@@ -49,3 +49,9 @@ func TestRespondAssetWriteError(t *testing.T) {
 		t.Fatal("unrelated error claimed")
 	}
 }
+
+func TestGovernedFieldsPatternDoesNotConflictWithGlossary(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/assets/{id}/governed/fields/{$}", func(http.ResponseWriter, *http.Request) {})
+	mux.HandleFunc("/api/v1/assets/by-glossary-term/{term_id}/{$}", func(http.ResponseWriter, *http.Request) {})
+}

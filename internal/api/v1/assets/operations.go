@@ -364,7 +364,7 @@ type patchFieldsRequest struct {
 // @Failure 412 {object} common.ErrorResponse
 // @Failure 428 {object} common.ErrorResponse
 // @ID patchAssetsIDFields
-// @Router /api/v1/assets/{id}/fields [patch]
+// @Router /api/v1/assets/{id}/governed/fields [patch]
 func (h *Handler) patchAssetFields(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
