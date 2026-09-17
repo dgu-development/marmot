@@ -83,7 +83,7 @@ func (h *Handler) Routes() []common.Route {
 			},
 		},
 		{
-			Path:    "/api/v1/assets/{id}/governed/fields",
+			Path:    "/api/v1/metamodel/assets/{id}",
 			Method:  http.MethodPatch,
 			Handler: h.patchAssetFields,
 			Middleware: []func(http.HandlerFunc) http.HandlerFunc{

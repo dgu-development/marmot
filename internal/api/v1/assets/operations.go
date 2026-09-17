@@ -350,7 +350,7 @@ type patchFieldsRequest struct {
 
 // @Summary Patch governed asset fields
 // @Description Partial update of governed fields. Absence preserves; null deletes only when the field is nullable. Requires If-Match.
-// @Tags assets
+// @Tags metamodel
 // @Accept json
 // @Produce json
 // @Param id path string true "Asset ID"
@@ -363,8 +363,8 @@ type patchFieldsRequest struct {
 // @Failure 404 {object} common.ErrorResponse
 // @Failure 412 {object} common.ErrorResponse
 // @Failure 428 {object} common.ErrorResponse
-// @ID patchAssetsIDFields
-// @Router /api/v1/assets/{id}/governed/fields [patch]
+// @ID patchMetamodelAssetsID
+// @Router /api/v1/metamodel/assets/{id} [patch]
 func (h *Handler) patchAssetFields(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
