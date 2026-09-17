@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/marmotdata/marmot/internal/core/asset"
@@ -50,8 +52,43 @@ func TestRespondAssetWriteError(t *testing.T) {
 	}
 }
 
-func TestGovernedFieldsPatternDoesNotConflictWithGlossary(t *testing.T) {
+func TestMetamodelPatchRouteStaysOffAssetsWildcard(t *testing.T) {
+	const want = `"/api/v1/metamodel/assets/{id}"`
+	src, err := os.ReadFile("handler.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(src)
+	if !strings.Contains(text, want) {
+		t.Fatalf("handler missing %s", want)
+	}
+	for _, banned := range []string{`"/api/v1/assets/{id}/fields"`, "governed/fields"} {
+		if strings.Contains(text, banned) {
+			t.Fatalf("banned path %s still registered", banned)
+		}
+	}
+
+	nop := func(http.ResponseWriter, *http.Request) {}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/assets/{id}/governed/fields/{$}", func(http.ResponseWriter, *http.Request) {})
-	mux.HandleFunc("/api/v1/assets/by-glossary-term/{term_id}/{$}", func(http.ResponseWriter, *http.Request) {})
+	for _, pattern := range []string{
+		"/api/v1/assets/{id}/{$}",
+		"/api/v1/assets/run-history-histogram/{id}/{$}",
+		"/api/v1/assets/tags/{id}/{$}",
+		"/api/v1/assets/by-glossary-term/{term_id}/{$}",
+		"/api/v1/metamodel/{$}",
+		"/api/v1/metamodel/assets/{id}/{$}",
+	} {
+		mux.HandleFunc(pattern, nop)
+	}
+
+	conflict := http.NewServeMux()
+	conflict.HandleFunc("/api/v1/assets/run-history-histogram/{id}/{$}", nop)
+	panicked := false
+	func() {
+		defer func() { panicked = recover() != nil }()
+		conflict.HandleFunc("/api/v1/assets/{id}/fields/{$}", nop)
+	}()
+	if !panicked {
+		t.Fatal("expected ServeMux conflict for /assets/{id}/fields")
+	}
 }
