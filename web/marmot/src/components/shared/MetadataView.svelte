@@ -16,7 +16,8 @@
 		endpoint = undefined,
 		id = undefined,
 		permissionResource = undefined,
-		permissionAction = undefined
+		permissionAction = undefined,
+		hideKeys = []
 	}: {
 		asset?: Asset;
 		metadata?: Record<string, unknown>;
@@ -28,6 +29,7 @@
 		id?: string;
 		permissionResource?: string;
 		permissionAction?: string;
+		hideKeys?: string[];
 	} = $props();
 
 	// Determine if we're in read-only mode
@@ -259,7 +261,10 @@
 		newValue = '';
 	}
 
-	const metadataEntries = $derived(Object.entries(metadata));
+	const hideKeySet = $derived(new Set(hideKeys));
+	const metadataEntries = $derived(
+		Object.entries(metadata).filter(([key]) => !hideKeySet.has(key))
+	);
 </script>
 
 {#snippet metadataDisclosure(

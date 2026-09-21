@@ -8,6 +8,9 @@
 	import DocumentationSystem from '$components/docs/DocumentationSystem.svelte';
 	import AssetSources from '$components/asset/AssetSources.svelte';
 	import MetadataView from '$components/shared/MetadataView.svelte';
+	import GovernedFieldsForm from '$components/asset/GovernedFieldsForm.svelte';
+	import { fetchMetamodel } from '$lib/metamodel/api';
+	import { governedMetadataNamespaces } from '$lib/metamodel/values';
 	import Lineage from '$components/lineage/Lineage.svelte';
 	import AssetContents from '$components/asset/AssetContents.svelte';
 	import SchemaEditor from '$components/schema/SchemaEditor.svelte';
@@ -58,11 +61,21 @@
 	let previewError: string | null = $state(null);
 
 	let canManageAssets = $derived(auth.hasPermission('assets', 'manage'));
+	let governedHideKeys = $state<string[]>([]);
 
 	let activeTab = $derived($page.url.searchParams.get('tab') || 'metadata');
 	let assetType = $derived($page.params.type);
 	let assetService = $derived($page.params.service);
 	let assetName = $derived($page.params.name);
+
+	async function loadGovernedNamespaces() {
+		try {
+			const schema = await fetchMetamodel();
+			governedHideKeys = schema.enabled ? governedMetadataNamespaces(schema.fields) : [];
+		} catch {
+			governedHideKeys = [];
+		}
+	}
 
 	async function fetchAsset() {
 		try {
@@ -77,6 +90,14 @@
 			const data = await response.json();
 			enrichedLinks = data.enriched_external_links || [];
 			asset = data;
+			const etag = response.headers.get('ETag');
+			if (asset && etag) {
+				const trimmed = etag.trim();
+				if (trimmed.length >= 3 && trimmed[0] === '"' && trimmed.at(-1) === '"') {
+					const version = Number(trimmed.slice(1, -1));
+					if (Number.isInteger(version) && version > 0) asset.version = version;
+				}
+			}
 		} catch (err) {
 			console.error('Error fetching asset:', err);
 			error = err instanceof Error ? err.message : m.discover_asset_load_error();
@@ -297,6 +318,7 @@
 	$effect(() => {
 		if (assetType && assetService && assetName) {
 			fetchAsset();
+			void loadGovernedNamespaces();
 		}
 	});
 
@@ -547,7 +569,8 @@
 								{#if isAgent}
 									<AgentSpecCard {asset} />
 								{:else}
-									<MetadataView {asset} />
+									<GovernedFieldsForm bind:asset />
+									<MetadataView {asset} hideKeys={governedHideKeys} />
 								{/if}
 								{#if asset.sources && Array.isArray(asset.sources) && asset.sources.length > 0}
 									<h3 class="pt-4 text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
