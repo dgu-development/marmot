@@ -135,6 +135,12 @@ type Config struct {
 		Elasticsearch *ElasticsearchConfig `mapstructure:"elasticsearch"`
 	} `mapstructure:"search"`
 
+	Memory struct {
+		// LookupLimit is how many memories a lookup of one asset or data
+		// product carries over MCP.
+		LookupLimit int `mapstructure:"lookup_limit"`
+	} `mapstructure:"memory"`
+
 	Pipelines struct {
 		MaxWorkers        int `mapstructure:"max_workers"`
 		SchedulerInterval int `mapstructure:"scheduler_interval"`
@@ -394,6 +400,7 @@ func loadConfig(configPath string) error {
 
 	// Search env vars
 	v.BindEnv("search.timeout")
+	v.BindEnv("memory.lookup_limit")
 	v.BindEnv("search.elasticsearch.enabled")
 	v.BindEnv("search.elasticsearch.addresses")
 	v.BindEnv("search.elasticsearch.username")
@@ -538,6 +545,7 @@ func setDefaults(v *viper.Viper) {
 
 	// Search defaults
 	v.SetDefault("search.timeout", 10) // 10 seconds
+	v.SetDefault("memory.lookup_limit", 25)
 	v.SetDefault("search.elasticsearch.enabled", false)
 	v.SetDefault("search.elasticsearch.index", "marmot")
 	v.SetDefault("search.elasticsearch.bulk_size", 500)
