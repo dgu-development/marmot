@@ -10,6 +10,7 @@ import (
 	"github.com/marmotdata/marmot/internal/api/v1/common"
 	"github.com/marmotdata/marmot/internal/core/glossary"
 	"github.com/marmotdata/marmot/internal/core/limits"
+	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/telemetry/lookups"
 	"github.com/rs/zerolog/log"
 )
@@ -95,7 +96,10 @@ func (h *Handler) createTerm(w http.ResponseWriter, r *http.Request) {
 			common.RespondLimitExceeded(w, limitErr)
 			return
 		}
+		var validation *metamodel.ValidationError
 		switch {
+		case errors.As(err, &validation):
+			common.RespondJSON(w, http.StatusBadRequest, validation)
 		case errors.Is(err, glossary.ErrInvalidInput):
 			log.Error().Err(err).Interface("request", req).Msg("Invalid input")
 			common.RespondError(w, http.StatusBadRequest, err.Error())
@@ -201,7 +205,10 @@ func (h *Handler) updateTerm(w http.ResponseWriter, r *http.Request) {
 
 	term, err := h.glossaryService.Update(r.Context(), id, input)
 	if err != nil {
+		var validation *metamodel.ValidationError
 		switch {
+		case errors.As(err, &validation):
+			common.RespondJSON(w, http.StatusBadRequest, validation)
 		case errors.Is(err, glossary.ErrInvalidInput):
 			log.Error().Err(err).Interface("request", req).Msg("Invalid input")
 			common.RespondError(w, http.StatusBadRequest, err.Error())
