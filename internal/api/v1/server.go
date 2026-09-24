@@ -25,6 +25,7 @@ import (
 	"github.com/marmotdata/marmot/internal/api/v1/glossary"
 	"github.com/marmotdata/marmot/internal/api/v1/lineage"
 	mcpAPI "github.com/marmotdata/marmot/internal/api/v1/mcp"
+	memoryAPI "github.com/marmotdata/marmot/internal/api/v1/memory"
 	metricsAPI "github.com/marmotdata/marmot/internal/api/v1/metrics"
 	notificationsAPI "github.com/marmotdata/marmot/internal/api/v1/notifications"
 	"github.com/marmotdata/marmot/internal/api/v1/plugins"
@@ -51,6 +52,7 @@ import (
 	glossaryImporter "github.com/marmotdata/marmot/internal/core/glossary/importer"
 	lineageService "github.com/marmotdata/marmot/internal/core/lineage"
 	"github.com/marmotdata/marmot/internal/core/metamodel"
+	memoryService "github.com/marmotdata/marmot/internal/core/memory"
 	notificationService "github.com/marmotdata/marmot/internal/core/notification"
 	roleService "github.com/marmotdata/marmot/internal/core/role"
 	runService "github.com/marmotdata/marmot/internal/core/runs"
@@ -184,6 +186,7 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	}
 	docsRepo := docsService.NewPostgresRepository(db)
 	docsSvc := docsService.NewService(docsRepo)
+	memorySvc := memoryService.NewService(memoryService.NewPostgresRepository(db))
 	notificationRepo := notificationService.NewPostgresRepository(db)
 	notificationSvc := notificationService.NewService(
 		notificationRepo,
@@ -593,6 +596,7 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 		dataproducts.NewHandler(dataProductSvc, userSvc, authSvc, config, lookupsRecorder),
 		assetrulesAPI.NewHandler(assetRuleSvc, userSvc, authSvc, config),
 		docsAPI.NewHandler(docsSvc, userSvc, authSvc, config),
+		memoryAPI.NewHandler(memorySvc, userSvc, authSvc, config),
 		notificationsAPI.NewHandler(notificationSvc, userSvc, authSvc, config),
 		subscriptionsAPI.NewHandler(subscriptionSvc, userSvc, authSvc, config),
 		teams.NewHandler(teamSvc, userSvc, authSvc, config),
