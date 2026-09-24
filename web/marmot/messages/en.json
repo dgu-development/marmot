@@ -673,7 +673,7 @@
 	"glossary_import_format_string": "Text",
 	"glossary_import_format_tags": "One or more tags separated by {sep}. Case is kept: PII and pii are different tags",
 	"glossary_import_format_term": "Name of another term, existing or in this file, ignoring case",
-	"glossary_import_guide": "Columns",
+	"glossary_import_guide": "Help document: columns",
 	"glossary_import_guide_column": "Column",
 	"glossary_import_guide_format": "How to write it",
 	"glossary_import_guide_hint": "Keep the header row as it is. Each column says how to write its cells; columns that take several values separate them with |.",
