@@ -2246,5 +2246,21 @@
 	"memory_sort_changed": "Actualizadas recientemente",
 	"memory_sort_created": "Más recientes",
 	"memory_sort_label": "Ordenar la memoria",
-	"memory_tab": "Memoria"
+	"memory_tab": "Memoria",
+	"memory_found_count": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "encontrada {count} vez",
+				"countPlural=other": "encontrada {count} veces"
+			}
+		}
+	],
+	"memory_sort_used": "Populares"
 }
