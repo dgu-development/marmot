@@ -2875,6 +2875,35 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/domains/writable": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "For narrowing domain pickers. all is true while enforcement is off or for global scope; otherwise domain_ids lists every writable domain.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "Domains the caller may write in",
+                "operationId": "getWritableDomains",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.WritableDomains"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/domains/{id}": {
             "get": {
                 "security": [
@@ -14026,6 +14055,23 @@ const docTemplate = `{
                 "SubjectServiceAccount"
             ]
         },
+        "domain.WritableDomains": {
+            "type": "object",
+            "properties": {
+                "all": {
+                    "type": "boolean"
+                },
+                "domain_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "enforced": {
+                    "type": "boolean"
+                }
+            }
+        },
         "importer.Action": {
             "type": "string",
             "enum": [
@@ -14528,8 +14574,12 @@ const docTemplate = `{
                 "domain_id": {
                     "type": "string"
                 },
+                "enforced": {
+                    "description": "Enforced reports whether writes are scoped by domain at all.",
+                    "type": "boolean"
+                },
                 "write": {
-                    "description": "Write: edit entities in the domain (enforced from delivery 2 on).",
+                    "description": "Write: edit entities in the domain, as far as domains decide. Always true\nwhile enforcement is off, when native RBAC alone applies.",
                     "type": "boolean"
                 }
             }
