@@ -13,6 +13,7 @@
 	import Icon from '$components/ui/Icon.svelte';
 	import IconifyIcon from '@iconify/svelte';
 	import Button from '$components/ui/Button.svelte';
+	import Checkbox from '$components/ui/Checkbox.svelte';
 	import QueryBuilder from '$components/query/QueryBuilder.svelte';
 	import GettingStarted from '$components/ui/GettingStarted.svelte';
 	import { auth } from '$lib/stores/auth';
@@ -515,22 +516,20 @@
 									{m.discover_kind_heading()}
 								</h3>
 								{#each ['asset', 'data_product', 'glossary', 'team'] as kind (kind)}
-									<label class="flex items-center justify-between mb-2">
-										<div class="flex items-center">
-											<input
-												type="checkbox"
+									<label class="flex items-center justify-between mb-2 cursor-pointer">
+										<div class="flex items-center gap-2">
+											<Checkbox
 												checked={selectedKinds.includes(kind)}
 												onchange={(e) => {
-													if (e.target.checked) {
+													if (e.currentTarget.checked) {
 														selectedKinds = [...selectedKinds, kind];
 													} else {
 														selectedKinds = selectedKinds.filter((k) => k !== kind);
 													}
 													handleFilterChange();
 												}}
-												class="rounded border-gray-300 dark:border-gray-600 text-earthy-terracotta-700 focus:ring-earthy-terracotta-600 dark:bg-gray-800"
 											/>
-											<span class="ml-2 text-sm text-gray-700 dark:text-gray-300"
+											<span class="text-sm text-gray-700 dark:text-gray-300"
 												>{getKindLabel(kind)}</span
 											>
 										</div>
@@ -551,13 +550,12 @@
 											{m.common_type()}
 										</h3>
 										{#each $facets.asset_types as { value, count } (value)}
-											<label class="flex items-center justify-between mb-2">
-												<div class="flex items-center">
-													<input
-														type="checkbox"
+											<label class="flex items-center justify-between mb-2 cursor-pointer">
+												<div class="flex items-center gap-2">
+													<Checkbox
 														checked={selectedTypes.includes(value)}
 														onchange={(e) => {
-															if (e.target.checked) {
+															if (e.currentTarget.checked) {
 																selectedTypes = [...selectedTypes, value];
 																selectedKinds = ['asset'];
 															} else {
@@ -565,9 +563,8 @@
 															}
 															handleFilterChange();
 														}}
-														class="rounded border-gray-300 dark:border-gray-600 text-earthy-terracotta-700 focus:ring-earthy-terracotta-600 dark:bg-gray-800"
 													/>
-													<span class="ml-2 text-sm text-gray-700 dark:text-gray-300">{value}</span>
+													<span class="text-sm text-gray-700 dark:text-gray-300">{value}</span>
 												</div>
 												<span class="text-xs text-gray-500 dark:text-gray-400">({count})</span>
 											</label>
@@ -583,13 +580,12 @@
 											{m.discover_providers_heading()}
 										</h3>
 										{#each $facets.providers as { value, count } (value)}
-											<label class="flex items-center justify-between mb-2">
-												<div class="flex items-center">
-													<input
-														type="checkbox"
+											<label class="flex items-center justify-between mb-2 cursor-pointer">
+												<div class="flex items-center gap-2">
+													<Checkbox
 														checked={selectedProviders.includes(value)}
 														onchange={(e) => {
-															if (e.target.checked) {
+															if (e.currentTarget.checked) {
 																selectedProviders = [...selectedProviders, value];
 																selectedKinds = ['asset'];
 															} else {
@@ -597,9 +593,8 @@
 															}
 															handleFilterChange();
 														}}
-														class="rounded border-gray-300 dark:border-gray-600 text-earthy-terracotta-700 focus:ring-earthy-terracotta-600 dark:bg-gray-800"
 													/>
-													<span class="ml-2 text-sm text-gray-700 dark:text-gray-300">{value}</span>
+													<span class="text-sm text-gray-700 dark:text-gray-300">{value}</span>
 												</div>
 												<span class="text-xs text-gray-500 dark:text-gray-400">({count})</span>
 											</label>
@@ -615,13 +610,12 @@
 											{m.common_tags()}
 										</h3>
 										{#each $facets.tags as { value, count } (value)}
-											<label class="flex items-center justify-between mb-2 gap-2">
-												<div class="flex items-center min-w-0">
-													<input
-														type="checkbox"
+											<label class="flex items-center justify-between mb-2 gap-2 cursor-pointer">
+												<div class="flex items-center gap-2 min-w-0">
+													<Checkbox
 														checked={selectedTags.includes(value)}
 														onchange={(e) => {
-															if (e.target.checked) {
+															if (e.currentTarget.checked) {
 																selectedTags = [...selectedTags, value];
 																selectedKinds = ['asset'];
 															} else {
@@ -629,10 +623,9 @@
 															}
 															handleFilterChange();
 														}}
-														class="flex-shrink-0 rounded border-gray-300 dark:border-gray-600 text-earthy-terracotta-700 focus:ring-earthy-terracotta-600 dark:bg-gray-800"
 													/>
 													<span
-														class="ml-2 text-sm text-gray-700 dark:text-gray-300 truncate"
+														class="text-sm text-gray-700 dark:text-gray-300 truncate"
 														title={value}
 													>
 														{value.length > 100 ? value.slice(0, 100) + '...' : value}
@@ -655,14 +648,13 @@
 												{governedFieldLabel(field)}
 											</h3>
 											{#each values as { value, count } (value)}
-												<label class="flex items-center justify-between mb-2">
-													<div class="flex items-center">
-														<input
-															type="checkbox"
+												<label class="flex items-center justify-between mb-2 cursor-pointer">
+													<div class="flex items-center gap-2">
+														<Checkbox
 															checked={(selectedGoverned[field.id] || []).includes(value)}
 															onchange={(e) => {
 																const current = selectedGoverned[field.id] || [];
-																if (e.target.checked) {
+																if (e.currentTarget.checked) {
 																	selectedGoverned = {
 																		...selectedGoverned,
 																		[field.id]: [...current, value]
@@ -676,9 +668,8 @@
 																}
 																handleFilterChange();
 															}}
-															class="rounded border-gray-300 dark:border-gray-600 text-earthy-terracotta-700 focus:ring-earthy-terracotta-600 dark:bg-gray-800"
 														/>
-														<span class="ml-2 text-sm text-gray-700 dark:text-gray-300"
+														<span class="text-sm text-gray-700 dark:text-gray-300"
 															>{value}</span
 														>
 													</div>
