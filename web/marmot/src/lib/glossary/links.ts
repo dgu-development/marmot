@@ -25,15 +25,42 @@ export function linkIds(value: unknown): string[] {
 	return [];
 }
 
+let queued = new Set<string>();
+let flush: Promise<void> | null = null;
+
+// Callers in the same tick, such as every row of a list, share one request.
+function fetchQueued(): Promise<void> {
+	flush ??= new Promise<void>((done, fail) => {
+		setTimeout(async () => {
+			const ids = [...queued];
+			queued = new Set();
+			flush = null;
+			try {
+				for (let i = 0; i < ids.length; i += 100) {
+					const batch = ids.slice(i, i + 100);
+					const response = await fetchApi(
+						`/glossary/refs?ids=${encodeURIComponent(batch.join(','))}`
+					);
+					if (!response.ok) throw new Error('Failed to resolve glossary terms');
+					const found = (await response.json()) as TermRef[];
+					for (const id of batch) known.set(id, null);
+					for (const ref of found) known.set(ref.id, ref);
+				}
+				done();
+			} catch (err) {
+				fail(err);
+			}
+		});
+	});
+	return flush;
+}
+
 /** Resolves IDs to terms, caching them; a deleted or unknown ID maps to null. */
 export async function resolveTerms(ids: string[]): Promise<Map<string, TermRef | null>> {
 	const missing = ids.filter((id) => !known.has(id));
 	if (missing.length > 0) {
-		const response = await fetchApi(`/glossary/refs?ids=${encodeURIComponent(missing.join(','))}`);
-		if (!response.ok) throw new Error('Failed to resolve glossary terms');
-		const found = (await response.json()) as TermRef[];
-		for (const id of missing) known.set(id, null);
-		for (const ref of found) known.set(ref.id, ref);
+		for (const id of missing) queued.add(id);
+		await fetchQueued();
 	}
 	return new Map(ids.map((id) => [id, known.get(id) ?? null]));
 }

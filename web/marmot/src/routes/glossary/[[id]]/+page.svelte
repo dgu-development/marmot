@@ -26,9 +26,14 @@
 	import MetadataView from '$components/shared/MetadataView.svelte';
 	import ProductGovernedFields from '$components/product/ProductGovernedFields.svelte';
 	import TermReferences from '$components/glossary/TermReferences.svelte';
+	import TermLinkSummary from '$components/glossary/TermLinkSummary.svelte';
+	import { GLOSSARY_TERM_CONTROL, linkIds } from '$lib/glossary/links';
+	import { nativeMessage } from '$lib/metamodel/i18n';
+	import { resolveMessage } from '$lib/metamodel/labels';
+	import { locale } from '$lib/i18n';
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import type { MetamodelSchema } from '$lib/metamodel/types';
-	import { governedFields, governedPaths } from '$lib/metamodel/values';
+	import { governedFields, governedPaths, readMetadataValue } from '$lib/metamodel/values';
 	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages';
 	import { formatDate } from '$lib/utils';
@@ -59,6 +64,20 @@
 	let metamodel: MetamodelSchema | null = null;
 	$: governed = metamodel?.enabled ? governedFields(metamodel.fields) : [];
 	$: governedHidePaths = governedPaths(governed);
+
+	$: linkFields = governed.filter((f) => f.presentation?.control === GLOSSARY_TERM_CONTROL);
+
+	function linkLabel(key: string | undefined, fallback: string): string {
+		if (!metamodel) return fallback;
+		return (
+			resolveMessage(key, {
+				locale: $locale,
+				defaultLocale: metamodel.defaultLocale,
+				messages: metamodel.messages,
+				native: nativeMessage
+			}) ?? fallback
+		);
+	}
 
 	function synonymsOf(term: GlossaryTerm | null): string[] {
 		const value = term?.metadata?.synonyms;
@@ -464,6 +483,15 @@
 											})}
 										</div>
 									{/if}
+									{#each linkFields as field (field.id)}
+										{@const ids = linkIds(readMetadataValue(term.metadata, field.storage))}
+										{#if ids.length > 0}
+											<TermLinkSummary
+												label={linkLabel(field.presentation?.labelKey, field.id)}
+												{ids}
+											/>
+										{/if}
+									{/each}
 									<div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
 										{term.definition}
 									</div>
