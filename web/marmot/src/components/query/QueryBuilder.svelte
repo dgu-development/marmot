@@ -6,6 +6,12 @@
 	import { m } from '$lib/paraglide/messages';
 	import { domainsEnabled } from '$lib/domains/api';
 	import { domainQueryValues } from '$lib/domains/query';
+	import { catalogLabels } from '$lib/catalog/labels';
+	import { locale } from '$lib/i18n';
+	import { fetchMetamodel } from '$lib/metamodel/api';
+	import { nativeMessage } from '$lib/metamodel/i18n';
+	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
+	import type { MetamodelSchema } from '$lib/metamodel/types';
 
 	let {
 		query = '',
@@ -133,6 +139,48 @@
 		}
 	]);
 
+	// Profile labels for metadata paths and values; the query keeps the identifiers.
+	let schema = $state<MetamodelSchema | null>(null);
+	$effect(() => {
+		fetchMetamodel()
+			.then((loaded) => (schema = loaded.enabled ? loaded : null))
+			.catch(() => (schema = null));
+	});
+	const labelContext = $derived({
+		locale: $locale,
+		defaultLocale: schema?.defaultLocale ?? 'en',
+		messages: schema?.messages,
+		native: nativeMessage
+	});
+
+	function profileField(path: string) {
+		return schema?.fields.find((f) => f.storage === `metadata.${path}`);
+	}
+
+	function fieldDescription(path: string): string {
+		const field = profileField(path);
+		return (field && resolveMessage(field.presentation?.labelKey, labelContext)) ?? path;
+	}
+
+	function withLabels(field: string, suggestions: { value: string }[]) {
+		return suggestions.map(({ value }) => {
+			let label: string | undefined;
+			if (field === 'type') label = $catalogLabels.type(value);
+			else if (field === 'provider') label = $catalogLabels.provider(value);
+			else {
+				const governed = profileField(field);
+				if (governed) {
+					const typed = governed.type === 'boolean' ? value === 'true' : value;
+					label = valueLabel(governed, typed, labelContext);
+					if (!label && governed.type === 'boolean' && (value === 'true' || value === 'false')) {
+						label = value === 'true' ? m.metamodel_yes() : m.metamodel_no();
+					}
+				}
+			}
+			return label && label !== value ? { value, label: `${label} · ${value}` } : { value };
+		});
+	}
+
 	// Metadata fields fetched from API
 	interface MetadataFieldEntry {
 		field: string;
@@ -165,16 +213,25 @@
 
 	const booleanOperators: BooleanOperator[] = ['AND', 'OR', 'NOT'];
 
+	function toFieldOption(f: MetadataFieldEntry) {
+		return {
+			value: `metadata.${f.field}`,
+			label: `@metadata.${f.field}`,
+			description: fieldDescription(f.field),
+			category: 'Metadata'
+		};
+	}
+
+	// The profile may load after the fields: relabel them when it does.
+	$effect(() => {
+		if (schema && metadataFieldsCache) metadataFields = metadataFieldsCache.map(toFieldOption);
+	});
+
 	// Fetch metadata fields from API
 	async function fetchMetadataFields() {
 		// Use cache if available
 		if (metadataFieldsCache && metadataFieldsCache.length > 0) {
-			metadataFields = metadataFieldsCache.map((f) => ({
-				value: `metadata.${f.field}`,
-				label: `@metadata.${f.field}`,
-				description: f.field,
-				category: 'Metadata'
-			}));
+			metadataFields = metadataFieldsCache.map(toFieldOption);
 			return;
 		}
 
@@ -189,12 +246,7 @@
 			const data: unknown = await response.json();
 			if (Array.isArray(data) && data.length > 0) {
 				metadataFieldsCache = data as MetadataFieldEntry[];
-				metadataFields = (data as MetadataFieldEntry[]).map((f) => ({
-					value: `metadata.${f.field}`,
-					label: `@metadata.${f.field}`,
-					description: f.field,
-					category: 'Metadata'
-				}));
+				metadataFields = (data as MetadataFieldEntry[]).map(toFieldOption);
 			}
 		} catch (error) {
 			console.error('Error fetching metadata fields:', error);
@@ -415,7 +467,7 @@
 			}
 			const cacheKey = `${field}-${prefix}`;
 			if (valueFetchCache[cacheKey]) {
-				return valueFetchCache[cacheKey];
+				return withLabels(field, valueFetchCache[cacheKey]);
 			}
 
 			const params = new URLSearchParams({
@@ -463,7 +515,7 @@
 			}
 
 			valueFetchCache[cacheKey] = suggestions;
-			return suggestions;
+			return withLabels(field, suggestions);
 		} catch (error) {
 			console.error('Error fetching value suggestions:', error);
 			return [];
