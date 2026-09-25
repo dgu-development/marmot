@@ -1366,7 +1366,7 @@
 	"profile_theme_label": "Theme",
 	"profile_username_label": "Username",
 	"query_add_filter": "Add Filter",
-	"query_field_filters_label": ">Field Filters",
+	"query_field_filters_label": "Field Filters",
 	"query_field_kind_description": "Resource kind (asset, glossary, team)",
 	"query_field_placeholder": "Field (e.g., kind, type, metadata.owner)",
 	"query_field_provider_description": "Data provider",

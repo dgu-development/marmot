@@ -222,16 +222,25 @@
 		};
 	}
 
+	// Profile fields first, by their full path: the metadata suggestions only list top-level keys.
+	function fieldOptions(entries: MetadataFieldEntry[]) {
+		const profile = (schema?.fields ?? [])
+			.filter((f) => f.storage.startsWith('metadata.'))
+			.map((f) => toFieldOption({ field: f.storage.slice('metadata.'.length) }));
+		const seen = new Set(profile.map((o) => o.value));
+		return [...profile, ...entries.map(toFieldOption).filter((o) => !seen.has(o.value))];
+	}
+
 	// The profile may load after the fields: relabel them when it does.
 	$effect(() => {
-		if (schema && metadataFieldsCache) metadataFields = metadataFieldsCache.map(toFieldOption);
+		if (schema) metadataFields = fieldOptions(metadataFieldsCache ?? []);
 	});
 
 	// Fetch metadata fields from API
 	async function fetchMetadataFields() {
 		// Use cache if available
 		if (metadataFieldsCache && metadataFieldsCache.length > 0) {
-			metadataFields = metadataFieldsCache.map(toFieldOption);
+			metadataFields = fieldOptions(metadataFieldsCache);
 			return;
 		}
 
@@ -246,7 +255,7 @@
 			const data: unknown = await response.json();
 			if (Array.isArray(data) && data.length > 0) {
 				metadataFieldsCache = data as MetadataFieldEntry[];
-				metadataFields = (data as MetadataFieldEntry[]).map(toFieldOption);
+				metadataFields = fieldOptions(data as MetadataFieldEntry[]);
 			}
 		} catch (error) {
 			console.error('Error fetching metadata fields:', error);
@@ -464,6 +473,15 @@
 		try {
 			if (field === 'domain') {
 				return domainQueryValues();
+			}
+			const governed = profileField(field);
+			if (governed?.type === 'boolean')
+				return withLabels(field, [{ value: 'true' }, { value: 'false' }]);
+			if (governed?.values?.length) {
+				return withLabels(
+					field,
+					governed.values.map((value) => ({ value }))
+				);
 			}
 			const cacheKey = `${field}-${prefix}`;
 			if (valueFetchCache[cacheKey]) {
