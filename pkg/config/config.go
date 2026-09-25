@@ -124,6 +124,10 @@ type Config struct {
 		Banner BannerConfig `mapstructure:"banner"`
 		// DefaultLanguage is the BCP 47 tag the web UI falls back to when a user has no language preference, empty means detect from the browser
 		DefaultLanguage string `mapstructure:"default_language"`
+		// DomainLandingURL is a path with an {id} placeholder, such as
+		// /dgu/landing/domains/{id}. When set, domain pages link to it, so a
+		// distribution can give each domain its own portal page.
+		DomainLandingURL string `mapstructure:"domain_landing_url"`
 	} `mapstructure:"ui"`
 
 	Search struct {
@@ -367,6 +371,7 @@ func loadConfig(configPath string) error {
 	v.BindEnv("ui.banner.variant")
 	v.BindEnv("ui.banner.message")
 	v.BindEnv("ui.banner.id")
+	v.BindEnv("ui.domain_landing_url")
 
 	// Pipelines env vars
 	v.BindEnv("pipelines.max_workers")
@@ -512,6 +517,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("ui.banner.variant", "info")
 	v.SetDefault("ui.banner.message", "")
 	v.SetDefault("ui.banner.id", "banner-1")
+	v.SetDefault("ui.domain_landing_url", "")
 
 	// Pipelines defaults
 	v.SetDefault("pipelines.max_workers", 10)
@@ -595,6 +601,11 @@ func validate(cfg *Config) error {
 	}
 	if cfg.UI.Banner.Enabled && !validVariants[strings.ToLower(cfg.UI.Banner.Variant)] {
 		return fmt.Errorf("invalid banner variant: %s", cfg.UI.Banner.Variant)
+	}
+
+	if landing := cfg.UI.DomainLandingURL; landing != "" &&
+		(!strings.HasPrefix(landing, "/") || strings.HasPrefix(landing, "//") || !strings.Contains(landing, "{id}")) {
+		return fmt.Errorf("ui.domain_landing_url must be a path starting with / and containing {id}: %q", landing)
 	}
 
 	if cfg.Server.TLS != nil {

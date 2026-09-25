@@ -2068,5 +2068,6 @@
 	"pipelines_text_clear": "Vaciar",
 	"pipelines_text_lines": "{count} líneas",
 	"pipelines_text_too_large": "El fichero supera {size}.",
-	"pipelines_text_read_error": "No se pudo leer el fichero."
+	"pipelines_text_read_error": "No se pudo leer el fichero.",
+	"domains_open_landing": "Portada del dominio"
 }
