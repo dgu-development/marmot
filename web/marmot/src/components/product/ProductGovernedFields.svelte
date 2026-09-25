@@ -34,12 +34,15 @@
 	let {
 		metadata = $bindable(),
 		productId,
+		endpoint = undefined,
 		schema,
 		fields,
 		editable = false
 	}: {
 		metadata: Record<string, unknown>;
 		productId: string | undefined;
+		/** PUT target taking `{ metadata }`, for entities other than products (glossary terms). */
+		endpoint?: string;
 		schema: MetamodelSchema;
 		fields: MetamodelField[];
 		editable?: boolean;
@@ -59,6 +62,8 @@
 	let userSearching = $state(false);
 	let userFocusedIndex = $state(-1);
 	let userSearchTimeout: ReturnType<typeof setTimeout>;
+
+	const target = $derived(endpoint ?? (productId ? `/products/${productId}` : undefined));
 
 	let resolvedOwners = $state<Record<string, OwnerResult | null>>({});
 	const pendingLookups: Record<string, true> = {};
@@ -244,7 +249,7 @@
 		{ onSelect: pickUser, onEscape: () => (userQuery ? resetUserSearch() : cancel()) }
 	);
 
-	// Local mode (no productId, e.g. the create wizard): just update the bound metadata, the
+	// Local mode (no target, e.g. the create wizard): just update the bound metadata, the
 	// same way MetadataView's own free-field editor does before the product exists to PUT to.
 	async function save(field: MetamodelField) {
 		if (saving) return;
@@ -266,7 +271,7 @@
 		}
 		const updated = writeMetadataValue(metadata, field.storage, parsed.value);
 
-		if (!productId) {
+		if (!target) {
 			metadata = updated;
 			editingId = null;
 			return;
@@ -275,7 +280,7 @@
 		saving = true;
 		errorCode = null;
 		try {
-			const response = await fetchApi(`/products/${productId}`, {
+			const response = await fetchApi(target, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ metadata: updated })

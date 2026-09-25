@@ -24,6 +24,10 @@
 	import Icon from '@iconify/svelte';
 	import Tags from '$components/shared/Tags.svelte';
 	import MetadataView from '$components/shared/MetadataView.svelte';
+	import ProductGovernedFields from '$components/product/ProductGovernedFields.svelte';
+	import { fetchMetamodel } from '$lib/metamodel/api';
+	import type { MetamodelSchema } from '$lib/metamodel/types';
+	import { governedFields, governedPaths } from '$lib/metamodel/values';
 	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages';
 	import { formatDate } from '$lib/utils';
@@ -50,6 +54,21 @@
 
 	let isEditing = false;
 	let editedTerm: GlossaryTerm | null = null;
+
+	let metamodel: MetamodelSchema | null = null;
+	$: governed = metamodel?.enabled ? governedFields(metamodel.fields) : [];
+	$: governedHidePaths = governedPaths(governed);
+
+	function synonymsOf(term: GlossaryTerm | null): string[] {
+		const value = term?.metadata?.synonyms;
+		return Array.isArray(value) ? value.filter((s): s is string => typeof s === 'string') : [];
+	}
+
+	function matchedSynonym(term: GlossaryTerm, query: string): string | undefined {
+		const q = query.trim().toLowerCase();
+		if (!q || term.name.toLowerCase().includes(q)) return undefined;
+		return synonymsOf(term).find((s) => s.toLowerCase().includes(q));
+	}
 
 	const canManageGlossary = auth.hasPermission('glossary', 'manage');
 	// Creating stays on canManageGlossary; editing also needs the selected term's domain.
@@ -329,6 +348,10 @@
 	});
 
 	onMount(() => {
+		fetchMetamodel('glossary_term')
+			.then((schema) => (metamodel = schema))
+			.catch(() => (metamodel = null));
+
 		// Refetch whenever the page URL changes (search params, route id, etc).
 		// Subscribing here instead of using a `$:` block avoids the lint's
 		// infinite-reactive-loop heuristic, since fetchTerms() mutates stores
@@ -431,6 +454,15 @@
 									<div class="font-medium text-gray-900 dark:text-gray-100 text-sm">
 										{term.name}
 									</div>
+									{#if matchedSynonym(term, searchQuery)}
+										<div
+											class="mt-0.5 text-xs text-earthy-terracotta-700 dark:text-earthy-terracotta-400"
+										>
+											{m.glossary_synonym_match({
+												synonym: matchedSynonym(term, searchQuery) ?? ''
+											})}
+										</div>
+									{/if}
 									<div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
 										{term.definition}
 									</div>
@@ -462,6 +494,22 @@
 									<h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
 										{selectedTerm.name}
 									</h2>
+									{#if synonymsOf(selectedTerm).length > 0}
+										<div
+											class="-mt-1 mb-3 flex flex-wrap items-center gap-1.5"
+											aria-label={m.glossary_synonyms_label()}
+										>
+											<span class="text-xs text-gray-500 dark:text-gray-400"
+												>{m.glossary_synonyms_label()}:</span
+											>
+											{#each synonymsOf(selectedTerm) as synonym (synonym)}
+												<span
+													class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-200"
+													>{synonym}</span
+												>
+											{/each}
+										</div>
+									{/if}
 								{/if}
 
 								<!-- Definition -->
@@ -560,14 +608,30 @@
 											permissionAction="manage"
 											readOnly={false}
 											maxDepth={2}
+											hidePaths={governedHidePaths}
 										/>
 									{:else}
 										<MetadataView
-											metadata={selectedTerm.metadata}
+											bind:metadata={selectedTerm.metadata}
 											endpoint="/glossary"
 											id={selectedTerm.id}
 											maxDepth={2}
-										/>
+											hidePaths={governedHidePaths}
+											hasLeadingRows={governed.length > 0}
+										>
+											{#snippet leadingRows()}
+												{#if metamodel && selectedTerm}
+													<ProductGovernedFields
+														bind:metadata={selectedTerm.metadata}
+														productId={undefined}
+														endpoint={`/glossary/${selectedTerm.id}`}
+														schema={metamodel}
+														fields={governed}
+														editable={canEditTerm}
+													/>
+												{/if}
+											{/snippet}
+										</MetadataView>
 									{/if}
 								</div>
 

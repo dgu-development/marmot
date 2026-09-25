@@ -714,6 +714,8 @@
 	"glossary_page_title": "Glossary - Marmot",
 	"glossary_save_changes": "Save Changes",
 	"glossary_search_placeholder": "Search terms...",
+	"glossary_synonym_match": "Synonym: {synonym}",
+	"glossary_synonyms_label": "Synonyms",
 	"glossary_term_count": [
 		{
 			"declarations": ["input count", "local countPlural = count: plural"],
