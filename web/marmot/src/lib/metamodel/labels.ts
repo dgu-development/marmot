@@ -19,3 +19,21 @@ export function resolveMessage(
 	const { messages, locale, defaultLocale, native } = context;
 	return messages?.[locale]?.[key] ?? messages?.[defaultLocale]?.[key] ?? native?.(key);
 }
+
+interface LabelledField {
+	type: string;
+	presentation?: { valueLabelKeys?: Record<string, string> };
+}
+
+/**
+ * The profile's label for a stored enum or boolean value, or undefined when it has none, so callers
+ * fall back to the value itself (or to their own Yes/No for booleans).
+ */
+export function valueLabel(
+	field: LabelledField,
+	value: unknown,
+	context: MessageContext
+): string | undefined {
+	if (typeof value !== 'string' && typeof value !== 'boolean') return undefined;
+	return resolveMessage(field.presentation?.valueLabelKeys?.[String(value)], context);
+}

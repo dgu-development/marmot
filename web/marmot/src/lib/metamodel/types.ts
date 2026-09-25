@@ -13,6 +13,10 @@ export interface MetamodelPresentation {
 	inverseLabelKey?: string;
 	/** Offer this field as a segmented Discover filter. Only enum and boolean fields qualify. */
 	facet?: boolean;
+	/** Stored value -> message key, to show a label in place of an enum or boolean value. */
+	valueLabelKeys?: Record<string, string>;
+	/** Show an enum field's value as a chip next to the entity's name. */
+	badge?: boolean;
 }
 
 export interface MetamodelConstraints {

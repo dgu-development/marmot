@@ -25,7 +25,7 @@
 	import { locale } from '$lib/i18n';
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import { nativeMessage } from '$lib/metamodel/i18n';
-	import { resolveMessage } from '$lib/metamodel/labels';
+	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
 	import { facetableFields } from '$lib/metamodel/values';
 	import type { MetamodelField } from '$lib/metamodel/types';
 
@@ -118,6 +118,16 @@
 
 	function governedFieldLabel(field: MetamodelField): string {
 		return resolveMessage(field.presentation?.labelKey, messageContext) ?? field.id;
+	}
+
+	function governedValueLabel(field: MetamodelField | undefined, value: string): string {
+		if (!field) return value;
+		const label = valueLabel(field, value, messageContext);
+		if (label) return label;
+		if (field.type === 'boolean' && (value === 'true' || value === 'false')) {
+			return value === 'true' ? m.metamodel_yes() : m.metamodel_no();
+		}
+		return value;
 	}
 
 	$effect(() => {
@@ -673,7 +683,7 @@
 															}}
 														/>
 														<span class="text-sm text-gray-700 dark:text-gray-300"
-															>{value}</span
+															>{governedValueLabel(field, value)}</span
 														>
 													</div>
 													<span class="text-xs text-gray-500 dark:text-gray-400">({count})</span>
@@ -837,7 +847,7 @@
 											<span class="text-earthy-terracotta-700 dark:text-earthy-terracotta-700"
 												>{field ? governedFieldLabel(field) : id}:</span
 											>
-											{value}
+											{governedValueLabel(field, value)}
 											<button
 												onclick={() => removeGovernedFilter(id, value)}
 												class="ml-0.5 hover:text-earthy-terracotta-700 dark:hover:text-earthy-terracotta-200"
