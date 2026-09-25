@@ -147,7 +147,8 @@ field may share a binding, since they never share a row.
 | `descriptionKey` | Optional description message key |
 | `section` | Optional UI section id |
 | `order` | Optional sort order within the section |
-| `control` | Alternate editor without changing storage. Only `user` is defined so far (string holding a Marmot user ID) |
+| `control` | Alternate editor without changing storage: `user` (string holding a Marmot user ID) or `glossary_term` (see [Links between terms](#links-between-terms)) |
+| `inverseLabelKey` | With `control: glossary_term`, the message key naming the link from the term it points to, such as "Acronyms" for a "Stands for" field |
 | `facet` | Offer this field as a Discover segmented filter. Requires type `enum` or `boolean` |
 
 Native labels reuse existing Marmot message keys. A profile with custom fields
@@ -306,6 +307,37 @@ Synonyms that discovery runs send are stored in `metadata.synonyms`, and
 searching any of them finds the term, in the glossary and in global search.
 Declare a `list` of `string` field bound to `metadata.synonyms` to edit them
 and carry them in the import template.
+
+#### Links between terms
+
+`control: glossary_term` turns a `glossary_term` field into links to other
+terms, for example an acronym pointing at the terms it stands for:
+
+```yaml
+- id: stands_for
+  type: list
+  itemType: string
+  core: true
+  storage: metadata.dgu.stands_for
+  appliesTo:
+    kinds: [glossary_term]
+  presentation:
+    labelKey: metamodel.stands_for.label
+    inverseLabelKey: metamodel.stands_for.inverse
+    control: glossary_term
+```
+
+- The field is a `string` (one term) or a `list` of `string`, and applies to
+  `glossary_term` only.
+- It stores term IDs, so a link survives renaming. A write that adds an ID of
+  a missing or deleted term fails with code `term_not_found`, and a term
+  pointing at itself with `self_reference`. Links the term already had are
+  kept when their target is deleted later, and the page shows them as deleted.
+- `GET /api/v1/glossary/references/{id}` lists, per field, the terms pointing
+  at a term; the term page shows them under `inverseLabelKey`.
+  `GET /api/v1/glossary/refs?ids=` resolves IDs to names.
+- The import template takes term names, existing or in the same file,
+  separated by `|` and ignoring case; the export writes names.
 
 ## Compatibility and rollout
 
