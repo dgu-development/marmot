@@ -122,7 +122,7 @@
 	let kindSchemas = $state<Record<string, MetamodelSchema | null>>({});
 
 	$effect(() => {
-		for (const kind of ['asset', 'glossary_term', 'data_product']) {
+		for (const kind of ['glossary_term', 'data_product']) {
 			fetchMetamodel(kind)
 				.then((schema) => (kindSchemas = { ...kindSchemas, [kind]: schema }))
 				.catch(() => {});
@@ -1022,13 +1022,6 @@
 												</div>
 											</div>
 											<div class="flex items-center gap-1.5 flex-shrink-0">
-												<FieldBadges
-													schema={kindSchemas.asset}
-													metadata={result.metadata?.metadata as
-														| Record<string, unknown>
-														| undefined}
-													size="xs"
-												/>
 												<button
 													onclick={(e) => handleTypeClick(result.metadata?.type ?? '', e)}
 													class="text-xs {getTagColor(
@@ -1118,11 +1111,22 @@
 													</div>
 												</div>
 												<div class="min-w-0 flex-1">
-													<h3
-														class="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate group-hover:text-earthy-terracotta-700 dark:group-hover:text-earthy-terracotta-700 transition-colors"
-													>
-														{result.name}
-													</h3>
+													<div class="flex items-center justify-between gap-2">
+														<h3
+															class="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate group-hover:text-earthy-terracotta-700 dark:group-hover:text-earthy-terracotta-700 transition-colors"
+														>
+															{result.name}
+														</h3>
+														<div class="flex flex-shrink-0 gap-1">
+															<FieldBadges
+																schema={kindSchemas.data_product}
+																metadata={result.metadata?.metadata as
+																	| Record<string, unknown>
+																	| undefined}
+																size="xs"
+															/>
+														</div>
+													</div>
 													<div
 														class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400"
 													>
