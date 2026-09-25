@@ -2941,13 +2941,19 @@ definitions:
     type: object
   metamodel.Presentation:
     properties:
+      badge:
+        description: |-
+          Badge asks clients to show an enum field's value as a chip next to the
+          entity's name, on its page and in search results.
+        type: boolean
       control:
         description: |-
           Control names an alternate editor for a string field's value; the stored
           value and its validation are unaffected. "user" holds a native Marmot
           user ID. "glossary_term" holds glossary term IDs, in a string or a list
           of strings, on glossary_term fields only; the glossary checks the terms
-          exist.
+          exist. "search" shows each value of a string or list of strings as a
+          link to a catalog search for it, such as a term's synonyms.
         type: string
       descriptionKey:
         type: string

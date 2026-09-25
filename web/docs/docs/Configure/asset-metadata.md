@@ -147,9 +147,10 @@ field may share a binding, since they never share a row.
 | `descriptionKey` | Optional description message key |
 | `section` | Optional UI section id |
 | `order` | Optional sort order within the section |
-| `control` | Alternate editor without changing storage: `user` (string holding a Marmot user ID) or `glossary_term` (see [Links between terms](#links-between-terms)) |
+| `control` | Alternate editor without changing storage: `user` (string holding a Marmot user ID), `glossary_term` (see [Links between terms](#links-between-terms)) or `search` (string or list of strings; each value links to a catalog search for it, as for a term's synonyms) |
 | `inverseLabelKey` | With `control: glossary_term`, the message key naming the link from the term it points to, such as "Acronyms" for a "Stands for" field |
 | `facet` | Offer this field as a Discover segmented filter. Requires type `enum` or `boolean` |
+| `badge` | Show the value of an `enum` field as a chip next to the entity's name, on its page and in Discover results, with its label from `valueLabelKeys` |
 | `valueLabelKeys` | Map of stored value → message key, to show a label in place of the value (see [Value labels](#value-labels)). For `enum`, `list` of `enum`, or `boolean` (`"true"`, `"false"`) |
 
 Native labels reuse existing Marmot message keys. A profile with custom fields

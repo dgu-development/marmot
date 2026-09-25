@@ -31,7 +31,8 @@ type Presentation struct {
 	// value and its validation are unaffected. "user" holds a native Marmot
 	// user ID. "glossary_term" holds glossary term IDs, in a string or a list
 	// of strings, on glossary_term fields only; the glossary checks the terms
-	// exist.
+	// exist. "search" shows each value of a string or list of strings as a
+	// link to a catalog search for it, such as a term's synonyms.
 	Control string `json:"control,omitempty"`
 	// InverseLabelKey names a glossary_term link seen from the term it points
 	// to, such as "Acronyms" for a "Stands for" field.
@@ -43,11 +44,17 @@ type Presentation struct {
 	// boolean fields, "true" and "false" may be keyed. Storage, search and
 	// filters keep using the value.
 	ValueLabelKeys map[string]string `json:"valueLabelKeys,omitempty"`
+	// Badge asks clients to show an enum field's value as a chip next to the
+	// entity's name, on its page and in search results.
+	Badge bool `json:"badge,omitempty"`
 }
 
-const ControlGlossaryTerm = "glossary_term"
+const (
+	ControlGlossaryTerm = "glossary_term"
+	ControlSearch       = "search"
+)
 
-var supportedControls = []string{"", "user", ControlGlossaryTerm}
+var supportedControls = []string{"", "user", ControlGlossaryTerm, ControlSearch}
 
 type Constraints struct {
 	Minimum   *float64 `json:"minimum,omitempty"`
@@ -381,6 +388,12 @@ func validateDefinition(f Field) error {
 		if kinds := f.AppliesTo.EffectiveKinds(); len(kinds) != 1 || kinds[0] != "glossary_term" {
 			return errors.New("the glossary_term control applies to glossary_term fields only")
 		}
+	}
+	if f.Presentation.Control == ControlSearch && f.Type != "string" && (f.Type != "list" || f.ItemType != "string") {
+		return errors.New("the search control requires type string or a list of strings")
+	}
+	if f.Presentation.Badge && f.Type != "enum" {
+		return errors.New("badge requires type enum")
 	}
 	if f.Presentation.InverseLabelKey != "" && f.Presentation.Control != ControlGlossaryTerm {
 		return errors.New("inverseLabelKey requires the glossary_term control")

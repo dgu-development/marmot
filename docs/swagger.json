@@ -14429,8 +14429,12 @@
         "metamodel.Presentation": {
             "type": "object",
             "properties": {
+                "badge": {
+                    "description": "Badge asks clients to show an enum field's value as a chip next to the\nentity's name, on its page and in search results.",
+                    "type": "boolean"
+                },
                 "control": {
-                    "description": "Control names an alternate editor for a string field's value; the stored\nvalue and its validation are unaffected. \"user\" holds a native Marmot\nuser ID. \"glossary_term\" holds glossary term IDs, in a string or a list\nof strings, on glossary_term fields only; the glossary checks the terms\nexist.",
+                    "description": "Control names an alternate editor for a string field's value; the stored\nvalue and its validation are unaffected. \"user\" holds a native Marmot\nuser ID. \"glossary_term\" holds glossary term IDs, in a string or a list\nof strings, on glossary_term fields only; the glossary checks the terms\nexist. \"search\" shows each value of a string or list of strings as a\nlink to a catalog search for it, such as a term's synonyms.",
                     "type": "string"
                 },
                 "descriptionKey": {

@@ -93,6 +93,8 @@ func TestRejectInvalidDefinitions(t *testing.T) {
 		"term link on asset":      strings.Replace(exampleProfile, "type: integer", "type: string", 1) + "      control: glossary_term\n",
 		"term link on integer":    strings.Replace(exampleProfile, "required: true", "required: true\n    appliesTo:\n      kinds: [glossary_term]", 1) + "      control: glossary_term\n",
 		"inverse label alone":     exampleProfile + "      inverseLabelKey: example.retention.inverse\n",
+		"search on integer":       exampleProfile + "      control: search\n",
+		"badge on integer":        exampleProfile + "      badge: true\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Load(strings.NewReader(document)); err == nil {
@@ -423,5 +425,44 @@ func TestValueLabelKeys(t *testing.T) {
 				t.Fatal("accepted invalid valueLabelKeys")
 			}
 		})
+	}
+}
+
+func TestBadgeAndSearchControl(t *testing.T) {
+	profile := `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: term_type
+    type: enum
+    core: true
+    storage: metadata.example.term_type
+    values: [business_term, acronym]
+    appliesTo:
+      kinds: [glossary_term]
+    presentation:
+      labelKey: example.term_type.label
+      badge: true
+  - id: synonyms
+    type: list
+    itemType: string
+    core: true
+    storage: metadata.synonyms
+    appliesTo:
+      kinds: [glossary_term]
+    presentation:
+      labelKey: example.synonyms.label
+      control: search
+`
+	r, err := Load(strings.NewReader(profile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, _ := r.Field("term_type"); !f.Presentation.Badge {
+		t.Fatal("badge not carried")
+	}
+	if f, _ := r.Field("synonyms"); f.Presentation.Control != ControlSearch {
+		t.Fatal("search control not carried")
 	}
 }
