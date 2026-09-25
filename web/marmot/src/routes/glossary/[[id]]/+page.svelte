@@ -49,6 +49,7 @@
 	let selectedTerm: GlossaryTerm | null = null;
 	let showCreateModal = false;
 	let showDeleteConfirm = false;
+	let referencingCount = 0;
 
 	let newTermName = '';
 	let newTermDefinition = '';
@@ -192,6 +193,7 @@
 
 	function selectTerm(term: GlossaryTerm) {
 		selectedTerm = term;
+		referencingCount = 0;
 		isEditing = false;
 		editedTerm = null;
 
@@ -666,7 +668,11 @@
 								</div>
 
 								{#if metamodel?.enabled}
-									<TermReferences termId={selectedTerm.id} schema={metamodel} />
+									<TermReferences
+										termId={selectedTerm.id}
+										schema={metamodel}
+										onload={(count) => (referencingCount = count)}
+									/>
 								{/if}
 
 								<!-- Description (Markdown Body) -->
@@ -958,6 +964,13 @@
 				<p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
 					{m.glossary_delete_confirm({ name: selectedTerm?.name ?? '' })}
 				</p>
+				{#if referencingCount > 0}
+					<p
+						class="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200"
+					>
+						{m.glossary_delete_referenced({ count: referencingCount })}
+					</p>
+				{/if}
 				<div class="flex justify-end gap-3">
 					<button
 						on:click={() => (showDeleteConfirm = false)}

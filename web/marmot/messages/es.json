@@ -605,6 +605,7 @@
 	"glossary_delete_confirm": "¿Seguro que quieres eliminar «{name}»? Esta acción no se puede deshacer.",
 	"glossary_delete_error": "No se ha podido eliminar término",
 	"glossary_delete_modal_heading": "Eliminar término",
+	"glossary_delete_referenced": "Otros términos apuntan a este ({count}). Sus enlaces se mostrarán como término eliminado.",
 	"glossary_description_edit_placeholder": "Añade una descripción detallada con ejemplos, contexto o notas de uso...",
 	"glossary_description_optional_label": "Descripción (opcional)",
 	"glossary_description_placeholder": "Contexto adicional, ejemplos de uso o explicación detallada...",

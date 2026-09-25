@@ -605,6 +605,7 @@
 	"glossary_delete_confirm": "Are you sure you want to delete \"{name}\"? This action cannot be undone.",
 	"glossary_delete_error": "Failed to delete term",
 	"glossary_delete_modal_heading": "Delete Term",
+	"glossary_delete_referenced": "Other terms point at this one ({count}). Their links will show as a deleted term.",
 	"glossary_description_edit_placeholder": "Add a detailed description with examples, context, or usage notes...",
 	"glossary_description_optional_label": "Description (Optional)",
 	"glossary_description_placeholder": "Additional context, usage examples, or detailed explanation...",

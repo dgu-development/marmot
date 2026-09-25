@@ -8,7 +8,16 @@
 	import { rememberTerm, termReferences, type TermReferences } from '$lib/glossary/links';
 	import TermLinks from './TermLinks.svelte';
 
-	let { termId, schema }: { termId: string; schema: MetamodelSchema } = $props();
+	let {
+		termId,
+		schema,
+		onload = undefined
+	}: {
+		termId: string;
+		schema: MetamodelSchema;
+		/** Receives how many terms point at this one, once known. */
+		onload?: (count: number) => void;
+	} = $props();
 
 	let groups = $state<TermReferences[]>([]);
 
@@ -20,6 +29,7 @@
 				if (cancelled) return;
 				for (const group of found) group.terms.forEach(rememberTerm);
 				groups = found;
+				onload?.(new Set(found.flatMap((g) => g.terms.map((t) => t.id))).size);
 			})
 			.catch(() => {});
 		return () => {
