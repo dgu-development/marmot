@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SearchLinks from '$components/metamodel/SearchLinks.svelte';
 	import IconifyIcon from '@iconify/svelte';
 	import { fetchApi } from '$lib/api';
 	import { toasts } from '$lib/stores/toast';
@@ -367,6 +368,8 @@
 		{@render ownerChip(value, false)}
 	{:else if field.presentation?.control === GLOSSARY_TERM_CONTROL}
 		<TermLinks ids={linkIds(value)} />
+	{:else if field.presentation?.control === 'search'}
+		<SearchLinks values={Array.isArray(value) ? value.map(String) : [String(value)]} />
 	{:else if Array.isArray(value)}
 		<div class="flex flex-wrap gap-1.5">
 			{#each value as item, i (i)}

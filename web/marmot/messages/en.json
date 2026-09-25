@@ -932,6 +932,7 @@
 	"metamodel_other_section": "Other",
 	"metamodel_required": "Required",
 	"metamodel_save_failed": "Could not save the field.",
+	"metamodel_search_for": "Search the catalog for “{value}”",
 	"metamodel_unknown_user": "Unknown user",
 	"metamodel_yes": "Yes",
 	"metrics_asset_types_title": "Asset Types",

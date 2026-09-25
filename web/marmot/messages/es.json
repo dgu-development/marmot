@@ -932,6 +932,7 @@
 	"metamodel_other_section": "Otros",
 	"metamodel_required": "Obligatorio",
 	"metamodel_save_failed": "No se ha podido guardar el campo.",
+	"metamodel_search_for": "Buscar «{value}» en el catálogo",
 	"metamodel_unknown_user": "Usuario desconocido",
 	"metamodel_yes": "Sí",
 	"metrics_asset_types_title": "Tipos de activos",

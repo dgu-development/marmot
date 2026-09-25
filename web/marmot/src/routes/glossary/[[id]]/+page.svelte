@@ -27,6 +27,8 @@
 	import ProductGovernedFields from '$components/product/ProductGovernedFields.svelte';
 	import TermReferences from '$components/glossary/TermReferences.svelte';
 	import TermLinkSummary from '$components/glossary/TermLinkSummary.svelte';
+	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
+	import SearchLinks from '$components/metamodel/SearchLinks.svelte';
 	import { GLOSSARY_TERM_CONTROL, linkIds } from '$lib/glossary/links';
 	import { nativeMessage } from '$lib/metamodel/i18n';
 	import { resolveMessage } from '$lib/metamodel/labels';
@@ -522,9 +524,14 @@
 										placeholder={m.glossary_term_name_placeholder()}
 									/>
 								{:else}
-									<h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
-										{selectedTerm.name}
-									</h2>
+									<div class="mb-3 flex items-start justify-between gap-3">
+										<h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+											{selectedTerm.name}
+										</h2>
+										<div class="flex flex-shrink-0 flex-wrap justify-end gap-1.5 pt-1">
+											<FieldBadges schema={metamodel} metadata={selectedTerm.metadata} />
+										</div>
+									</div>
 									{#if synonymsOf(selectedTerm).length > 0}
 										<div
 											class="-mt-1 mb-3 flex flex-wrap items-center gap-1.5"
@@ -533,12 +540,7 @@
 											<span class="text-xs text-gray-500 dark:text-gray-400"
 												>{m.glossary_synonyms_label()}:</span
 											>
-											{#each synonymsOf(selectedTerm) as synonym (synonym)}
-												<span
-													class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-200"
-													>{synonym}</span
-												>
-											{/each}
+											<SearchLinks values={synonymsOf(selectedTerm)} />
 										</div>
 									{/if}
 								{/if}

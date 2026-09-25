@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SearchLinks from '$components/metamodel/SearchLinks.svelte';
 	import IconifyIcon from '@iconify/svelte';
 	import Avatar from '$components/user/Avatar.svelte';
 	import { locale } from '$lib/i18n';
@@ -170,6 +171,8 @@
 									{owner?.name ?? value}
 								</span>
 							{/if}
+						{:else if field.presentation?.control === 'search'}
+							<SearchLinks values={Array.isArray(value) ? value.map(String) : [String(value)]} />
 						{:else if Array.isArray(value)}
 							<div class="flex flex-wrap gap-1">
 								{#each value as item, itemIndex (itemIndex)}

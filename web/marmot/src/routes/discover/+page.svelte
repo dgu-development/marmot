@@ -28,7 +28,8 @@
 	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
 	import { facetableFields } from '$lib/metamodel/values';
 	import { catalogLabels } from '$lib/catalog/labels';
-	import type { MetamodelField } from '$lib/metamodel/types';
+	import type { MetamodelField, MetamodelSchema } from '$lib/metamodel/types';
+	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
 
 	interface SearchResultMetadata {
 		type?: string;
@@ -115,6 +116,17 @@
 		defaultLocale: schemaDefaultLocale,
 		messages: schemaMessages,
 		native: nativeMessage
+	});
+
+	// Badges come from each kind's own profile fields.
+	let kindSchemas = $state<Record<string, MetamodelSchema | null>>({});
+
+	$effect(() => {
+		for (const kind of ['asset', 'glossary_term', 'data_product']) {
+			fetchMetamodel(kind)
+				.then((schema) => (kindSchemas = { ...kindSchemas, [kind]: schema }))
+				.catch(() => {});
+		}
 	});
 
 	function governedFieldLabel(field: MetamodelField): string {
@@ -1010,6 +1022,13 @@
 												</div>
 											</div>
 											<div class="flex items-center gap-1.5 flex-shrink-0">
+												<FieldBadges
+													schema={kindSchemas.asset}
+													metadata={result.metadata?.metadata as
+														| Record<string, unknown>
+														| undefined}
+													size="xs"
+												/>
 												<button
 													onclick={(e) => handleTypeClick(result.metadata?.type ?? '', e)}
 													class="text-xs {getTagColor(
@@ -1184,13 +1203,24 @@
 													</h3>
 												</div>
 											</div>
-											<span
-												class="flex-shrink-0 text-xs {getResultTypeColor(
-													result.type
-												)} px-2 py-0.5 rounded font-medium"
-											>
-												{getKindLabel(result.type)}
-											</span>
+											<div class="flex flex-shrink-0 items-center gap-1.5">
+												{#if result.type === 'glossary'}
+													<FieldBadges
+														schema={kindSchemas.glossary_term}
+														metadata={result.metadata?.metadata as
+															| Record<string, unknown>
+															| undefined}
+														size="xs"
+													/>
+												{/if}
+												<span
+													class="text-xs {getResultTypeColor(
+														result.type
+													)} px-2 py-0.5 rounded font-medium"
+												>
+													{getKindLabel(result.type)}
+												</span>
+											</div>
 										</div>
 
 										{#if getResultSubtitle(result)}
