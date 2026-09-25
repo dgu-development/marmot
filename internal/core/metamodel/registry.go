@@ -38,6 +38,11 @@ type Presentation struct {
 	InverseLabelKey string `json:"inverseLabelKey,omitempty"`
 	// Facet asks Discover to offer this field as a segmented filter. Only enum and boolean fields qualify
 	Facet bool `json:"facet,omitempty"`
+	// ValueLabelKeys maps stored values to message keys, for showing a label
+	// in place of the value. Only enum values (also as list items) and, for
+	// boolean fields, "true" and "false" may be keyed. Storage, search and
+	// filters keep using the value.
+	ValueLabelKeys map[string]string `json:"valueLabelKeys,omitempty"`
 }
 
 const ControlGlossaryTerm = "glossary_term"
@@ -383,6 +388,9 @@ func validateDefinition(f Field) error {
 	if f.Presentation.Facet && f.Type != "enum" && f.Type != "boolean" {
 		return errors.New("facet requires type enum or boolean")
 	}
+	if err := validateValueLabelKeys(f); err != nil {
+		return err
+	}
 	v := f.Validation
 	valueType := f.Type
 	if valueType == "list" {
@@ -586,4 +594,28 @@ func number(value any) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func validateValueLabelKeys(f Field) error {
+	if len(f.Presentation.ValueLabelKeys) == 0 {
+		return nil
+	}
+	var allowed []string
+	switch {
+	case f.Type == "enum", f.Type == "list" && f.ItemType == "enum":
+		allowed = f.Values
+	case f.Type == "boolean":
+		allowed = []string{"true", "false"}
+	default:
+		return errors.New("valueLabelKeys requires an enum, a list of enum or a boolean")
+	}
+	for value, key := range f.Presentation.ValueLabelKeys {
+		if !slices.Contains(allowed, value) {
+			return fmt.Errorf("valueLabelKeys names %q, which is not a value of the field", value)
+		}
+		if !messageKey.MatchString(key) {
+			return errors.New("invalid message key")
+		}
+	}
+	return nil
 }

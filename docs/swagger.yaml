@@ -2968,6 +2968,15 @@ definitions:
         type: integer
       section:
         type: string
+      valueLabelKeys:
+        additionalProperties:
+          type: string
+        description: |-
+          ValueLabelKeys maps stored values to message keys, for showing a label
+          in place of the value. Only enum values (also as list items) and, for
+          boolean fields, "true" and "false" may be keyed. Storage, search and
+          filters keep using the value.
+        type: object
     type: object
   metamodel.Schema:
     properties:

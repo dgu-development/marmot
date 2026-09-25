@@ -14455,6 +14455,13 @@
                 },
                 "section": {
                     "type": "string"
+                },
+                "valueLabelKeys": {
+                    "description": "ValueLabelKeys maps stored values to message keys, for showing a label\nin place of the value. Only enum values (also as list items) and, for\nboolean fields, \"true\" and \"false\" may be keyed. Storage, search and\nfilters keep using the value.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 }
             }
         },

@@ -150,6 +150,7 @@ field may share a binding, since they never share a row.
 | `control` | Alternate editor without changing storage: `user` (string holding a Marmot user ID) or `glossary_term` (see [Links between terms](#links-between-terms)) |
 | `inverseLabelKey` | With `control: glossary_term`, the message key naming the link from the term it points to, such as "Acronyms" for a "Stands for" field |
 | `facet` | Offer this field as a Discover segmented filter. Requires type `enum` or `boolean` |
+| `valueLabelKeys` | Map of stored value → message key, to show a label in place of the value (see [Value labels](#value-labels)). For `enum`, `list` of `enum`, or `boolean` (`"true"`, `"false"`) |
 
 Native labels reuse existing Marmot message keys. A profile with custom fields
 should also ship a `messages` catalogue (below) so clients can resolve their
@@ -174,6 +175,38 @@ fallback itself. Locales and keys are validated as identifiers; values must be
 non-empty. Keeping labels in this catalogue, not in Marmot's own message
 files, means editing a profile's text never requires a kernel change or
 rebuild.
+
+### Value labels
+
+```yaml
+- id: classification
+  type: enum
+  values: [public, internal]
+  storage: metadata.example.classification
+  core: true
+  presentation:
+    labelKey: example.classification.label
+    valueLabelKeys:
+      public: example.classification.public
+      internal: example.classification.internal
+messages:
+  es:
+    example.classification.public: Pública
+    example.classification.internal: Interna
+```
+
+Clients show the label wherever the value appears: field values, editors,
+Discover facets. What is stored, indexed and filtered stays the value, so
+`@metadata.example.classification:public` and a facet still send `public`. A
+value without a key is shown as is. Boolean fields without keys show the
+client's own "Yes" and "No".
+
+Two key prefixes are reserved in `messages` for the catalog's own
+identifiers, which plugins emit in English: `assetType.<type>` labels an asset
+type and `provider.<provider>` a provider, with the identifier lowercased and
+every character other than `a-z` and `0-9` turned into `_` (`Delta Table` →
+`assetType.delta_table`). They take precedence over Marmot's built-in labels
+for the core types.
 
 ### Native storage bindings
 

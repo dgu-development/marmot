@@ -380,3 +380,48 @@ fields:
 		t.Fatalf("field = %+v", f)
 	}
 }
+
+func TestValueLabelKeys(t *testing.T) {
+	const head = "formatVersion: 1\nid: example\nversion: 1\ndefaultLocale: en\nfields:\n"
+	enum := head + `  - id: classification
+    type: enum
+    core: true
+    storage: metadata.example.classification
+    values: [public, internal]
+    presentation:
+      labelKey: example.classification.label
+      valueLabelKeys:
+        public: example.classification.public
+        internal: example.classification.internal
+`
+	r, err := Load(strings.NewReader(enum))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, _ := r.Field("classification"); f.Presentation.ValueLabelKeys["public"] != "example.classification.public" {
+		t.Fatalf("keys not carried: %+v", f.Presentation)
+	}
+	for name, document := range map[string]string{
+		"enum list": head + "  - id: channels\n    type: list\n    itemType: enum\n    core: true\n    storage: metadata.example.channels\n    values: [api, sftp]\n    presentation:\n      labelKey: example.channels.label\n      valueLabelKeys:\n        api: example.channels.api\n",
+		"boolean":   head + "  - id: pii\n    type: boolean\n    core: true\n    storage: metadata.example.pii\n    presentation:\n      labelKey: example.pii.label\n      valueLabelKeys:\n        \"true\": example.pii.yes\n        \"false\": example.pii.no\n",
+		"partial":   strings.Replace(enum, "        internal: example.classification.internal\n", "", 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Load(strings.NewReader(document)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	for name, document := range map[string]string{
+		"unknown value":    strings.Replace(enum, "internal: example", "secret: example", 1),
+		"invalid key":      strings.Replace(enum, "example.classification.public", "example classification", 1),
+		"string field":     head + "  - id: note\n    type: string\n    core: true\n    storage: metadata.example.note\n    presentation:\n      labelKey: example.note.label\n      valueLabelKeys:\n        x: example.note.x\n",
+		"boolean non-bool": head + "  - id: pii\n    type: boolean\n    core: true\n    storage: metadata.example.pii\n    presentation:\n      labelKey: example.pii.label\n      valueLabelKeys:\n        maybe: example.pii.maybe\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Load(strings.NewReader(document)); err == nil {
+				t.Fatal("accepted invalid valueLabelKeys")
+			}
+		})
+	}
+}
