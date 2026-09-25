@@ -31,7 +31,7 @@ type DomainResolver func(ctx context.Context, refs []string) (*DomainFilter, err
 
 var ErrUnknownDomain = errors.New("unknown domain")
 
-const domainTokenPattern = `(?:\b(NOT)\s+)?@domain\s*[:=]\s*(?:"([^"]+)"|([^\s"()]+))`
+const domainTokenPattern = `(?:\b(NOT)\s+)?@domain\s*[:=]\s*(?:"([^"]+)"|([^\s"()]+))` //nolint:gosec // G101: a query token pattern, not a credential
 
 var (
 	domainFilterRegex = regexp.MustCompile(`(?i)` + domainTokenPattern)
