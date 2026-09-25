@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 
 	"github.com/marmotdata/marmot/internal/api/v1/common"
 	"github.com/marmotdata/marmot/internal/core/domain"
@@ -37,8 +38,7 @@ func (d *guardedDocs) Routes() []common.Route {
 		if route.Method == http.MethodGet || route.Method == http.MethodOptions {
 			continue
 		}
-		mw := append([]func(http.HandlerFunc) http.HandlerFunc{}, route.Middleware...)
-		routes[i].Middleware = append(mw, d.check)
+		routes[i].Middleware = append(slices.Clone(route.Middleware), d.check)
 	}
 	return routes
 }

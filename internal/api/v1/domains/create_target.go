@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 
 	"github.com/marmotdata/marmot/internal/api/v1/common"
 	"github.com/marmotdata/marmot/internal/core/domain"
@@ -39,8 +40,7 @@ func (c *createTargets) Routes() []common.Route {
 		if route.Method != http.MethodPost || !c.paths[route.Path] {
 			continue
 		}
-		mw := append([]func(http.HandlerFunc) http.HandlerFunc{}, route.Middleware...)
-		routes[i].Middleware = append(mw, c.target)
+		routes[i].Middleware = append(slices.Clone(route.Middleware), c.target)
 	}
 	return routes
 }

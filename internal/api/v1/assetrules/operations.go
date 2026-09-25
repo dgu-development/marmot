@@ -227,11 +227,12 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 
 	err := h.assetRuleService.Delete(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, domain.ErrForbidden) {
+		switch {
+		case errors.Is(err, domain.ErrForbidden):
 			common.RespondError(w, http.StatusForbidden, "Asset rules are global while domain write enforcement is on")
-		} else if errors.Is(err, assetrule.ErrNotFound) {
+		case errors.Is(err, assetrule.ErrNotFound):
 			common.RespondError(w, http.StatusNotFound, "Asset rule not found")
-		} else {
+		default:
 			log.Error().Err(err).Str("id", id).Msg("Failed to delete asset rule")
 			common.RespondError(w, http.StatusInternalServerError, "Internal server error")
 		}
