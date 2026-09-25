@@ -28,6 +28,8 @@ type Repository interface {
 	List(ctx context.Context, offset, limit int) (*ListResult, error)
 	Search(ctx context.Context, filter SearchFilter) (*ListResult, error)
 	GetChildren(ctx context.Context, parentID string) ([]*GlossaryTerm, error)
+	RefsByID(ctx context.Context, ids []string) ([]TermRef, error)
+	ReferencedBy(ctx context.Context, path []string, id string) ([]TermRef, error)
 }
 
 // querier is what the repository needs from a connection. A pool and a

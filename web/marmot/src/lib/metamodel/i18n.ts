@@ -29,6 +29,10 @@ export function violationMessage(code: string): string {
 			return m.metamodel_error_enum();
 		case 'date':
 			return m.metamodel_error_date();
+		case 'term_not_found':
+			return m.metamodel_error_term_not_found();
+		case 'self_reference':
+			return m.metamodel_error_self_reference();
 		default:
 			return m.metamodel_error_unknown();
 	}

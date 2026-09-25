@@ -4,8 +4,13 @@ export interface MetamodelPresentation {
 	descriptionKey?: string;
 	section?: string;
 	order?: number;
-	/** Alternate editor for a string field's value; the stored type is unchanged. Only "user" exists. */
+	/**
+	 * Alternate editor for a string field's value; the stored type is unchanged. "user" holds a
+	 * user ID; "glossary_term" holds glossary term IDs, in a string or a list, on terms only.
+	 */
 	control?: string;
+	/** Names a glossary_term link seen from the term it points to. */
+	inverseLabelKey?: string;
 	/** Offer this field as a segmented Discover filter. Only enum and boolean fields qualify. */
 	facet?: boolean;
 }

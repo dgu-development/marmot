@@ -115,6 +115,15 @@ func exportCell(c Column, t *glossary.GlossaryTerm, names map[string]string) str
 	if !ok || value == nil {
 		return ""
 	}
+	if c.links() {
+		var linked []string
+		for _, id := range glossary.LinkIDs(value) {
+			if name, ok := names[id]; ok {
+				linked = append(linked, name)
+			}
+		}
+		return strings.Join(linked, ListSeparator)
+	}
 	if items, ok := value.([]any); ok {
 		parts := make([]string, 0, len(items))
 		for _, item := range items {

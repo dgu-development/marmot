@@ -28,14 +28,21 @@ type Presentation struct {
 	Section        string `json:"section,omitempty"`
 	Order          int    `json:"order,omitempty"`
 	// Control names an alternate editor for a string field's value; the stored
-	// value and its validation are unaffected. Only "user" is defined so far,
-	// for a string field that holds a native Marmot user ID.
+	// value and its validation are unaffected. "user" holds a native Marmot
+	// user ID. "glossary_term" holds glossary term IDs, in a string or a list
+	// of strings, on glossary_term fields only; the glossary checks the terms
+	// exist.
 	Control string `json:"control,omitempty"`
+	// InverseLabelKey names a glossary_term link seen from the term it points
+	// to, such as "Acronyms" for a "Stands for" field.
+	InverseLabelKey string `json:"inverseLabelKey,omitempty"`
 	// Facet asks Discover to offer this field as a segmented filter. Only enum and boolean fields qualify
 	Facet bool `json:"facet,omitempty"`
 }
 
-var supportedControls = []string{"", "user"}
+const ControlGlossaryTerm = "glossary_term"
+
+var supportedControls = []string{"", "user", ControlGlossaryTerm}
 
 type Constraints struct {
 	Minimum   *float64 `json:"minimum,omitempty"`
@@ -351,7 +358,7 @@ func validateDefinition(f Field) error {
 	} else if !strings.HasPrefix(f.Storage, "marmot.") {
 		return errors.New("unknown storage binding")
 	}
-	for _, key := range []string{f.Presentation.LabelKey, f.Presentation.HelpTextKey, f.Presentation.DescriptionKey} {
+	for _, key := range []string{f.Presentation.LabelKey, f.Presentation.HelpTextKey, f.Presentation.DescriptionKey, f.Presentation.InverseLabelKey} {
 		if key != "" && !messageKey.MatchString(key) {
 			return errors.New("invalid message key")
 		}
@@ -361,6 +368,17 @@ func validateDefinition(f Field) error {
 	}
 	if f.Presentation.Control == "user" && f.Type != "string" {
 		return errors.New("the user control requires type string")
+	}
+	if f.Presentation.Control == ControlGlossaryTerm {
+		if f.Type != "string" && (f.Type != "list" || f.ItemType != "string") {
+			return errors.New("the glossary_term control requires type string or a list of strings")
+		}
+		if kinds := f.AppliesTo.EffectiveKinds(); len(kinds) != 1 || kinds[0] != "glossary_term" {
+			return errors.New("the glossary_term control applies to glossary_term fields only")
+		}
+	}
+	if f.Presentation.InverseLabelKey != "" && f.Presentation.Control != ControlGlossaryTerm {
+		return errors.New("inverseLabelKey requires the glossary_term control")
 	}
 	if f.Presentation.Facet && f.Type != "enum" && f.Type != "boolean" {
 		return errors.New("facet requires type enum or boolean")

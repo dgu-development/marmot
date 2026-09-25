@@ -159,6 +159,11 @@ func (im *Importer) Validate(ctx context.Context, sheet *Sheet, onExisting OnExi
 	for _, row := range sheet.Rows {
 		if !blank(row) {
 			lookup = append(lookup, cell(row, ColumnName), cell(row, ColumnParent))
+			for _, c := range cols {
+				if c.links() {
+					lookup = append(lookup, splitList(cell(row, c.ID))...)
+				}
+			}
 		}
 	}
 	found, err := im.terms.ByNames(ctx, lookup)
@@ -265,9 +270,18 @@ func (im *Importer) validateRow(ctx context.Context, r *Row, row []string, cell 
 		metadata = deepCopy(current.Metadata)
 	}
 	values := map[string]any{}
+	var links map[string][]string
 	for id, i := range index {
 		c, ok := known[id]
 		if !ok || !c.profile() || row[i] == "" {
+			continue
+		}
+		if c.links() {
+			targets := readLinks(c, r.Name, row[i], n, fail, warn)
+			if links == nil {
+				links = map[string][]string{}
+			}
+			links[c.Storage] = targets
 			continue
 		}
 		value, ok := parseValue(c, row[i])
@@ -327,7 +341,7 @@ func (im *Importer) validateRow(ctx context.Context, r *Row, row []string, cell 
 		if description != "" {
 			in.Description = &description
 		}
-		r.term = glossary.ImportTerm{Name: n.canonical(r.Name), Create: in, ParentName: parent, Extra: extra}
+		r.term = glossary.ImportTerm{Name: n.canonical(r.Name), Create: in, ParentName: parent, Links: links, Extra: extra}
 		return
 	}
 	// On update, an empty cell keeps the current value.
@@ -344,7 +358,35 @@ func (im *Importer) validateRow(ctx context.Context, r *Row, row []string, cell 
 	if len(tags) > 0 {
 		in.Tags = tags
 	}
-	r.term = glossary.ImportTerm{Name: current.Name, ExistingID: current.ID, Update: in, ParentName: parent, Extra: extra}
+	r.term = glossary.ImportTerm{Name: current.Name, ExistingID: current.ID, Update: in, ParentName: parent, Links: links, Extra: extra}
+}
+
+// readLinks resolves a glossary_term cell to the names the catalog will hold,
+// the way the parent column is: existing terms or rows of the same file.
+func readLinks(c Column, self, cell string, n names, fail, warn func(column, code, message string)) []string {
+	items := splitList(cell)
+	if !c.list() && len(items) > 1 {
+		fail(c.ID, "type", "only one term name is allowed")
+	}
+	if max := c.Validation.MaxItems; max != nil && len(items) > *max {
+		fail(c.ID, "items", fmt.Sprintf("at most %d terms", *max))
+	}
+	targets := make([]string, 0, len(items))
+	for _, name := range items {
+		found, byCase := n.term(name)
+		switch {
+		case fold(name) == fold(self):
+			fail(c.ID, "self_reference", "a term cannot point at itself")
+		case len(found) == 0 && !n.inFile(name):
+			fail(c.ID, "term_not_found", fmt.Sprintf("no term named %q exists or is in the file", name))
+		case len(found) > 1:
+			fail(c.ID, "ambiguous_term", fmt.Sprintf("%d terms are named %q", len(found), name))
+		case byCase || (len(found) == 0 && n.canonical(name) != name):
+			warn(c.ID, "matched_ignoring_case", fmt.Sprintf("refers to %q, ignoring case", n.canonical(name)))
+		}
+		targets = append(targets, n.canonical(name))
+	}
+	return targets
 }
 
 func (im *Importer) readOwners(ctx context.Context, value string, fail func(column, code, message string)) []glossary.OwnerInput {

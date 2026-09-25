@@ -3,6 +3,7 @@ package glossary
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -445,4 +446,18 @@ func TestParentAssignments_KeepsAChain(t *testing.T) {
 	})
 
 	assert.Equal(t, map[string]string{"A": "B", "B": "C"}, assignments)
+}
+
+func (r *fakeRepo) RefsByID(ctx context.Context, ids []string) ([]TermRef, error) {
+	refs := []TermRef{}
+	for _, term := range r.live() {
+		if slices.Contains(ids, term.ID) {
+			refs = append(refs, TermRef{ID: term.ID, Name: term.Name, Definition: term.Definition})
+		}
+	}
+	return refs, nil
+}
+
+func (r *fakeRepo) ReferencedBy(ctx context.Context, path []string, id string) ([]TermRef, error) {
+	return []TermRef{}, nil
 }

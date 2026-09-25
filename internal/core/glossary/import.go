@@ -2,8 +2,12 @@ package glossary
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+
+	"github.com/marmotdata/marmot/internal/core/metamodel"
 )
 
 // ImportTerm is one validated row of a bulk import: a term to create, or an
@@ -20,6 +24,10 @@ type ImportTerm struct {
 	Create     CreateTermInput
 	Update     UpdateTermInput
 	ParentName string
+	// Links maps the metadata binding of each glossary_term field the row
+	// sets to the names of its targets, resolved like ParentName once every
+	// row is written.
+	Links map[string][]string
 }
 
 func (t ImportTerm) name() string {
@@ -131,7 +139,67 @@ func (s *service) importOrdered(ctx context.Context, terms []ImportTerm) ([]*Glo
 		}
 		pending = next
 	}
+	return s.importLinks(ctx, terms, written, ids)
+}
+
+// importLinks writes glossary_term values once every row exists, since a row
+// may point at a term another row creates.
+func (s *service) importLinks(ctx context.Context, terms []ImportTerm, written []*GlossaryTerm, ids map[string]string) ([]*GlossaryTerm, error) {
+	byName := make(map[string]int, len(written))
+	for i, term := range written {
+		byName[term.Name] = i
+	}
+	for _, t := range terms {
+		if len(t.Links) == 0 {
+			continue
+		}
+		i, ok := byName[t.name()]
+		if !ok {
+			continue
+		}
+		metadata := copyMetadata(written[i].Metadata)
+		for storage, names := range t.Links {
+			linked := make([]any, 0, len(names))
+			for _, name := range names {
+				id, ok := ids[name]
+				if !ok {
+					target, err := s.repo.GetByName(ctx, name)
+					if err != nil {
+						return nil, fmt.Errorf("term %q: linked term %q: %w", t.name(), name, err)
+					}
+					id = target.ID
+				}
+				linked = append(linked, id)
+			}
+			var value any = linked
+			if field, ok := s.linkField(storage); ok && field.Type == "string" {
+				value = linked[0]
+			}
+			metadata = setAt(metadata, strings.Split(strings.TrimPrefix(storage, "metadata."), "."), value)
+		}
+		term, err := s.Update(ctx, written[i].ID, UpdateTermInput{Metadata: metadata})
+		if err != nil {
+			return nil, fmt.Errorf("term %q: %w", t.name(), err)
+		}
+		written[i] = term
+	}
 	return written, nil
+}
+
+func (s *service) linkField(storage string) (metamodel.Field, bool) {
+	for _, f := range LinkFields(s.metamodel) {
+		if f.Storage == storage {
+			return f, true
+		}
+	}
+	return metamodel.Field{}, false
+}
+
+func copyMetadata(m map[string]interface{}) map[string]interface{} {
+	raw, _ := json.Marshal(m)
+	out := map[string]interface{}{}
+	_ = json.Unmarshal(raw, &out)
+	return out
 }
 
 // importParent resolves a parent name to an ID. ready is false while the

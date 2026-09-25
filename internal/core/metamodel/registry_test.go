@@ -90,6 +90,9 @@ func TestRejectInvalidDefinitions(t *testing.T) {
 		"unsupported reference":   strings.Replace(exampleProfile, "type: integer", "type: reference", 1),
 		"nullable native tags":    "formatVersion: 1\nid: example\nversion: 1\ndefaultLocale: en\nfields:\n  - id: tags\n    type: list\n    itemType: string\n    core: true\n    nullable: true\n    storage: marmot.tags\n",
 		"facet on integer field":  strings.Replace(exampleProfile, "labelKey: example.retention.label", "labelKey: example.retention.label\n      facet: true", 1),
+		"term link on asset":      strings.Replace(exampleProfile, "type: integer", "type: string", 1) + "      control: glossary_term\n",
+		"term link on integer":    strings.Replace(exampleProfile, "required: true", "required: true\n    appliesTo:\n      kinds: [glossary_term]", 1) + "      control: glossary_term\n",
+		"inverse label alone":     exampleProfile + "      inverseLabelKey: example.retention.inverse\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Load(strings.NewReader(document)); err == nil {
@@ -348,4 +351,32 @@ func mergeValues(base map[string]any, extra map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+func TestGlossaryTermControl(t *testing.T) {
+	profile := `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: stands_for
+    type: list
+    itemType: string
+    core: true
+    storage: metadata.example.stands_for
+    appliesTo:
+      kinds: [glossary_term]
+    presentation:
+      labelKey: example.stands_for.label
+      control: glossary_term
+      inverseLabelKey: example.stands_for.inverse
+`
+	r, err := Load(strings.NewReader(profile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, ok := r.Field("stands_for")
+	if !ok || f.Presentation.Control != ControlGlossaryTerm || f.Presentation.InverseLabelKey != "example.stands_for.inverse" {
+		t.Fatalf("field = %+v", f)
+	}
 }

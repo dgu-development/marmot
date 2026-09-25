@@ -34,7 +34,8 @@ type Column struct {
 	// Validation holds a profile field's constraints: range, length, items.
 	Validation metamodel.Constraints
 	// Format names how a term's own column is written ("name", "text",
-	// "term", "owners", "tags"); profile columns are described by their type.
+	// "term", "owners", "tags"); profile columns are described by their type,
+	// except "terms" for a glossary_term field, written as term names.
 	Format string
 	// Storage is the metadata.* binding of a profile field; empty for the
 	// term's own columns.
@@ -50,6 +51,8 @@ type Column struct {
 func (c Column) profile() bool { return c.Storage != "" }
 
 func (c Column) list() bool { return c.Type == "list" }
+
+func (c Column) links() bool { return c.Format == "terms" }
 
 // Columns lists the term's own columns followed by the profile fields that
 // apply to glossary_term and are stored in metadata.
@@ -69,7 +72,12 @@ func Columns(registry *metamodel.Registry) []Column {
 		if !strings.HasPrefix(f.Storage, "metadata.") {
 			continue
 		}
+		var format string
+		if f.Presentation.Control == metamodel.ControlGlossaryTerm {
+			format = "terms"
+		}
 		cols = append(cols, Column{
+			Format:     format,
 			ID:         f.ID,
 			Type:       f.Type,
 			ItemType:   f.ItemType,
@@ -121,6 +129,11 @@ func Describe(c Column) string {
 	case "name":
 		return "Text. Identifies the term ignoring case: a row matches an existing term that differs only in case, and keeps its name."
 	case "term":
+		return "The name of another term, existing or in this file, ignoring case."
+	case "terms":
+		if c.list() {
+			return "Names of other terms, existing or in this file, separated by " + ListSeparator + ", ignoring case."
+		}
 		return "The name of another term, existing or in this file, ignoring case."
 	case "owners":
 		return "Usernames, or team:<team name>, separated by " + ListSeparator + ", ignoring case."

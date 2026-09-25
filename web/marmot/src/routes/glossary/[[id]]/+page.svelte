@@ -25,6 +25,7 @@
 	import Tags from '$components/shared/Tags.svelte';
 	import MetadataView from '$components/shared/MetadataView.svelte';
 	import ProductGovernedFields from '$components/product/ProductGovernedFields.svelte';
+	import TermReferences from '$components/glossary/TermReferences.svelte';
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import type { MetamodelSchema } from '$lib/metamodel/types';
 	import { governedFields, governedPaths } from '$lib/metamodel/values';
@@ -625,6 +626,7 @@
 														bind:metadata={selectedTerm.metadata}
 														productId={undefined}
 														endpoint={`/glossary/${selectedTerm.id}`}
+														selfId={selectedTerm.id}
 														schema={metamodel}
 														fields={governed}
 														editable={canEditTerm}
@@ -634,6 +636,10 @@
 										</MetadataView>
 									{/if}
 								</div>
+
+								{#if metamodel?.enabled}
+									<TermReferences termId={selectedTerm.id} schema={metamodel} />
+								{/if}
 
 								<!-- Description (Markdown Body) -->
 								{#if selectedTerm.description || (isEditing && editedTerm)}

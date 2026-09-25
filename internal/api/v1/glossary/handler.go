@@ -109,6 +109,24 @@ func (h *Handler) Routes() []common.Route {
 			},
 		},
 		{
+			Path:    "/api/v1/glossary/references/{id}",
+			Method:  http.MethodGet,
+			Handler: h.getReferences,
+			Middleware: []func(http.HandlerFunc) http.HandlerFunc{
+				common.WithAuth(h.userService, h.authService, h.config),
+				common.RequirePermission(h.userService, "glossary", "view"),
+			},
+		},
+		{
+			Path:    "/api/v1/glossary/refs",
+			Method:  http.MethodGet,
+			Handler: h.getRefs,
+			Middleware: []func(http.HandlerFunc) http.HandlerFunc{
+				common.WithAuth(h.userService, h.authService, h.config),
+				common.RequirePermission(h.userService, "glossary", "view"),
+			},
+		},
+		{
 			Path:    "/api/v1/glossary/children/{id}",
 			Method:  http.MethodGet,
 			Handler: h.getChildren,

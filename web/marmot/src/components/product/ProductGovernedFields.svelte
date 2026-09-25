@@ -5,6 +5,9 @@
 	import { locale } from '$lib/i18n';
 	import { m } from '$lib/paraglide/messages';
 	import Avatar from '$components/user/Avatar.svelte';
+	import TermLinks from '$components/glossary/TermLinks.svelte';
+	import TermLinkPicker from '$components/glossary/TermLinkPicker.svelte';
+	import { GLOSSARY_TERM_CONTROL, linkIds } from '$lib/glossary/links';
 	import { createKeyboardNavigationState } from '$lib/keyboard';
 	import type { MetamodelField, MetamodelSchema } from '$lib/metamodel/types';
 	import { isValidationError, MetamodelHttpError } from '$lib/metamodel/api';
@@ -35,6 +38,7 @@
 		metadata = $bindable(),
 		productId,
 		endpoint = undefined,
+		selfId = undefined,
 		schema,
 		fields,
 		editable = false
@@ -43,6 +47,8 @@
 		productId: string | undefined;
 		/** PUT target taking `{ metadata }`, for entities other than products (glossary terms). */
 		endpoint?: string;
+		/** The entity being edited, which a glossary_term field may not point at. */
+		selfId?: string;
 		schema: MetamodelSchema;
 		fields: MetamodelField[];
 		editable?: boolean;
@@ -349,6 +355,8 @@
 		</span>
 	{:else if field.presentation?.control === 'user' && typeof value === 'string'}
 		{@render ownerChip(value, false)}
+	{:else if field.presentation?.control === GLOSSARY_TERM_CONTROL}
+		<TermLinks ids={linkIds(value)} />
 	{:else if Array.isArray(value)}
 		<div class="flex flex-wrap gap-1.5">
 			{#each value as item, i (i)}
@@ -504,6 +512,20 @@
 		<div class="min-w-0 flex-1">
 			{#if field.presentation?.control === 'user'}
 				{@render userEditor(field, controlId, described)}
+			{:else if field.presentation?.control === GLOSSARY_TERM_CONTROL}
+				<TermLinkPicker
+					ids={linkIds(draft)}
+					multiple={field.type === 'list'}
+					exclude={selfId}
+					inputId={controlId}
+					labelledby={`governed-product-label-${field.id}`}
+					describedby={described}
+					onchange={(ids) => {
+						draft = field.type === 'list' ? ids : (ids[0] ?? '');
+						errorCode = null;
+					}}
+					onescape={cancel}
+				/>
 			{:else if field.type === 'integer' || field.type === 'number'}
 				<input
 					id={controlId}

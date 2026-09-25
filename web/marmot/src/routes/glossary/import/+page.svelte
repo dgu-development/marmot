@@ -74,6 +74,10 @@
 				return m.glossary_import_format_string();
 			case 'term':
 				return m.glossary_import_format_term();
+			case 'terms':
+				return c.type === 'list'
+					? m.glossary_import_format_terms({ sep })
+					: m.glossary_import_format_term();
 			case 'owners':
 				return m.glossary_import_format_owners({ sep });
 			case 'tags':

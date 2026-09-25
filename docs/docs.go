@@ -3658,6 +3658,112 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/glossary/references/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "For each profile field with the glossary_term control, the live terms whose value names this term (for example, the acronyms that stand for it).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "glossary"
+                ],
+                "summary": "Terms pointing at a term",
+                "operationId": "getGlossaryTermReferences",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Term ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/GlossaryTermReferences"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/glossary/refs": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The live terms with the given IDs, for showing glossary_term values by name. Unknown or deleted IDs are left out.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "glossary"
+                ],
+                "summary": "Resolve term IDs",
+                "operationId": "getGlossaryTermRefs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Comma-separated term IDs (at most 100)",
+                        "name": "ids",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/GlossaryTermRef"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/glossary/search": {
             "get": {
                 "security": [
@@ -11740,6 +11846,34 @@ const docTemplate = `{
                 }
             }
         },
+        "GlossaryTermRef": {
+            "type": "object",
+            "properties": {
+                "definition": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "GlossaryTermReferences": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string"
+                },
+                "terms": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/GlossaryTermRef"
+                    }
+                }
+            }
+        },
         "HistogramBucket": {
             "type": "object",
             "properties": {
@@ -14304,7 +14438,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "control": {
-                    "description": "Control names an alternate editor for a string field's value; the stored\nvalue and its validation are unaffected. Only \"user\" is defined so far,\nfor a string field that holds a native Marmot user ID.",
+                    "description": "Control names an alternate editor for a string field's value; the stored\nvalue and its validation are unaffected. \"user\" holds a native Marmot\nuser ID. \"glossary_term\" holds glossary term IDs, in a string or a list\nof strings, on glossary_term fields only; the glossary checks the terms\nexist.",
                     "type": "string"
                 },
                 "descriptionKey": {
@@ -14315,6 +14449,10 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "helpTextKey": {
+                    "type": "string"
+                },
+                "inverseLabelKey": {
+                    "description": "InverseLabelKey names a glossary_term link seen from the term it points\nto, such as \"Acronyms\" for a \"Stands for\" field.",
                     "type": "string"
                 },
                 "labelKey": {
