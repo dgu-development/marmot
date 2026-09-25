@@ -54,3 +54,29 @@ func TestSearchCountsItsMatches(t *testing.T) {
 		t.Fatalf("invoice: total = %d, %v", total, err)
 	}
 }
+
+func TestHardDeletingASoftDeletedTermKeepsTheCount(t *testing.T) {
+	pool := pgtest.TempDB(t)
+	ctx := context.Background()
+	count := func() (n int) {
+		t.Helper()
+		if err := pool.QueryRow(ctx, `SELECT COALESCE((SELECT count FROM summary_counts WHERE dimension = 'entity_type' AND key = 'glossary'), 0)`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	for _, name := range []string{"Kept", "Gone"} {
+		if _, err := pool.Exec(ctx, `INSERT INTO glossary_terms (name, definition) VALUES ($1, 'x')`, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `UPDATE glossary_terms SET deleted_at = now() WHERE name = 'Gone'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM glossary_terms WHERE name = 'Gone'`); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(); n != 1 {
+		t.Fatalf("glossary count = %d, want 1", n)
+	}
+}
