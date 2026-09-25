@@ -11,7 +11,7 @@ marmotdata/marmot          main     ← upstream
 dgu-development/marmot     main     ← fast-forward only mirror of upstream (reference only, never a branch point)
 dgu-development/marmot     dgu      ← product line (PRs land here)
                            upstream/*  ← upstream-candidate, branched from a freshly fetched upstream/main
-                           feature/*   ← fork-only, branched from dgu
+                           feature/*, fix/*, docs/*, chore/*, refactor/*   ← fork-only, branched from dgu
 ```
 
 | Branch | Role |
@@ -19,7 +19,7 @@ dgu-development/marmot     dgu      ← product line (PRs land here)
 | `main` | Read-only mirror of `marmotdata/marmot` `main`. No unique commits. **Never branch from it** — it can be stale between syncs; kept only for browsing/diffing. |
 | `dgu` | Long-lived product line. Default branch for issues, PR templates, and CODEOWNERS. Consuming distributions pin a SHA of this branch. |
 | `upstream/*` | Upstream-candidate work. Branch from a freshly fetched `upstream/main`, PR to marmotdata/marmot. Rebase only — never merge `dgu`, `main`, or a fork branch into it. |
-| `feature/*` | Fork-only work. Branch from `dgu`, PR to `dgu`. |
+| `feature/*`, `fix/*`, `docs/*`, `chore/*`, `refactor/*` | Fork-only work, prefixed by the kind of change as in Conventional Commits. Branch from `dgu`, PR to `dgu`. |
 
 Do not use GitHub **Sync fork**, and do not open or merge PRs against `main` — it must stay bit-for-bit identical to `upstream/main`, not just fast-forward-able from it. Two things enforce that:
 
