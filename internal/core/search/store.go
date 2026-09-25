@@ -86,6 +86,10 @@ func (r *PostgresRepository) Search(ctx context.Context, filter Filter) ([]*Resu
 		r.recorder.RecordDBQuery(ctx, "unified_search", time.Since(start), false)
 		return nil, 0, nil, fmt.Errorf("scanning search results: %w", err)
 	}
+	if err := r.attachEntityMetadata(ctx, results); err != nil {
+		r.recorder.RecordDBQuery(ctx, "unified_search", time.Since(start), false)
+		return nil, 0, nil, err
+	}
 
 	facets, total, err := r.buildFacetsParallel(ctx, parsedQuery.GetFreeText(), filter, parsedQuery)
 	if err != nil {
