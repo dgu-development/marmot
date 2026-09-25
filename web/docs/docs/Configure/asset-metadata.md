@@ -299,6 +299,14 @@ wins. Ingestion runs that sync a source's glossary own the term's other
 metadata but never overwrite the governed fields: a run keeps whatever people
 set in them.
 
+The term page shows the governed fields in its metadata table, where people
+who may edit the term change them in place.
+
+Synonyms that discovery runs send are stored in `metadata.synonyms`, and
+searching any of them finds the term, in the glossary and in global search.
+Declare a `list` of `string` field bound to `metadata.synonyms` to edit them
+and carry them in the import template.
+
 ## Compatibility and rollout
 
 Migration `000054_asset_version.sql` adds only `assets.version`, initialized to
