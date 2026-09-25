@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { catalogLabels } from '$lib/catalog/labels';
 	import type { Asset } from '$lib/assets/types';
 	import Icon from '$components/ui/Icon.svelte';
 	import { m } from '$lib/paraglide/messages';
@@ -52,7 +53,7 @@
 						<span
 							class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
 						>
-							{asset.providers.join(', ')}
+							{asset.providers.map((p) => $catalogLabels.provider(p)).join(', ')}
 						</span>
 					{/if}
 				</div>

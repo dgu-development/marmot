@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { catalogLabels } from '$lib/catalog/labels';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { SvelteMap, SvelteURLSearchParams } from 'svelte/reactivity';
@@ -969,7 +970,7 @@
 															<span
 																class="flex-shrink-0 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded"
 															>
-																{result.metadata?.type?.replace(/_/g, ' ')}
+																{$catalogLabels.type(result.metadata?.type).replace(/_/g, ' ')}
 															</span>
 														</div>
 														<p

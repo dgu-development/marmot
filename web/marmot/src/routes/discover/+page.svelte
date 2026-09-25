@@ -27,6 +27,7 @@
 	import { nativeMessage } from '$lib/metamodel/i18n';
 	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
 	import { facetableFields } from '$lib/metamodel/values';
+	import { catalogLabels } from '$lib/catalog/labels';
 	import type { MetamodelField } from '$lib/metamodel/types';
 
 	interface SearchResultMetadata {
@@ -577,7 +578,9 @@
 															handleFilterChange();
 														}}
 													/>
-													<span class="text-sm text-gray-700 dark:text-gray-300">{value}</span>
+													<span class="text-sm text-gray-700 dark:text-gray-300"
+														>{$catalogLabels.type(value)}</span
+													>
 												</div>
 												<span class="text-xs text-gray-500 dark:text-gray-400">({count})</span>
 											</label>
@@ -607,7 +610,9 @@
 															handleFilterChange();
 														}}
 													/>
-													<span class="text-sm text-gray-700 dark:text-gray-300">{value}</span>
+													<span class="text-sm text-gray-700 dark:text-gray-300"
+														>{$catalogLabels.provider(value)}</span
+													>
 												</div>
 												<span class="text-xs text-gray-500 dark:text-gray-400">({count})</span>
 											</label>
@@ -756,7 +761,7 @@
 										<span class="text-earthy-terracotta-700 dark:text-earthy-terracotta-700"
 											>{m.discover_filter_type_label()}</span
 										>
-										{type}
+										{$catalogLabels.type(type)}
 										<button
 											onclick={() => removeFilter('types', type)}
 											class="ml-0.5 hover:text-earthy-terracotta-700 dark:hover:text-earthy-terracotta-200"
@@ -786,7 +791,7 @@
 										<span class="text-earthy-terracotta-700 dark:text-earthy-terracotta-700"
 											>{m.discover_filter_provider_label()}</span
 										>
-										{provider}
+										{$catalogLabels.provider(provider)}
 										<button
 											onclick={() => removeFilter('providers', provider)}
 											class="ml-0.5 hover:text-earthy-terracotta-700 dark:hover:text-earthy-terracotta-200"
@@ -1011,7 +1016,7 @@
 														result.metadata?.type ?? ''
 													)} px-2 py-0.5 rounded hover:opacity-80 transition-opacity font-medium"
 												>
-													{result.metadata?.type?.replace(/_/g, ' ')}
+													{$catalogLabels.type(result.metadata?.type).replace(/_/g, ' ')}
 												</button>
 											</div>
 										</div>
