@@ -2062,5 +2062,11 @@
 	"webhook_type_schema_change": "Cambio de esquema",
 	"webhook_type_system": "Sistema",
 	"webhook_type_team_invite": "Invitación al equipo",
-	"webhook_type_upstream_schema_change": "Cambio de esquema ascendente"
+	"webhook_type_upstream_schema_change": "Cambio de esquema ascendente",
+	"pipelines_text_upload": "Cargar fichero",
+	"pipelines_text_drop": "Pégalo aquí o suelta un fichero",
+	"pipelines_text_clear": "Vaciar",
+	"pipelines_text_lines": "{count} líneas",
+	"pipelines_text_too_large": "El fichero supera {size}.",
+	"pipelines_text_read_error": "No se pudo leer el fichero."
 }

@@ -8,6 +8,7 @@
 	import { toasts } from '$lib/stores/toast';
 	import Button from '$components/ui/Button.svelte';
 	import PipelineDomain from '$components/domain/PipelineDomain.svelte';
+	import TextConfigField from '$components/pipeline/TextConfigField.svelte';
 	import { assignPipeline, errorMessage as domainErrorMessage } from '$lib/domains/api';
 	import IconifyIcon from '@iconify/svelte';
 	import Icon from '$components/ui/Icon.svelte';
@@ -1298,6 +1299,33 @@
 										</p>
 									{/if}
 								</div>
+							</div>
+						{:else if field.type === 'text'}
+							<div class="md:col-span-2" data-field-path={fieldPath}>
+								<label
+									for={`field-${fieldPath}`}
+									class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block"
+								>
+									{field.label}
+									{#if field.required}
+										<span class="text-red-500">*</span>
+									{/if}
+								</label>
+								{#if field.description}
+									<p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+										{field.description}
+									</p>
+								{/if}
+								<TextConfigField
+									id={`field-${fieldPath}`}
+									value={String(configObj[field.name] ?? '')}
+									placeholder={field.placeholder || ''}
+									required={field.required}
+									onchange={(text) => {
+										configObj[field.name] = text;
+										clearFieldError(fieldPath);
+									}}
+								/>
 							</div>
 						{:else}
 							<div>
