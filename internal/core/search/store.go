@@ -525,12 +525,8 @@ func (r *PostgresRepository) buildFacetsParallel(ctx context.Context, searchQuer
 		Tags:       []FacetValue{},
 	}
 
-	// For search queries, skip expensive facet computation
-	// The search results themselves provide the filtering - facets aren't needed
 	if searchQuery != "" || (parsedQuery != nil && parsedQuery.HasStructuredFilters()) {
-		// Just get a quick count from the search results
-		// We'll estimate total from the search query instead
-		return facets, 0, nil
+		return r.matchFacets(ctx, searchQuery, filter, parsedQuery, facets)
 	}
 
 	// For unfiltered empty queries, use cached facets from summary_counts
