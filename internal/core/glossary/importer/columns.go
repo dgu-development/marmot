@@ -164,11 +164,12 @@ func Describe(c Column) string {
 		text = kind
 	}
 	v := c.Validation
-	if v.Minimum != nil && v.Maximum != nil {
+	switch {
+	case v.Minimum != nil && v.Maximum != nil:
 		text += fmt.Sprintf(", from %g to %g", *v.Minimum, *v.Maximum)
-	} else if v.Minimum != nil {
+	case v.Minimum != nil:
 		text += fmt.Sprintf(", at least %g", *v.Minimum)
-	} else if v.Maximum != nil {
+	case v.Maximum != nil:
 		text += fmt.Sprintf(", at most %g", *v.Maximum)
 	}
 	if v.MinLength != nil {
