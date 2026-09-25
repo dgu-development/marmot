@@ -8,6 +8,7 @@
 	import { toasts } from '$lib/stores/toast';
 	import { m } from '$lib/paraglide/messages';
 	import type { DomainRef, EnforcementPlan, EnforcementState } from '$lib/domains/types';
+	import { isUnassigned } from '$lib/domains/labels';
 	import {
 		DomainError,
 		enforcementPlan,
@@ -69,7 +70,8 @@
 		return s.updated_by ?? '';
 	}
 
-	const paths = (refs: DomainRef[]) => refs.map((r) => r.path).join(', ') || '—';
+	const paths = (refs: DomainRef[]) =>
+		refs.map((r) => (isUnassigned(r) ? m.domains_unassigned() : r.path)).join(', ') || '—';
 	const subjectLabel = (type: string) =>
 		type === 'service_account'
 			? m.domains_enforcement_type_service_account()
@@ -261,7 +263,7 @@
 								{#each plan.pipelines as pl (pl.schedule_id)}
 									<tr>
 										<td class="{cell} font-medium text-gray-900 dark:text-gray-100">{pl.name}</td>
-										<td class={cell}>{pl.domain.path}</td>
+										<td class={cell}>{paths([pl.domain])}</td>
 										<td class={cell}>{pl.assets_outside}</td>
 									</tr>
 								{/each}
