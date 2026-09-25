@@ -90,6 +90,11 @@ func TestRejectInvalidDefinitions(t *testing.T) {
 		"unsupported reference":   strings.Replace(exampleProfile, "type: integer", "type: reference", 1),
 		"nullable native tags":    "formatVersion: 1\nid: example\nversion: 1\ndefaultLocale: en\nfields:\n  - id: tags\n    type: list\n    itemType: string\n    core: true\n    nullable: true\n    storage: marmot.tags\n",
 		"facet on integer field":  strings.Replace(exampleProfile, "labelKey: example.retention.label", "labelKey: example.retention.label\n      facet: true", 1),
+		"term link on asset":      strings.Replace(exampleProfile, "type: integer", "type: string", 1) + "      control: glossary_term\n",
+		"term link on integer":    strings.Replace(exampleProfile, "required: true", "required: true\n    appliesTo:\n      kinds: [glossary_term]", 1) + "      control: glossary_term\n",
+		"inverse label alone":     exampleProfile + "      inverseLabelKey: example.retention.inverse\n",
+		"search on integer":       exampleProfile + "      control: search\n",
+		"badge on integer":        exampleProfile + "      badge: true\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Load(strings.NewReader(document)); err == nil {
@@ -348,4 +353,116 @@ func mergeValues(base map[string]any, extra map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+func TestGlossaryTermControl(t *testing.T) {
+	profile := `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: stands_for
+    type: list
+    itemType: string
+    core: true
+    storage: metadata.example.stands_for
+    appliesTo:
+      kinds: [glossary_term]
+    presentation:
+      labelKey: example.stands_for.label
+      control: glossary_term
+      inverseLabelKey: example.stands_for.inverse
+`
+	r, err := Load(strings.NewReader(profile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, ok := r.Field("stands_for")
+	if !ok || f.Presentation.Control != ControlGlossaryTerm || f.Presentation.InverseLabelKey != "example.stands_for.inverse" {
+		t.Fatalf("field = %+v", f)
+	}
+}
+
+func TestValueLabelKeys(t *testing.T) {
+	const head = "formatVersion: 1\nid: example\nversion: 1\ndefaultLocale: en\nfields:\n"
+	enum := head + `  - id: classification
+    type: enum
+    core: true
+    storage: metadata.example.classification
+    values: [public, internal]
+    presentation:
+      labelKey: example.classification.label
+      valueLabelKeys:
+        public: example.classification.public
+        internal: example.classification.internal
+`
+	r, err := Load(strings.NewReader(enum))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, _ := r.Field("classification"); f.Presentation.ValueLabelKeys["public"] != "example.classification.public" {
+		t.Fatalf("keys not carried: %+v", f.Presentation)
+	}
+	for name, document := range map[string]string{
+		"enum list": head + "  - id: channels\n    type: list\n    itemType: enum\n    core: true\n    storage: metadata.example.channels\n    values: [api, sftp]\n    presentation:\n      labelKey: example.channels.label\n      valueLabelKeys:\n        api: example.channels.api\n",
+		"boolean":   head + "  - id: pii\n    type: boolean\n    core: true\n    storage: metadata.example.pii\n    presentation:\n      labelKey: example.pii.label\n      valueLabelKeys:\n        \"true\": example.pii.yes\n        \"false\": example.pii.no\n",
+		"partial":   strings.Replace(enum, "        internal: example.classification.internal\n", "", 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Load(strings.NewReader(document)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	for name, document := range map[string]string{
+		"unknown value":    strings.Replace(enum, "internal: example", "secret: example", 1),
+		"invalid key":      strings.Replace(enum, "example.classification.public", "example classification", 1),
+		"string field":     head + "  - id: note\n    type: string\n    core: true\n    storage: metadata.example.note\n    presentation:\n      labelKey: example.note.label\n      valueLabelKeys:\n        x: example.note.x\n",
+		"boolean non-bool": head + "  - id: pii\n    type: boolean\n    core: true\n    storage: metadata.example.pii\n    presentation:\n      labelKey: example.pii.label\n      valueLabelKeys:\n        maybe: example.pii.maybe\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Load(strings.NewReader(document)); err == nil {
+				t.Fatal("accepted invalid valueLabelKeys")
+			}
+		})
+	}
+}
+
+func TestBadgeAndSearchControl(t *testing.T) {
+	profile := `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: term_type
+    type: enum
+    core: true
+    storage: metadata.example.term_type
+    values: [business_term, acronym]
+    appliesTo:
+      kinds: [glossary_term]
+    presentation:
+      labelKey: example.term_type.label
+      badge: true
+  - id: synonyms
+    type: list
+    itemType: string
+    core: true
+    storage: metadata.synonyms
+    appliesTo:
+      kinds: [glossary_term]
+    presentation:
+      labelKey: example.synonyms.label
+      control: search
+`
+	r, err := Load(strings.NewReader(profile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, _ := r.Field("term_type"); !f.Presentation.Badge {
+		t.Fatal("badge not carried")
+	}
+	if f, _ := r.Field("synonyms"); f.Presentation.Control != ControlSearch {
+		t.Fatal("search control not carried")
+	}
 }

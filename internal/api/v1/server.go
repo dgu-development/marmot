@@ -139,23 +139,48 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	}
 
 	assetSvc := asset.NewService(assetRepo, asset.WithMetamodel(metamodelRegistry))
+	var domainRepo *domainService.PostgresRepository
+	var domainSvc domainService.Service
+	var domainGuard *domainService.Guard
+	if config.Domains.Enabled {
+		domainRepo = domainService.NewPostgresRepository(db)
+		domainSvc = domainService.NewService(domainRepo)
+		domainGuard = domainService.NewGuard(domainSvc, domainRepo, common.PrincipalFromContext)
+		assetSvc = domainService.GuardAssets(assetSvc, domainGuard)
+	}
 	userSvc := userService.NewService(userRepo)
 	roleStore := roleService.NewPostgresStore(db)
 	roleSvc := roleService.NewService(roleStore)
 	serviceAccountStore := serviceaccountService.NewPostgresRepository(db)
 	serviceAccountSvc := serviceaccountService.NewService(serviceAccountStore)
-	lineageSvc := lineageService.NewService(lineageRepo, assetSvc)
+	var lineageOpts []lineageService.ServiceOption
+	if domainGuard != nil {
+		lineageOpts = append(lineageOpts, lineageService.WithEdgeGuard(domainGuard.AuthorizeEdge))
+	}
+	lineageSvc := lineageService.NewService(lineageRepo, assetSvc, lineageOpts...)
+	if domainGuard != nil {
+		lineageSvc = domainService.GuardLineage(lineageSvc, domainGuard)
+	}
 	agentRepo := agentService.NewPostgresRepository(db)
 	agentSvc := agentService.NewService(agentRepo, assetSvc, lineageSvc)
 	assetDocsSvc := assetdocs.NewService(assetDocsRepo)
+	if domainGuard != nil {
+		assetDocsSvc = domainService.GuardAssetDocs(assetDocsSvc, domainGuard)
+	}
 	authSvc := authService.NewService(authRepo, userSvc)
 	glossarySvc := glossaryService.NewService(glossaryRepo, glossaryService.WithMetamodel(metamodelRegistry))
+	if domainGuard != nil {
+		glossarySvc = domainService.GuardGlossary(glossarySvc, domainGuard)
+	}
 	runsSvc := runService.NewService(runRepo, assetSvc, lineageSvc, glossarySvc, recorder)
 	teamRepo := teamService.NewPostgresRepository(db)
 	teamSvc := teamService.NewService(teamRepo)
 	searchSvc := searchService.NewService(searchRepo)
 	dataProductSvc := dataproductService.NewService(dataProductRepo)
 	dataProductSvc.SetMetamodel(metamodelRegistry)
+	if domainGuard != nil {
+		dataProductSvc = domainService.GuardDataProducts(dataProductSvc, domainGuard)
+	}
 	docsRepo := docsService.NewPostgresRepository(db)
 	docsSvc := docsService.NewService(docsRepo)
 	notificationRepo := notificationService.NewPostgresRepository(db)
@@ -203,6 +228,9 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 		DB:       db,
 	})
 	assetRuleSvc := assetruleService.NewService(assetRuleRepo, assetRuleMemberRepo, enrichmentEvaluator, assetRuleMemberSvc)
+	if domainGuard != nil {
+		assetRuleSvc = domainService.GuardAssetRules(assetRuleSvc, domainGuard)
+	}
 
 	// Start membership evaluation services
 	membershipSvc.Start(context.Background())
@@ -547,6 +575,10 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	authHandler := auth.NewHandler(authSvc, oauthManager, userSvc, config, oauthFositeProvider)
 	common.SetOAuthAuthorizeCompleter(authHandler)
 
+	var glossaryColumns []glossaryImporter.ColumnProvider
+	if domainGuard != nil {
+		glossaryColumns = append(glossaryColumns, domainService.GlossaryImportColumns(domainSvc, domainGuard))
+	}
 	server.handlers = []interface{ Routes() []common.Route }{
 		health.NewHandler(),
 		assets.NewHandler(assetSvc, assetDocsSvc, userSvc, authSvc, metricsService, runsSvc, scheduleSvc, teamSvc, assetRuleSvc, scheduleEncryptor, config, lookupsRecorder),
@@ -556,7 +588,7 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 		mcpAPI.NewHandler(assetSvc, glossarySvc, userSvc, teamSvc, dataProductSvc, lineageSvc, finalSearchSvc, authSvc, config, lookupsRecorder),
 		metricsAPI.NewHandler(metricsService, userSvc, authSvc, config),
 		runs.NewHandler(runsSvc, userSvc, authSvc, scheduleSvc, config),
-		glossary.NewHandler(glossarySvc, glossaryImporter.New(metamodelRegistry, glossarySvc, glossaryImporter.ServiceOwners{Users: userSvc, Teams: teamSvc}), userSvc, authSvc, config, lookupsRecorder),
+		glossary.NewHandler(glossarySvc, glossaryImporter.New(metamodelRegistry, glossarySvc, glossaryImporter.ServiceOwners{Users: userSvc, Teams: teamSvc}, glossaryColumns...), userSvc, authSvc, config, lookupsRecorder),
 		dataproducts.NewHandler(dataProductSvc, userSvc, authSvc, config, lookupsRecorder),
 		assetrulesAPI.NewHandler(assetRuleSvc, userSvc, authSvc, config),
 		docsAPI.NewHandler(docsSvc, userSvc, authSvc, config),
@@ -576,8 +608,26 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	}
 
 	if config.Domains.Enabled {
-		domainSvc := domainService.NewService(domainService.NewPostgresRepository(db))
-		server.handlers = append(server.handlers, domainsAPI.NewHandler(domainSvc, userSvc, authSvc, config))
+		// Elasticsearch search does not apply @domain yet; serving it would
+		// return results outside the requested domains.
+		if config.Search.Elasticsearch != nil && config.Search.Elasticsearch.Enabled {
+			log.Fatal().Msg("domains.enabled is not supported with the Elasticsearch search backend yet")
+		}
+		assetSvc.AddMembershipObserver(domainService.NewIngestionObserver(domainRepo))
+		searchRepo.SetDomainResolver(domainService.SearchResolver(domainSvc))
+		for i, h := range server.handlers {
+			switch h.(type) {
+			case *docsAPI.Handler:
+				server.handlers[i] = domainsAPI.GuardDocs(h, domainGuard)
+			case *assets.Handler:
+				server.handlers[i] = domainsAPI.WithCreateTargets(h, domainSvc, "/api/v1/assets/")
+			case *dataproducts.Handler:
+				server.handlers[i] = domainsAPI.WithCreateTargets(h, domainSvc, "/api/v1/products/")
+			case *glossary.Handler:
+				server.handlers[i] = domainsAPI.WithCreateTargets(h, domainSvc, "/api/v1/glossary/", "/api/v1/glossary/import")
+			}
+		}
+		server.handlers = append(server.handlers, domainsAPI.NewHandler(domainSvc, domainGuard, userSvc, authSvc, config))
 	}
 
 	// Set up K8s SA token auth and operator syncer if enabled

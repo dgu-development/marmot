@@ -147,8 +147,11 @@ field may share a binding, since they never share a row.
 | `descriptionKey` | Optional description message key |
 | `section` | Optional UI section id |
 | `order` | Optional sort order within the section |
-| `control` | Alternate editor without changing storage. Only `user` is defined so far (string holding a Marmot user ID) |
+| `control` | Alternate editor without changing storage: `user` (string holding a Marmot user ID), `glossary_term` (see [Links between terms](#links-between-terms)) or `search` (string or list of strings; each value links to a catalog search for it, as for a term's synonyms) |
+| `inverseLabelKey` | With `control: glossary_term`, the message key naming the link from the term it points to, such as "Acronyms" for a "Stands for" field |
 | `facet` | Offer this field as a Discover segmented filter. Requires type `enum` or `boolean` |
+| `badge` | Show the value of an `enum` field as a chip next to the entity's name, on its page and in Discover results, with its label from `valueLabelKeys` |
+| `valueLabelKeys` | Map of stored value → message key, to show a label in place of the value (see [Value labels](#value-labels)). For `enum`, `list` of `enum`, or `boolean` (`"true"`, `"false"`) |
 
 Native labels reuse existing Marmot message keys. A profile with custom fields
 should also ship a `messages` catalogue (below) so clients can resolve their
@@ -173,6 +176,38 @@ fallback itself. Locales and keys are validated as identifiers; values must be
 non-empty. Keeping labels in this catalogue, not in Marmot's own message
 files, means editing a profile's text never requires a kernel change or
 rebuild.
+
+### Value labels
+
+```yaml
+- id: classification
+  type: enum
+  values: [public, internal]
+  storage: metadata.example.classification
+  core: true
+  presentation:
+    labelKey: example.classification.label
+    valueLabelKeys:
+      public: example.classification.public
+      internal: example.classification.internal
+messages:
+  es:
+    example.classification.public: Pública
+    example.classification.internal: Interna
+```
+
+Clients show the label wherever the value appears: field values, editors,
+Discover facets. What is stored, indexed and filtered stays the value, so
+`@metadata.example.classification:public` and a facet still send `public`. A
+value without a key is shown as is. Boolean fields without keys show the
+client's own "Yes" and "No".
+
+Two key prefixes are reserved in `messages` for the catalog's own
+identifiers, which plugins emit in English: `assetType.<type>` labels an asset
+type and `provider.<provider>` a provider, with the identifier lowercased and
+every character other than `a-z` and `0-9` turned into `_` (`Delta Table` →
+`assetType.delta_table`). They take precedence over Marmot's built-in labels
+for the core types.
 
 ### Native storage bindings
 
@@ -298,6 +333,45 @@ and `PUT /api/v1/glossary/{id}`, and a violation returns `400` with the same
 wins. Ingestion runs that sync a source's glossary own the term's other
 metadata but never overwrite the governed fields: a run keeps whatever people
 set in them.
+
+The term page shows the governed fields in its metadata table, where people
+who may edit the term change them in place.
+
+Synonyms that discovery runs send are stored in `metadata.synonyms`, and
+searching any of them finds the term, in the glossary and in global search.
+Declare a `list` of `string` field bound to `metadata.synonyms` to edit them
+and carry them in the import template.
+
+#### Links between terms
+
+`control: glossary_term` turns a `glossary_term` field into links to other
+terms, for example an acronym pointing at the terms it stands for:
+
+```yaml
+- id: stands_for
+  type: list
+  itemType: string
+  core: true
+  storage: metadata.dgu.stands_for
+  appliesTo:
+    kinds: [glossary_term]
+  presentation:
+    labelKey: metamodel.stands_for.label
+    inverseLabelKey: metamodel.stands_for.inverse
+    control: glossary_term
+```
+
+- The field is a `string` (one term) or a `list` of `string`, and applies to
+  `glossary_term` only.
+- It stores term IDs, so a link survives renaming. A write that adds an ID of
+  a missing or deleted term fails with code `term_not_found`, and a term
+  pointing at itself with `self_reference`. Links the term already had are
+  kept when their target is deleted later, and the page shows them as deleted.
+- `GET /api/v1/glossary/references/{id}` lists, per field, the terms pointing
+  at a term; the term page shows them under `inverseLabelKey`.
+  `GET /api/v1/glossary/refs?ids=` resolves IDs to names.
+- The import template takes term names, existing or in the same file,
+  separated by `|` and ignoring case; the export writes names.
 
 ## Compatibility and rollout
 

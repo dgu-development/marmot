@@ -98,10 +98,15 @@ type Service interface {
 	SyncTerms(ctx context.Context, source string, inputs []TermInput) (*SyncResult, error)
 	// GetByName returns the live term with that name, or ErrTermNotFound.
 	GetByName(ctx context.Context, name string) (*GlossaryTerm, error)
-	// ByNames maps each name to every live term that has it.
+	// ByNames maps each term name to every live term that has it; names are
+	// matched ignoring case, and the map is keyed by the names as stored.
 	ByNames(ctx context.Context, names []string) (map[string][]*GlossaryTerm, error)
 	// Import writes a validated batch of terms, all or none.
 	Import(ctx context.Context, terms []ImportTerm) ([]*GlossaryTerm, error)
+	// References returns, per glossary_term profile field, the live terms pointing at id.
+	References(ctx context.Context, id string) ([]TermReferences, error)
+	// RefsByID resolves term IDs to the live terms that have them; unknown IDs are left out.
+	RefsByID(ctx context.Context, ids []string) ([]TermRef, error)
 	SetSearchObserver(observer SearchObserver)
 }
 
@@ -171,6 +176,9 @@ func (s *service) Create(ctx context.Context, input CreateTermInput) (*GlossaryT
 		return nil, err
 	}
 	if err := validateMetamodel(s.metamodel, input.Metadata); err != nil {
+		return nil, err
+	}
+	if err := s.checkTermLinks(ctx, "", input.Metadata, nil); err != nil {
 		return nil, err
 	}
 
@@ -271,6 +279,7 @@ func (s *service) Update(ctx context.Context, id string, input UpdateTermInput) 
 	if err != nil {
 		return nil, err
 	}
+	previousMetadata := existing.Metadata
 
 	if input.Name != nil {
 		existing.Name = *input.Name
@@ -288,6 +297,9 @@ func (s *service) Update(ctx context.Context, id string, input UpdateTermInput) 
 		existing.Tags = input.Tags
 	}
 	if err := validateMetamodel(s.metamodel, existing.Metadata); err != nil {
+		return nil, err
+	}
+	if err := s.checkTermLinks(ctx, id, existing.Metadata, previousMetadata); err != nil {
 		return nil, err
 	}
 

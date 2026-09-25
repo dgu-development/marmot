@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { catalogLabels } from '$lib/catalog/labels';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { SvelteMap, SvelteURLSearchParams } from 'svelte/reactivity';
@@ -8,6 +9,7 @@
 	import Button from '$components/ui/Button.svelte';
 	import IconifyIcon from '@iconify/svelte';
 	import OwnerSelector from '$components/shared/OwnerSelector.svelte';
+	import DomainSelect from '$components/domain/DomainSelect.svelte';
 	import RichTextEditor from '$components/editor/RichTextEditor.svelte';
 	import Tags from '$components/shared/Tags.svelte';
 	import MetadataView from '$components/shared/MetadataView.svelte';
@@ -61,6 +63,7 @@
 	// Form state
 	let name = $state(initialName);
 	let description = $state(initialDescription);
+	let domainId = $state('');
 	let documentation = $state(initialDocumentation);
 	let owners = $state<Owner[]>(initialOwners);
 	let tags = $state<string[]>(initialTags);
@@ -355,7 +358,8 @@
 					: undefined
 		};
 
-		const response = await fetchApi('/products/', {
+		const target = domainId ? `?domain_id=${encodeURIComponent(domainId)}` : '';
+		const response = await fetchApi(`/products/${target}`, {
 			method: 'POST',
 			body: JSON.stringify(body)
 		});
@@ -597,6 +601,11 @@
 							<OwnerSelector bind:selectedOwners={owners} />
 						</div>
 					</div>
+					{#if mode === 'create'}
+						<div class="mt-5">
+							<DomainSelect id="product-domain" bind:value={domainId} />
+						</div>
+					{/if}
 				</div>
 			</div>
 		{/if}
@@ -961,7 +970,7 @@
 															<span
 																class="flex-shrink-0 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded"
 															>
-																{result.metadata?.type?.replace(/_/g, ' ')}
+																{$catalogLabels.type(result.metadata?.type).replace(/_/g, ' ')}
 															</span>
 														</div>
 														<p

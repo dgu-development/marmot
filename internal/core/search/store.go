@@ -30,8 +30,9 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	db       *pgxpool.Pool
-	recorder metrics.Recorder
+	db             *pgxpool.Pool
+	recorder       metrics.Recorder
+	domainResolver DomainResolver
 }
 
 func NewPostgresRepository(db *pgxpool.Pool, recorder metrics.Recorder) *PostgresRepository {
@@ -48,6 +49,12 @@ func (r *PostgresRepository) Search(ctx context.Context, filter Filter) ([]*Resu
 
 	ctx, cancel := context.WithTimeout(ctx, DefaultSearchTimeout)
 	defer cancel()
+
+	if empty, err := r.resolveDomainFilter(ctx, &filter); err != nil {
+		return nil, 0, nil, err
+	} else if empty {
+		return []*Result{}, 0, emptyFacets(), nil
+	}
 
 	kindFilters := extractKindFilters(filter.Query)
 	if len(kindFilters) > 0 {
@@ -78,6 +85,10 @@ func (r *PostgresRepository) Search(ctx context.Context, filter Filter) ([]*Resu
 	if err != nil {
 		r.recorder.RecordDBQuery(ctx, "unified_search", time.Since(start), false)
 		return nil, 0, nil, fmt.Errorf("scanning search results: %w", err)
+	}
+	if err := r.attachEntityMetadata(ctx, results); err != nil {
+		r.recorder.RecordDBQuery(ctx, "unified_search", time.Since(start), false)
+		return nil, 0, nil, err
 	}
 
 	facets, total, err := r.buildFacetsParallel(ctx, parsedQuery.GetFreeText(), filter, parsedQuery)
@@ -392,6 +403,7 @@ func (r *PostgresRepository) buildFilterClauses(filter Filter, parsedQuery *quer
 		params = append(params, filter.Tags)
 	}
 
+	whereClauses, params = appendDomainClauses(filter.Domain, whereClauses, params)
 	whereClauses, params = appendMetadataFilterClauses(filter.MetadataFilters, whereClauses, params)
 	paramCount = len(params)
 
@@ -513,12 +525,8 @@ func (r *PostgresRepository) buildFacetsParallel(ctx context.Context, searchQuer
 		Tags:       []FacetValue{},
 	}
 
-	// For search queries, skip expensive facet computation
-	// The search results themselves provide the filtering - facets aren't needed
 	if searchQuery != "" || (parsedQuery != nil && parsedQuery.HasStructuredFilters()) {
-		// Just get a quick count from the search results
-		// We'll estimate total from the search query instead
-		return facets, 0, nil
+		return r.matchFacets(ctx, searchQuery, filter, parsedQuery, facets)
 	}
 
 	// For unfiltered empty queries, use cached facets from summary_counts
@@ -526,7 +534,7 @@ func (r *PostgresRepository) buildFacetsParallel(ctx context.Context, searchQuer
 	// Note: selecting all 4 entity types is functionally equivalent to no type filter
 	allTypesSelected := len(filter.Types) == 4
 	noTypeFilter := len(filter.Types) == 0 || allTypesSelected
-	if noTypeFilter && len(filter.AssetTypes) == 0 && len(filter.Providers) == 0 && len(filter.Tags) == 0 && len(filter.MetadataFilters) == 0 {
+	if noTypeFilter && len(filter.AssetTypes) == 0 && len(filter.Providers) == 0 && len(filter.Tags) == 0 && len(filter.MetadataFilters) == 0 && filter.Domain == nil {
 		return r.buildCachedFacets(ctx, filter)
 	}
 
@@ -674,6 +682,7 @@ func (r *PostgresRepository) buildListingFacetWhereClause(filter Filter) (string
 		params = append(params, filter.Tags)
 	}
 
+	whereClauses, params = appendDomainClauses(filter.Domain, whereClauses, params)
 	whereClauses, params = appendMetadataFilterClauses(filter.MetadataFilters, whereClauses, params)
 
 	whereSQL := "WHERE true"

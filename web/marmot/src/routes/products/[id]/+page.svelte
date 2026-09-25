@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { catalogLabels } from '$lib/catalog/labels';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
@@ -31,6 +32,8 @@
 	import { createKeyboardNavigationState } from '$lib/keyboard';
 	import Tags from '$components/shared/Tags.svelte';
 	import OwnerSelector from '$components/shared/OwnerSelector.svelte';
+	import DomainChip from '$components/domain/DomainChip.svelte';
+	import { entityWritable } from '$lib/domains/writable';
 	import { m } from '$lib/paraglide/messages';
 	import { formatList } from '$lib/utils';
 
@@ -96,7 +99,8 @@
 	const ASSETS_PER_PAGE = 12;
 	let currentAssetPage = $state(1);
 
-	let canManage = $derived(auth.hasPermission('assets', 'manage'));
+	const domainWrite = $derived(entityWritable('data_product', product?.id));
+	let canManage = $derived(auth.hasPermission('assets', 'manage') && $domainWrite);
 
 	// Description editing state
 	let editedDescription = $state('');
@@ -785,6 +789,7 @@
 									disabled={!canManage}
 								/>
 							</div>
+							<DomainChip kind="data_product" entityId={product.id} canEdit={canManage} />
 						</div>
 					</div>
 				</div>
@@ -1260,7 +1265,9 @@
 																				<span
 																					class="flex-shrink-0 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded"
 																				>
-																					{result.metadata?.type?.replace(/_/g, ' ')}
+																					{$catalogLabels
+																						.type(result.metadata?.type)
+																						.replace(/_/g, ' ')}
 																				</span>
 																			</div>
 																			<p

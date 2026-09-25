@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fetchApi } from '$lib/api';
+	import DomainFilter from '$components/domain/DomainFilter.svelte';
 	import { writable, type Writable } from 'svelte/store';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -24,9 +25,11 @@
 	import { locale } from '$lib/i18n';
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import { nativeMessage } from '$lib/metamodel/i18n';
-	import { resolveMessage } from '$lib/metamodel/labels';
+	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
 	import { facetableFields } from '$lib/metamodel/values';
-	import type { MetamodelField } from '$lib/metamodel/types';
+	import { catalogLabels } from '$lib/catalog/labels';
+	import type { MetamodelField, MetamodelSchema } from '$lib/metamodel/types';
+	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
 
 	interface SearchResultMetadata {
 		type?: string;
@@ -115,8 +118,29 @@
 		native: nativeMessage
 	});
 
+	// Badges come from each kind's own profile fields.
+	let kindSchemas = $state<Record<string, MetamodelSchema | null>>({});
+
+	$effect(() => {
+		for (const kind of ['glossary_term', 'data_product']) {
+			fetchMetamodel(kind)
+				.then((schema) => (kindSchemas = { ...kindSchemas, [kind]: schema }))
+				.catch(() => {});
+		}
+	});
+
 	function governedFieldLabel(field: MetamodelField): string {
 		return resolveMessage(field.presentation?.labelKey, messageContext) ?? field.id;
+	}
+
+	function governedValueLabel(field: MetamodelField | undefined, value: string): string {
+		if (!field) return value;
+		const label = valueLabel(field, value, messageContext);
+		if (label) return label;
+		if (field.type === 'boolean' && (value === 'true' || value === 'false')) {
+			return value === 'true' ? m.metamodel_yes() : m.metamodel_no();
+		}
+		return value;
 	}
 
 	$effect(() => {
@@ -540,6 +564,8 @@
 								{/each}
 							</div>
 
+							<DomainFilter query={searchQuery} onQueryChange={handleRunQuery} />
+
 							<!-- Asset-specific filters (only show when Asset is selected) -->
 							{#if showAssetFilters}
 								{#if $facets.asset_types.length > 0}
@@ -564,7 +590,9 @@
 															handleFilterChange();
 														}}
 													/>
-													<span class="text-sm text-gray-700 dark:text-gray-300">{value}</span>
+													<span class="text-sm text-gray-700 dark:text-gray-300"
+														>{$catalogLabels.type(value)}</span
+													>
 												</div>
 												<span class="text-xs text-gray-500 dark:text-gray-400">({count})</span>
 											</label>
@@ -594,7 +622,9 @@
 															handleFilterChange();
 														}}
 													/>
-													<span class="text-sm text-gray-700 dark:text-gray-300">{value}</span>
+													<span class="text-sm text-gray-700 dark:text-gray-300"
+														>{$catalogLabels.provider(value)}</span
+													>
 												</div>
 												<span class="text-xs text-gray-500 dark:text-gray-400">({count})</span>
 											</label>
@@ -670,7 +700,7 @@
 															}}
 														/>
 														<span class="text-sm text-gray-700 dark:text-gray-300"
-															>{value}</span
+															>{governedValueLabel(field, value)}</span
 														>
 													</div>
 													<span class="text-xs text-gray-500 dark:text-gray-400">({count})</span>
@@ -743,7 +773,7 @@
 										<span class="text-earthy-terracotta-700 dark:text-earthy-terracotta-700"
 											>{m.discover_filter_type_label()}</span
 										>
-										{type}
+										{$catalogLabels.type(type)}
 										<button
 											onclick={() => removeFilter('types', type)}
 											class="ml-0.5 hover:text-earthy-terracotta-700 dark:hover:text-earthy-terracotta-200"
@@ -773,7 +803,7 @@
 										<span class="text-earthy-terracotta-700 dark:text-earthy-terracotta-700"
 											>{m.discover_filter_provider_label()}</span
 										>
-										{provider}
+										{$catalogLabels.provider(provider)}
 										<button
 											onclick={() => removeFilter('providers', provider)}
 											class="ml-0.5 hover:text-earthy-terracotta-700 dark:hover:text-earthy-terracotta-200"
@@ -834,7 +864,7 @@
 											<span class="text-earthy-terracotta-700 dark:text-earthy-terracotta-700"
 												>{field ? governedFieldLabel(field) : id}:</span
 											>
-											{value}
+											{governedValueLabel(field, value)}
 											<button
 												onclick={() => removeGovernedFilter(id, value)}
 												class="ml-0.5 hover:text-earthy-terracotta-700 dark:hover:text-earthy-terracotta-200"
@@ -998,7 +1028,7 @@
 														result.metadata?.type ?? ''
 													)} px-2 py-0.5 rounded hover:opacity-80 transition-opacity font-medium"
 												>
-													{result.metadata?.type?.replace(/_/g, ' ')}
+													{$catalogLabels.type(result.metadata?.type).replace(/_/g, ' ')}
 												</button>
 											</div>
 										</div>
@@ -1081,11 +1111,22 @@
 													</div>
 												</div>
 												<div class="min-w-0 flex-1">
-													<h3
-														class="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate group-hover:text-earthy-terracotta-700 dark:group-hover:text-earthy-terracotta-700 transition-colors"
-													>
-														{result.name}
-													</h3>
+													<div class="flex items-center justify-between gap-2">
+														<h3
+															class="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate group-hover:text-earthy-terracotta-700 dark:group-hover:text-earthy-terracotta-700 transition-colors"
+														>
+															{result.name}
+														</h3>
+														<div class="flex flex-shrink-0 gap-1">
+															<FieldBadges
+																schema={kindSchemas.data_product}
+																metadata={result.metadata?.metadata as
+																	| Record<string, unknown>
+																	| undefined}
+																size="xs"
+															/>
+														</div>
+													</div>
 													<div
 														class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400"
 													>
@@ -1166,13 +1207,24 @@
 													</h3>
 												</div>
 											</div>
-											<span
-												class="flex-shrink-0 text-xs {getResultTypeColor(
-													result.type
-												)} px-2 py-0.5 rounded font-medium"
-											>
-												{getKindLabel(result.type)}
-											</span>
+											<div class="flex flex-shrink-0 items-center gap-1.5">
+												{#if result.type === 'glossary'}
+													<FieldBadges
+														schema={kindSchemas.glossary_term}
+														metadata={result.metadata?.metadata as
+															| Record<string, unknown>
+															| undefined}
+														size="xs"
+													/>
+												{/if}
+												<span
+													class="text-xs {getResultTypeColor(
+														result.type
+													)} px-2 py-0.5 rounded font-medium"
+												>
+													{getKindLabel(result.type)}
+												</span>
+											</div>
 										</div>
 
 										{#if getResultSubtitle(result)}

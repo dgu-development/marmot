@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SearchLinks from '$components/metamodel/SearchLinks.svelte';
 	import IconifyIcon from '@iconify/svelte';
 	import Avatar from '$components/user/Avatar.svelte';
 	import { locale } from '$lib/i18n';
@@ -7,7 +8,7 @@
 	import type { MetamodelField } from '$lib/metamodel/types';
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import { nativeMessage } from '$lib/metamodel/i18n';
-	import { resolveMessage } from '$lib/metamodel/labels';
+	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
 	import { lookupOwnerById, type OwnerResult } from '$lib/metamodel/owners';
 	import {
 		governedFields,
@@ -88,6 +89,13 @@
 		return typeof value === 'object' ? JSON.stringify(value) : String(value);
 	}
 
+	function shown(field: MetamodelField, value: unknown): string {
+		const label = valueLabel(field, value, context);
+		if (label) return label;
+		if (typeof value === 'boolean') return value ? m.metamodel_yes() : m.metamodel_no();
+		return text(value);
+	}
+
 	function isEmptyValue(value: unknown): boolean {
 		return isUnset(value) || (Array.isArray(value) && value.length === 0);
 	}
@@ -163,23 +171,25 @@
 									{owner?.name ?? value}
 								</span>
 							{/if}
+						{:else if field.presentation?.control === 'search'}
+							<SearchLinks values={Array.isArray(value) ? value.map(String) : [String(value)]} />
 						{:else if Array.isArray(value)}
 							<div class="flex flex-wrap gap-1">
 								{#each value as item, itemIndex (itemIndex)}
 									<span
 										class="rounded-full bg-earthy-terracotta-100 px-2 py-0.5 text-xs break-all whitespace-pre-wrap text-earthy-terracotta-700 dark:bg-earthy-terracotta-900 dark:text-earthy-terracotta-100"
 									>
-										{text(item)}
+										{shown(field, item)}
 									</span>
 								{/each}
 							</div>
 						{:else if typeof value === 'boolean'}
 							<span class="rounded-full px-2 py-0.5 text-xs {valueClass(value)}">
-								{value ? m.metamodel_yes() : m.metamodel_no()}
+								{shown(field, value)}
 							</span>
 						{:else}
 							<span class="rounded-full px-2 py-0.5 text-xs {valueClass(value)}">
-								{text(value)}
+								{shown(field, value)}
 							</span>
 						{/if}
 					</dd>

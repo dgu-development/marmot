@@ -17,10 +17,25 @@
 	import MarkdownRenderer from '$components/ui/MarkdownRenderer.svelte';
 	import RichTextEditor from '$components/editor/RichTextEditor.svelte';
 	import OwnerSelector from '$components/shared/OwnerSelector.svelte';
+	import DomainChip from '$components/domain/DomainChip.svelte';
+	import DomainSelect from '$components/domain/DomainSelect.svelte';
+	import { entityWritable } from '$lib/domains/writable';
 	import Button from '$components/ui/Button.svelte';
 	import Icon from '@iconify/svelte';
 	import Tags from '$components/shared/Tags.svelte';
 	import MetadataView from '$components/shared/MetadataView.svelte';
+	import ProductGovernedFields from '$components/product/ProductGovernedFields.svelte';
+	import TermReferences from '$components/glossary/TermReferences.svelte';
+	import TermLinkSummary from '$components/glossary/TermLinkSummary.svelte';
+	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
+	import SearchLinks from '$components/metamodel/SearchLinks.svelte';
+	import { GLOSSARY_TERM_CONTROL, linkIds } from '$lib/glossary/links';
+	import { nativeMessage } from '$lib/metamodel/i18n';
+	import { resolveMessage } from '$lib/metamodel/labels';
+	import { locale } from '$lib/i18n';
+	import { fetchMetamodel } from '$lib/metamodel/api';
+	import type { MetamodelSchema } from '$lib/metamodel/types';
+	import { governedFields, governedPaths, readMetadataValue } from '$lib/metamodel/values';
 	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages';
 	import { formatDate } from '$lib/utils';
@@ -36,18 +51,52 @@
 	let selectedTerm: GlossaryTerm | null = null;
 	let showCreateModal = false;
 	let showDeleteConfirm = false;
+	let referencingCount = 0;
 
 	let newTermName = '';
 	let newTermDefinition = '';
 	let newTermDescription = '';
 	let newTermOwners: Owner[] = [];
+	let newTermDomain = '';
 	let isCreating = false;
 	let createError = '';
 
 	let isEditing = false;
 	let editedTerm: GlossaryTerm | null = null;
 
+	let metamodel: MetamodelSchema | null = null;
+	$: governed = metamodel?.enabled ? governedFields(metamodel.fields) : [];
+	$: governedHidePaths = governedPaths(governed);
+
+	$: linkFields = governed.filter((f) => f.presentation?.control === GLOSSARY_TERM_CONTROL);
+
+	function linkLabel(key: string | undefined, fallback: string): string {
+		if (!metamodel) return fallback;
+		return (
+			resolveMessage(key, {
+				locale: $locale,
+				defaultLocale: metamodel.defaultLocale,
+				messages: metamodel.messages,
+				native: nativeMessage
+			}) ?? fallback
+		);
+	}
+
+	function synonymsOf(term: GlossaryTerm | null): string[] {
+		const value = term?.metadata?.synonyms;
+		return Array.isArray(value) ? value.filter((s): s is string => typeof s === 'string') : [];
+	}
+
+	function matchedSynonym(term: GlossaryTerm, query: string): string | undefined {
+		const q = query.trim().toLowerCase();
+		if (!q || term.name.toLowerCase().includes(q)) return undefined;
+		return synonymsOf(term).find((s) => s.toLowerCase().includes(q));
+	}
+
 	const canManageGlossary = auth.hasPermission('glossary', 'manage');
+	// Creating stays on canManageGlossary; editing also needs the selected term's domain.
+	$: termWritable = entityWritable('glossary_term', selectedTerm?.id);
+	$: canEditTerm = canManageGlossary && $termWritable;
 	let didAutoSelect = false;
 
 	$: {
@@ -146,6 +195,7 @@
 
 	function selectTerm(term: GlossaryTerm) {
 		selectedTerm = term;
+		referencingCount = 0;
 		isEditing = false;
 		editedTerm = null;
 
@@ -175,6 +225,7 @@
 		newTermDefinition = '';
 		newTermDescription = '';
 		newTermOwners = [];
+		newTermDomain = '';
 		createError = '';
 		showCreateModal = true;
 	}
@@ -194,7 +245,8 @@
 					? newTermOwners.map((o) => ({ id: o.id, type: o.type }))
 					: undefined;
 
-			const response = await fetchApi('/glossary/', {
+			const target = newTermDomain ? `?domain_id=${encodeURIComponent(newTermDomain)}` : '';
+			const response = await fetchApi(`/glossary/${target}`, {
 				method: 'POST',
 				body: JSON.stringify({
 					name: newTermName,
@@ -320,6 +372,10 @@
 	});
 
 	onMount(() => {
+		fetchMetamodel('glossary_term')
+			.then((schema) => (metamodel = schema))
+			.catch(() => (metamodel = null));
+
 		// Refetch whenever the page URL changes (search params, route id, etc).
 		// Subscribing here instead of using a `$:` block avoids the lint's
 		// infinite-reactive-loop heuristic, since fetchTerms() mutates stores
@@ -422,6 +478,24 @@
 									<div class="font-medium text-gray-900 dark:text-gray-100 text-sm">
 										{term.name}
 									</div>
+									{#if matchedSynonym(term, searchQuery)}
+										<div
+											class="mt-0.5 text-xs text-earthy-terracotta-700 dark:text-earthy-terracotta-400"
+										>
+											{m.glossary_synonym_match({
+												synonym: matchedSynonym(term, searchQuery) ?? ''
+											})}
+										</div>
+									{/if}
+									{#each linkFields as field (field.id)}
+										{@const ids = linkIds(readMetadataValue(term.metadata, field.storage))}
+										{#if ids.length > 0}
+											<TermLinkSummary
+												label={linkLabel(field.presentation?.labelKey, field.id)}
+												{ids}
+											/>
+										{/if}
+									{/each}
 									<div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
 										{term.definition}
 									</div>
@@ -450,9 +524,25 @@
 										placeholder={m.glossary_term_name_placeholder()}
 									/>
 								{:else}
-									<h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
-										{selectedTerm.name}
-									</h2>
+									<div class="mb-3 flex items-start justify-between gap-3">
+										<h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+											{selectedTerm.name}
+										</h2>
+										<div class="flex flex-shrink-0 flex-wrap justify-end gap-1.5 pt-1">
+											<FieldBadges schema={metamodel} metadata={selectedTerm.metadata} />
+										</div>
+									</div>
+									{#if synonymsOf(selectedTerm).length > 0}
+										<div
+											class="-mt-1 mb-3 flex flex-wrap items-center gap-1.5"
+											aria-label={m.glossary_synonyms_label()}
+										>
+											<span class="text-xs text-gray-500 dark:text-gray-400"
+												>{m.glossary_synonyms_label()}:</span
+											>
+											<SearchLinks values={synonymsOf(selectedTerm)} />
+										</div>
+									{/if}
 								{/if}
 
 								<!-- Definition -->
@@ -503,6 +593,13 @@
 									{/if}
 								</div>
 
+								<DomainChip
+									kind="glossary_term"
+									entityId={selectedTerm.id}
+									canEdit={canEditTerm}
+									variant="section"
+								/>
+
 								<!-- Tags Section -->
 								<div>
 									<div class="flex items-center gap-2 mb-2">
@@ -520,7 +617,7 @@
 										tags={selectedTerm.tags ?? []}
 										endpoint="/glossary"
 										id={selectedTerm.id}
-										canEdit={canManageGlossary && isEditing}
+										canEdit={canEditTerm && isEditing}
 									/>
 								</div>
 
@@ -544,16 +641,41 @@
 											permissionAction="manage"
 											readOnly={false}
 											maxDepth={2}
+											hidePaths={governedHidePaths}
 										/>
 									{:else}
 										<MetadataView
-											metadata={selectedTerm.metadata}
+											bind:metadata={selectedTerm.metadata}
 											endpoint="/glossary"
 											id={selectedTerm.id}
 											maxDepth={2}
-										/>
+											hidePaths={governedHidePaths}
+											hasLeadingRows={governed.length > 0}
+										>
+											{#snippet leadingRows()}
+												{#if metamodel && selectedTerm}
+													<ProductGovernedFields
+														bind:metadata={selectedTerm.metadata}
+														productId={undefined}
+														endpoint={`/glossary/${selectedTerm.id}`}
+														selfId={selectedTerm.id}
+														schema={metamodel}
+														fields={governed}
+														editable={canEditTerm}
+													/>
+												{/if}
+											{/snippet}
+										</MetadataView>
 									{/if}
 								</div>
+
+								{#if metamodel?.enabled}
+									<TermReferences
+										termId={selectedTerm.id}
+										schema={metamodel}
+										onload={(count) => (referencingCount = count)}
+									/>
+								{/if}
 
 								<!-- Description (Markdown Body) -->
 								{#if selectedTerm.description || (isEditing && editedTerm)}
@@ -618,7 +740,7 @@
 								</div>
 
 								<!-- Actions -->
-								{#if canManageGlossary}
+								{#if canEditTerm}
 									<div
 										class="pt-5 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between"
 									>
@@ -799,6 +921,8 @@
 						</p>
 					</div>
 
+					<DomainSelect id="term-domain" bind:value={newTermDomain} />
+
 					<div class="flex justify-end gap-3 pt-4">
 						<Button
 							type="button"
@@ -842,6 +966,13 @@
 				<p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
 					{m.glossary_delete_confirm({ name: selectedTerm?.name ?? '' })}
 				</p>
+				{#if referencingCount > 0}
+					<p
+						class="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200"
+					>
+						{m.glossary_delete_referenced({ count: referencingCount })}
+					</p>
+				{/if}
 				<div class="flex justify-end gap-3">
 					<button
 						on:click={() => (showDeleteConfirm = false)}

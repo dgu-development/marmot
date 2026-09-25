@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/marmotdata/marmot/internal/core/auth"
 )
 
 type Service interface {
@@ -12,11 +14,23 @@ type Service interface {
 	Get(ctx context.Context, id string) (*Domain, error)
 	Children(ctx context.Context, parentID *string) ([]*Domain, error)
 	Subtree(ctx context.Context, id string) ([]*Domain, error)
+	Resolve(ctx context.Context, ref string) ([]*Domain, error)
 	Update(ctx context.Context, id string, in UpdateInput) (*Domain, error)
 	Delete(ctx context.Context, id string) error
 	Move(ctx context.Context, id string, parentID *string) (*Domain, error)
 	Assign(ctx context.Context, kind Kind, entityIDs []string, domainID string) error
 	DomainOf(ctx context.Context, kind Kind, entityID string) (string, error)
+	Import(ctx context.Context, in ImportInput) (*ImportReport, error)
+	PipelineAssignment(ctx context.Context, scheduleID string) (*PipelineAssignment, error)
+	AssignPipeline(ctx context.Context, scheduleID, domainID string, moveAssets bool) (*PipelineMoveResult, error)
+	Scope(ctx context.Context, p auth.Principal) (*Scope, error)
+	Roles(ctx context.Context, domainID string) ([]RoleAssignment, error)
+	GrantRole(ctx context.Context, p auth.Principal, domainID string, in GrantInput) (*RoleAssignment, error)
+	RevokeRole(ctx context.Context, p auth.Principal, domainID, assignmentID string) error
+	Enforcement(ctx context.Context) (*EnforcementState, error)
+	WritableDomains(ctx context.Context, p auth.Principal) (*WritableDomains, error)
+	EnforcementPlan(ctx context.Context, p auth.Principal) (*EnforcementPlan, error)
+	SetWriteEnforcement(ctx context.Context, p auth.Principal, on bool, confirm string) (*EnforcementState, error)
 }
 
 type service struct {

@@ -1069,6 +1069,13 @@ definitions:
       type:
         type: string
     type: object
+  DomainErrorResponse:
+    properties:
+      code:
+        type: string
+      error:
+        type: string
+    type: object
   Environment:
     properties:
       metadata:
@@ -1208,6 +1215,24 @@ definitions:
           UserDefinition is the wording a person gave the term. Ingestion
           reads it and never writes it, so it survives every run.
         type: string
+    type: object
+  GlossaryTermRef:
+    properties:
+      definition:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  GlossaryTermReferences:
+    properties:
+      field:
+        type: string
+      terms:
+        items:
+          $ref: '#/definitions/GlossaryTermRef'
+        type: array
     type: object
   HistogramBucket:
     properties:
@@ -2513,6 +2538,23 @@ definitions:
           $ref: '#/definitions/ValidationErrorDetail'
         type: array
     type: object
+  domain.AuditEntry:
+    properties:
+      action:
+        type: string
+      actor:
+        type: string
+      at:
+        type: string
+      entity_id:
+        type: string
+      entity_kind:
+        type: string
+      from_domain:
+        type: string
+      to_domain:
+        type: string
+    type: object
   domain.Domain:
     properties:
       created_at:
@@ -2543,6 +2585,91 @@ definitions:
       updated_at:
         type: string
     type: object
+  domain.DomainRef:
+    properties:
+      id:
+        type: string
+      path:
+        description: Path is the chain of names from the root, joined by " / ".
+        type: string
+    type: object
+  domain.EnforcementPlan:
+    properties:
+      generated_at:
+        type: string
+      hash:
+        type: string
+      pipelines:
+        items:
+          $ref: '#/definitions/domain.PlanPipeline'
+        type: array
+      principals:
+        items:
+          $ref: '#/definitions/domain.PlanPrincipal'
+        type: array
+      state:
+        $ref: '#/definitions/domain.EnforcementState'
+    type: object
+  domain.EnforcementState:
+    properties:
+      updated_at:
+        type: string
+      updated_by:
+        type: string
+      updated_by_name:
+        description: |-
+          UpdatedByName is the user's or service account's name, when the
+          change was made by one that still exists.
+        type: string
+      write:
+        type: boolean
+    type: object
+  domain.GrantInput:
+    properties:
+      role:
+        $ref: '#/definitions/domain.Role'
+      subject_id:
+        type: string
+      subject_type:
+        $ref: '#/definitions/domain.SubjectType'
+    type: object
+  domain.ImportInput:
+    properties:
+      apply:
+        type: boolean
+      mapping:
+        additionalProperties:
+          type: string
+        type: object
+      source:
+        type: string
+    type: object
+  domain.ImportReport:
+    properties:
+      already_assigned:
+        type: integer
+      applied:
+        type: boolean
+      mapped:
+        items:
+          $ref: '#/definitions/domain.ImportValue'
+        type: array
+      unmapped:
+        items:
+          $ref: '#/definitions/domain.ImportValue'
+        type: array
+    type: object
+  domain.ImportValue:
+    properties:
+      count:
+        type: integer
+      domain_id:
+        type: string
+      kind:
+        $ref: '#/definitions/domain.Kind'
+      value:
+        type: string
+    type: object
   domain.Kind:
     enum:
     - asset
@@ -2555,6 +2682,112 @@ definitions:
     - KindDataProduct
     - KindGlossaryTerm
     - KindIngestionSchedule
+  domain.PipelineAssignment:
+    properties:
+      assets_in_domain:
+        type: integer
+      domain_id:
+        type: string
+      schedule_id:
+        type: string
+    type: object
+  domain.PipelineMoveResult:
+    properties:
+      domain_id:
+        type: string
+      moved_assets:
+        type: integer
+    type: object
+  domain.PlanPipeline:
+    properties:
+      assets_outside:
+        type: integer
+      domain:
+        $ref: '#/definitions/domain.DomainRef'
+      name:
+        type: string
+      schedule_id:
+        type: string
+    type: object
+  domain.PlanPrincipal:
+    properties:
+      keeps:
+        items:
+          $ref: '#/definitions/domain.DomainRef'
+        type: array
+      loses:
+        items:
+          $ref: '#/definitions/domain.DomainRef'
+        type: array
+      name:
+        type: string
+      permissions:
+        items:
+          type: string
+        type: array
+      subject_id:
+        type: string
+      subject_type:
+        $ref: '#/definitions/domain.SubjectType'
+    type: object
+  domain.Role:
+    enum:
+    - domain_admin
+    - steward
+    - reader
+    type: string
+    x-enum-varnames:
+    - RoleDomainAdmin
+    - RoleSteward
+    - RoleReader
+  domain.RoleAssignment:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: string
+      domain_id:
+        type: string
+      domain_name:
+        type: string
+      id:
+        type: string
+      inherited:
+        type: boolean
+      role:
+        $ref: '#/definitions/domain.Role'
+      subject_id:
+        type: string
+      subject_missing:
+        description: SubjectMissing marks a row whose user, team or service account
+          was deleted.
+        type: boolean
+      subject_name:
+        type: string
+      subject_type:
+        $ref: '#/definitions/domain.SubjectType'
+    type: object
+  domain.SubjectType:
+    enum:
+    - user
+    - team
+    - service_account
+    type: string
+    x-enum-varnames:
+    - SubjectUser
+    - SubjectTeam
+    - SubjectServiceAccount
+  domain.WritableDomains:
+    properties:
+      all:
+        type: boolean
+      domain_ids:
+        items:
+          type: string
+        type: array
+      enforced:
+        type: boolean
+    type: object
   importer.Action:
     enum:
     - create
@@ -2708,11 +2941,19 @@ definitions:
     type: object
   metamodel.Presentation:
     properties:
+      badge:
+        description: |-
+          Badge asks clients to show an enum field's value as a chip next to the
+          entity's name, on its page and in search results.
+        type: boolean
       control:
         description: |-
           Control names an alternate editor for a string field's value; the stored
-          value and its validation are unaffected. Only "user" is defined so far,
-          for a string field that holds a native Marmot user ID.
+          value and its validation are unaffected. "user" holds a native Marmot
+          user ID. "glossary_term" holds glossary term IDs, in a string or a list
+          of strings, on glossary_term fields only; the glossary checks the terms
+          exist. "search" shows each value of a string or list of strings as a
+          link to a catalog search for it, such as a term's synonyms.
         type: string
       descriptionKey:
         type: string
@@ -2722,12 +2963,26 @@ definitions:
         type: boolean
       helpTextKey:
         type: string
+      inverseLabelKey:
+        description: |-
+          InverseLabelKey names a glossary_term link seen from the term it points
+          to, such as "Acronyms" for a "Stands for" field.
+        type: string
       labelKey:
         type: string
       order:
         type: integer
       section:
         type: string
+      valueLabelKeys:
+        additionalProperties:
+          type: string
+        description: |-
+          ValueLabelKeys maps stored values to message keys, for showing a label
+          in place of the value. Only enum values (also as list items) and, for
+          boolean fields, "true" and "false" may be keyed. Storage, search and
+          filters keep using the value.
+        type: object
     type: object
   metamodel.Schema:
     properties:
@@ -2894,6 +3149,22 @@ definitions:
         additionalProperties: {}
         type: object
     type: object
+  v1_domains.Capabilities:
+    properties:
+      admin:
+        description: 'Admin: manage its subdomains and role assignments.'
+        type: boolean
+      domain_id:
+        type: string
+      enforced:
+        description: Enforced reports whether writes are scoped by domain at all.
+        type: boolean
+      write:
+        description: |-
+          Write: edit entities in the domain, as far as domains decide. Always true
+          while enforcement is off, when native RBAC alone applies.
+        type: boolean
+    type: object
   v1_domains.CreateRequest:
     properties:
       description:
@@ -2911,6 +3182,16 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  v1_domains.EnforcementRequest:
+    properties:
+      confirm:
+        description: |-
+          Confirm is the hash of the plan the caller reviewed. Required to turn
+          enforcement on; ignored when turning it off.
+        type: string
+      write:
+        type: boolean
     type: object
   v1_domains.MembersRequest:
     properties:
@@ -2932,6 +3213,16 @@ definitions:
       parent_id:
         description: ParentID is the new parent; null moves the domain to the root.
         type: string
+    type: object
+  v1_domains.PipelineAssignmentRequest:
+    properties:
+      domain_id:
+        type: string
+      move_assets:
+        description: |-
+          MoveAssets also moves the assets this pipeline ingested that are still
+          in its previous domain. Never implied: the client must ask for it.
+        type: boolean
     type: object
   v1_domains.UpdateRequest:
     properties:
@@ -4447,7 +4738,7 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
       security:
       - ApiKeyAuth: []
       - BearerAuth: []
@@ -4475,15 +4766,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
       security:
       - ApiKeyAuth: []
       - BearerAuth: []
@@ -4512,11 +4803,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
       security:
       - ApiKeyAuth: []
       - BearerAuth: []
@@ -4541,7 +4832,7 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
       security:
       - ApiKeyAuth: []
       - BearerAuth: []
@@ -4575,15 +4866,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
       security:
       - ApiKeyAuth: []
       - BearerAuth: []
@@ -4595,7 +4886,8 @@ paths:
       consumes:
       - application/json
       description: Sets the owning domain of every listed entity, all or none. Requires
-        the entity kind's manage permission as well.
+        the entity kind's manage permission and, under write enforcement, write access
+        to both the current and the target domain. Every change is audited.
       operationId: assignDomainMembers
       parameters:
       - description: Domain ID
@@ -4621,15 +4913,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
       security:
       - ApiKeyAuth: []
       - BearerAuth: []
@@ -4664,19 +4956,131 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
       security:
       - ApiKeyAuth: []
       - BearerAuth: []
       summary: Move a domain
+      tags:
+      - domains
+  /api/v1/domains/{id}/roles:
+    delete:
+      operationId: revokeDomainRole
+      parameters:
+      - description: Domain ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Role assignment ID
+        in: query
+        name: assignment_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Revoke a role on a domain
+      tags:
+      - domains
+    get:
+      description: Includes the assignments inherited from its ancestors, marked inherited.
+      operationId: listDomainRoles
+      parameters:
+      - description: Domain ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.RoleAssignment'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: List a domain's role assignments
+      tags:
+      - domains
+    post:
+      consumes:
+      - application/json
+      description: Needs domain_admin on the domain or an ancestor, or global scope.
+        The role applies to the whole subtree.
+      operationId: grantDomainRole
+      parameters:
+      - description: Domain ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Subject and role
+        in: body
+        name: grant
+        required: true
+        schema:
+          $ref: '#/definitions/domain.GrantInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.RoleAssignment'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Grant a role on a domain
       tags:
       - domains
   /api/v1/domains/{id}/tree:
@@ -4701,11 +5105,201 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
       security:
       - ApiKeyAuth: []
       - BearerAuth: []
       summary: Get a domain subtree
+      tags:
+      - domains
+  /api/v1/domains/audit/{kind}/{id}:
+    get:
+      description: Every change of domain recorded for an entity, oldest first. Kind
+        is asset, data_product, glossary_term, ingestion_schedule or domain.
+      operationId: getDomainAuditLog
+      parameters:
+      - description: Entity kind
+        in: path
+        name: kind
+        required: true
+        type: string
+      - description: Entity ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.AuditEntry'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Get an entity's domain history
+      tags:
+      - domains
+  /api/v1/domains/capabilities:
+    get:
+      description: Informative, for hiding actions in a UI; the server checks every
+        operation again. Pass domain_id, or kind and id of an entity to use its domain.
+      operationId: getDomainCapabilities
+      parameters:
+      - description: Domain ID
+        in: query
+        name: domain_id
+        type: string
+      - description: Entity kind
+        enum:
+        - asset
+        - data_product
+        - glossary_term
+        - ingestion_schedule
+        in: query
+        name: kind
+        type: string
+      - description: Entity ID
+        in: query
+        name: id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1_domains.Capabilities'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: What the caller may do in a domain
+      tags:
+      - domains
+  /api/v1/domains/enforcement:
+    get:
+      description: Whether writes are scoped by domain. Off, native RBAC alone decides.
+      operationId: getDomainEnforcement
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.EnforcementState'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Get domain write enforcement state
+      tags:
+      - domains
+    post:
+      consumes:
+      - application/json
+      description: Turning it on needs the hash of the current plan; a plan that changed
+        since it was reviewed is refused with plan_changed. Both directions are audited.
+        Global scope only.
+      operationId: setDomainEnforcement
+      parameters:
+      - description: Target state
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1_domains.EnforcementRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.EnforcementState'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Turn domain write enforcement on or off
+      tags:
+      - domains
+  /api/v1/domains/enforcement/plan:
+    get:
+      description: Who would lose write access, and where, once writes are scoped
+        by domain, and which pipelines have assets outside their domain. Its hash
+        confirms the activation. Global scope only.
+      operationId: getDomainEnforcementPlan
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.EnforcementPlan'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Plan domain write enforcement
+      tags:
+      - domains
+  /api/v1/domains/import:
+    post:
+      consumes:
+      - application/json
+      description: Maps the values at a metadata path (such as metadata.dgu.domain)
+        to domains. Only entities still in Unassigned are assigned. A dry run unless
+        apply is true. Global administrators only.
+      operationId: importDomainMemberships
+      parameters:
+      - description: Source path, value-to-domain mapping and apply flag
+        in: body
+        name: import
+        required: true
+        schema:
+          $ref: '#/definitions/domain.ImportInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.ImportReport'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Import domain memberships from metadata
       tags:
       - domains
   /api/v1/domains/of/{kind}/{id}:
@@ -4738,11 +5332,107 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/ErrorResponse'
+            $ref: '#/definitions/DomainErrorResponse'
       security:
       - ApiKeyAuth: []
       - BearerAuth: []
       summary: Get an entity's domain
+      tags:
+      - domains
+  /api/v1/domains/pipelines/{scheduleId}/assignment:
+    get:
+      description: The domain new assets from this pipeline go to, and how many assets
+        it ingested are still in that domain.
+      operationId: getPipelineDomain
+      parameters:
+      - description: Ingestion schedule ID
+        in: path
+        name: scheduleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.PipelineAssignment'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Get a pipeline's domain
+      tags:
+      - domains
+    put:
+      consumes:
+      - application/json
+      description: Sets the domain for the pipeline's new assets. With move_assets,
+        the assets it already ingested that are still in its previous domain move
+        too, in the same transaction; assets placed in another domain stay. Moving
+        assets also requires assets:manage. Under write enforcement the caller must
+        be able to write in both domains; the change is audited.
+      operationId: setPipelineDomain
+      parameters:
+      - description: Ingestion schedule ID
+        in: path
+        name: scheduleId
+        required: true
+        type: string
+      - description: Target domain and whether to move the ingested assets
+        in: body
+        name: assignment
+        required: true
+        schema:
+          $ref: '#/definitions/v1_domains.PipelineAssignmentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.PipelineMoveResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/DomainErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Change a pipeline's domain
+      tags:
+      - domains
+  /api/v1/domains/writable:
+    get:
+      description: For narrowing domain pickers. all is true while enforcement is
+        off or for global scope; otherwise domain_ids lists every writable domain.
+      operationId: getWritableDomains
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.WritableDomains'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Domains the caller may write in
       tags:
       - domains
   /api/v1/glossary/:
@@ -5003,6 +5693,75 @@ paths:
       - ApiKeyAuth: []
       - BearerAuth: []
       summary: List glossary terms
+      tags:
+      - glossary
+  /api/v1/glossary/references/{id}:
+    get:
+      description: For each profile field with the glossary_term control, the live
+        terms whose value names this term (for example, the acronyms that stand for
+        it).
+      operationId: getGlossaryTermReferences
+      parameters:
+      - description: Term ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/GlossaryTermReferences'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Terms pointing at a term
+      tags:
+      - glossary
+  /api/v1/glossary/refs:
+    get:
+      description: The live terms with the given IDs, for showing glossary_term values
+        by name. Unknown or deleted IDs are left out.
+      operationId: getGlossaryTermRefs
+      parameters:
+      - description: Comma-separated term IDs (at most 100)
+        in: query
+        name: ids
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/GlossaryTermRef'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Resolve term IDs
       tags:
       - glossary
   /api/v1/glossary/search:

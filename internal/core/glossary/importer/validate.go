@@ -67,8 +67,8 @@ type Result struct {
 // Valid reports whether the file may be applied: no file or row errors.
 func (r *Result) Valid() bool { return len(r.Problems) == 0 && r.Summary.Errors == 0 }
 
-// Terms looks terms up by name. Names are not unique in Marmot, so it returns
-// every live term with each name.
+// Terms looks terms up by name, ignoring case. Names are not unique in
+// Marmot, so it returns every live term with each name, keyed as stored.
 type Terms interface {
 	ByNames(ctx context.Context, names []string) (map[string][]*glossary.GlossaryTerm, error)
 }
@@ -82,16 +82,24 @@ type Owners interface {
 var ErrOwnerNotFound = errors.New("owner not found")
 
 type Importer struct {
-	registry *metamodel.Registry
-	terms    Terms
-	owners   Owners
+	registry  *metamodel.Registry
+	terms     Terms
+	owners    Owners
+	providers []ColumnProvider
 }
 
-func New(registry *metamodel.Registry, terms Terms, owners Owners) *Importer {
-	return &Importer{registry: registry, terms: terms, owners: owners}
+func New(registry *metamodel.Registry, terms Terms, owners Owners, providers ...ColumnProvider) *Importer {
+	return &Importer{registry: registry, terms: terms, owners: owners, providers: providers}
 }
 
-func (im *Importer) Columns() []Column { return Columns(im.registry) }
+// Columns are the term's own columns, the profile's and the providers'.
+func (im *Importer) Columns() []Column {
+	cols := Columns(im.registry)
+	for _, p := range im.providers {
+		cols = append(cols, p.Columns()...)
+	}
+	return cols
+}
 
 // Describe lists the template's columns for a client's guide, in locale.
 func (im *Importer) Describe(locale string) []ColumnInfo {
@@ -147,19 +155,26 @@ func (im *Importer) Validate(ctx context.Context, sheet *Sheet, onExisting OnExi
 		return ""
 	}
 
-	names := make([]string, 0, len(sheet.Rows))
-	lines := map[string][]int{}
-	for i, row := range sheet.Rows {
-		if blank(row) {
-			continue
+	var lookup []string
+	for _, row := range sheet.Rows {
+		if !blank(row) {
+			lookup = append(lookup, cell(row, ColumnName), cell(row, ColumnParent))
+			for _, c := range cols {
+				if c.links() {
+					lookup = append(lookup, splitList(cell(row, c.ID))...)
+				}
+			}
 		}
-		name := cell(row, ColumnName)
-		names = append(names, name)
-		lines[name] = append(lines[name], i+2)
 	}
-	existing, err := im.terms.ByNames(ctx, names)
+	found, err := im.terms.ByNames(ctx, lookup)
 	if err != nil {
 		return nil, err
+	}
+	n := newNames(found)
+	for i, row := range sheet.Rows {
+		if !blank(row) && cell(row, ColumnName) != "" {
+			n.addRow(cell(row, ColumnName), i+2)
+		}
 	}
 
 	for i, row := range sheet.Rows {
@@ -167,7 +182,7 @@ func (im *Importer) Validate(ctx context.Context, sheet *Sheet, onExisting OnExi
 			continue
 		}
 		r := Row{Line: i + 2, Name: cell(row, ColumnName)}
-		im.validateRow(ctx, &r, row, cell, known, index, existing, lines, onExisting)
+		im.validateRow(ctx, &r, row, cell, known, index, n, onExisting)
 		result.Rows = append(result.Rows, r)
 	}
 	im.checkParents(result.Rows)
@@ -191,18 +206,21 @@ func (im *Importer) Validate(ctx context.Context, sheet *Sheet, onExisting OnExi
 	return result, nil
 }
 
-func (im *Importer) validateRow(ctx context.Context, r *Row, row []string, cell func([]string, string) string, known map[string]Column, index map[string]int, existing map[string][]*glossary.GlossaryTerm, lines map[string][]int, onExisting OnExisting) {
+func (im *Importer) validateRow(ctx context.Context, r *Row, row []string, cell func([]string, string) string, known map[string]Column, index map[string]int, n names, onExisting OnExisting) {
 	fail := func(column, code, message string) {
 		r.Errors = append(r.Errors, Problem{Column: column, Code: code, Message: message})
+	}
+	warn := func(column, code, message string) {
+		r.Warnings = append(r.Warnings, Problem{Column: column, Code: code, Message: message})
 	}
 	if r.Name == "" {
 		fail(ColumnName, "required", "a name is required")
 		return
 	}
-	if len(lines[r.Name]) > 1 {
-		fail(ColumnName, "duplicate_in_file", fmt.Sprintf("the name is repeated on lines %v", lines[r.Name]))
+	if lines := n.lines[fold(r.Name)]; len(lines) > 1 {
+		fail(ColumnName, "duplicate_in_file", fmt.Sprintf("the name is repeated, ignoring case, on lines %v", lines))
 	}
-	matches := existing[r.Name]
+	matches, byCase := n.term(r.Name)
 	var current *glossary.GlossaryTerm
 	switch {
 	case len(matches) > 1:
@@ -210,6 +228,9 @@ func (im *Importer) validateRow(ctx context.Context, r *Row, row []string, cell 
 		return
 	case len(matches) == 1:
 		current = matches[0]
+		if byCase {
+			warn(ColumnName, "matched_ignoring_case", fmt.Sprintf("matches the existing term %q, ignoring case; its name is kept", current.Name))
+		}
 		if onExisting != OnExistingUpdate {
 			r.Action = ActionSkip
 			return
@@ -224,12 +245,19 @@ func (im *Importer) validateRow(ctx context.Context, r *Row, row []string, cell 
 		fail(ColumnDefinition, "required", "a definition is required for a new term")
 	}
 	parent := cell(row, ColumnParent)
-	if parent == r.Name {
-		fail(ColumnParent, "parent_self", "a term cannot be its own parent")
-	} else if parent != "" && len(existing[parent]) == 0 && len(lines[parent]) == 0 {
-		fail(ColumnParent, "parent_not_found", fmt.Sprintf("no term named %q exists or is in the file", parent))
-	} else if len(existing[parent]) > 1 {
-		fail(ColumnParent, "ambiguous_parent", fmt.Sprintf("%d terms are named %q", len(existing[parent]), parent))
+	if parent != "" {
+		parents, parentByCase := n.term(parent)
+		switch {
+		case fold(parent) == fold(r.Name):
+			fail(ColumnParent, "parent_self", "a term cannot be its own parent")
+		case len(parents) == 0 && !n.inFile(parent):
+			fail(ColumnParent, "parent_not_found", fmt.Sprintf("no term named %q exists or is in the file", parent))
+		case len(parents) > 1:
+			fail(ColumnParent, "ambiguous_parent", fmt.Sprintf("%d terms are named %q", len(parents), parent))
+		case parentByCase || (len(parents) == 0 && n.canonical(parent) != parent):
+			warn(ColumnParent, "matched_ignoring_case", fmt.Sprintf("refers to %q, ignoring case", n.canonical(parent)))
+		}
+		parent = n.canonical(parent)
 	}
 	owners := im.readOwners(ctx, cell(row, ColumnOwners), fail)
 	if current == nil && len(owners) == 0 && !slices.ContainsFunc(r.Errors, func(p Problem) bool { return p.Column == ColumnOwners }) {
@@ -242,9 +270,18 @@ func (im *Importer) validateRow(ctx context.Context, r *Row, row []string, cell 
 		metadata = deepCopy(current.Metadata)
 	}
 	values := map[string]any{}
+	var links map[string][]string
 	for id, i := range index {
 		c, ok := known[id]
 		if !ok || !c.profile() || row[i] == "" {
+			continue
+		}
+		if c.links() {
+			targets := readLinks(c, r.Name, row[i], n, fail, warn)
+			if links == nil {
+				links = map[string][]string{}
+			}
+			links[c.Storage] = targets
 			continue
 		}
 		value, ok := parseValue(c, row[i])
@@ -277,12 +314,34 @@ func (im *Importer) validateRow(ctx context.Context, r *Row, row []string, cell 
 		}
 	}
 
+	var extra map[string]string
+	for _, p := range im.providers {
+		cells := map[string]string{}
+		for _, c := range p.Columns() {
+			if i, ok := index[c.ID]; ok {
+				cells[c.ID] = row[i]
+			}
+		}
+		errs, warnings := p.Check(ctx, RowContext{Name: r.Name, Current: current, Cells: cells})
+		r.Errors = append(r.Errors, errs...)
+		r.Warnings = append(r.Warnings, warnings...)
+		for id, v := range cells {
+			if v == "" {
+				continue
+			}
+			if extra == nil {
+				extra = map[string]string{}
+			}
+			extra[id] = v
+		}
+	}
+
 	if current == nil {
 		in := glossary.CreateTermInput{Name: r.Name, Definition: definition, Owners: owners, Tags: tags, Metadata: metadata}
 		if description != "" {
 			in.Description = &description
 		}
-		r.term = glossary.ImportTerm{Create: in, ParentName: parent}
+		r.term = glossary.ImportTerm{Name: n.canonical(r.Name), Create: in, ParentName: parent, Links: links, Extra: extra}
 		return
 	}
 	// On update, an empty cell keeps the current value.
@@ -299,7 +358,35 @@ func (im *Importer) validateRow(ctx context.Context, r *Row, row []string, cell 
 	if len(tags) > 0 {
 		in.Tags = tags
 	}
-	r.term = glossary.ImportTerm{ExistingID: current.ID, Update: in, ParentName: parent}
+	r.term = glossary.ImportTerm{Name: current.Name, ExistingID: current.ID, Update: in, ParentName: parent, Links: links, Extra: extra}
+}
+
+// readLinks resolves a glossary_term cell to the names the catalog will hold,
+// the way the parent column is: existing terms or rows of the same file.
+func readLinks(c Column, self, cell string, n names, fail, warn func(column, code, message string)) []string {
+	items := splitList(cell)
+	if !c.list() && len(items) > 1 {
+		fail(c.ID, "type", "only one term name is allowed")
+	}
+	if max := c.Validation.MaxItems; max != nil && len(items) > *max {
+		fail(c.ID, "items", fmt.Sprintf("at most %d terms", *max))
+	}
+	targets := make([]string, 0, len(items))
+	for _, name := range items {
+		found, byCase := n.term(name)
+		switch {
+		case fold(name) == fold(self):
+			fail(c.ID, "self_reference", "a term cannot point at itself")
+		case len(found) == 0 && !n.inFile(name):
+			fail(c.ID, "term_not_found", fmt.Sprintf("no term named %q exists or is in the file", name))
+		case len(found) > 1:
+			fail(c.ID, "ambiguous_term", fmt.Sprintf("%d terms are named %q", len(found), name))
+		case byCase || (len(found) == 0 && n.canonical(name) != name):
+			warn(c.ID, "matched_ignoring_case", fmt.Sprintf("refers to %q, ignoring case", n.canonical(name)))
+		}
+		targets = append(targets, n.canonical(name))
+	}
+	return targets
 }
 
 func (im *Importer) readOwners(ctx context.Context, value string, fail func(column, code, message string)) []glossary.OwnerInput {
@@ -324,12 +411,12 @@ func (im *Importer) checkParents(rows []Row) {
 	parentOf := map[string]string{}
 	for _, r := range rows {
 		if r.Action == ActionCreate || r.Action == ActionUpdate {
-			parentOf[r.Name] = r.term.ParentName
+			parentOf[r.term.Name] = r.term.ParentName
 		}
 	}
 	for i := range rows {
-		seen := map[string]bool{rows[i].Name: true}
-		for p := parentOf[rows[i].Name]; p != ""; p = parentOf[p] {
+		seen := map[string]bool{rows[i].term.Name: true}
+		for p := parentOf[rows[i].term.Name]; p != ""; p = parentOf[p] {
 			if seen[p] {
 				rows[i].Errors = append(rows[i].Errors, Problem{Column: ColumnParent, Code: "parent_cycle", Message: "the parent terms in the file form a loop"})
 				break
@@ -388,7 +475,13 @@ func parseScalar(kind string, values []string, raw string) (any, bool) {
 	case "string":
 		return raw, true
 	case "enum":
-		return raw, slices.Contains(values, raw)
+		// Stored as the profile spells it, whatever case the cell used.
+		for _, v := range values {
+			if strings.EqualFold(v, raw) {
+				return v, true
+			}
+		}
+		return nil, false
 	case "boolean":
 		return parseBool(raw)
 	case "integer":

@@ -1,15 +1,19 @@
 <script lang="ts">
+	import SearchLinks from '$components/metamodel/SearchLinks.svelte';
 	import IconifyIcon from '@iconify/svelte';
 	import { fetchApi } from '$lib/api';
 	import { toasts } from '$lib/stores/toast';
 	import { locale } from '$lib/i18n';
 	import { m } from '$lib/paraglide/messages';
 	import Avatar from '$components/user/Avatar.svelte';
+	import TermLinks from '$components/glossary/TermLinks.svelte';
+	import TermLinkPicker from '$components/glossary/TermLinkPicker.svelte';
+	import { GLOSSARY_TERM_CONTROL, linkIds } from '$lib/glossary/links';
 	import { createKeyboardNavigationState } from '$lib/keyboard';
 	import type { MetamodelField, MetamodelSchema } from '$lib/metamodel/types';
 	import { isValidationError, MetamodelHttpError } from '$lib/metamodel/api';
 	import { nativeMessage, violationMessage } from '$lib/metamodel/i18n';
-	import { resolveMessage } from '$lib/metamodel/labels';
+	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
 	import {
 		lookupOwnerById,
 		searchUsers as searchUserOwners,
@@ -34,12 +38,18 @@
 	let {
 		metadata = $bindable(),
 		productId,
+		endpoint = undefined,
+		selfId = undefined,
 		schema,
 		fields,
 		editable = false
 	}: {
 		metadata: Record<string, unknown>;
 		productId: string | undefined;
+		/** PUT target taking `{ metadata }`, for entities other than products (glossary terms). */
+		endpoint?: string;
+		/** The entity being edited, which a glossary_term field may not point at. */
+		selfId?: string;
 		schema: MetamodelSchema;
 		fields: MetamodelField[];
 		editable?: boolean;
@@ -59,6 +69,8 @@
 	let userSearching = $state(false);
 	let userFocusedIndex = $state(-1);
 	let userSearchTimeout: ReturnType<typeof setTimeout>;
+
+	const target = $derived(endpoint ?? (productId ? `/products/${productId}` : undefined));
 
 	let resolvedOwners = $state<Record<string, OwnerResult | null>>({});
 	const pendingLookups: Record<string, true> = {};
@@ -117,6 +129,13 @@
 		return typeof value === 'object' ? JSON.stringify(value) : String(value);
 	}
 
+	function shown(field: MetamodelField, value: unknown): string {
+		const label = valueLabel(field, value, context);
+		if (label) return label;
+		if (typeof value === 'boolean') return value ? m.metamodel_yes() : m.metamodel_no();
+		return text(value);
+	}
+
 	function isEmptyValue(value: unknown): boolean {
 		return isUnset(value) || (Array.isArray(value) && value.length === 0);
 	}
@@ -169,11 +188,14 @@
 		if (field.type === 'boolean') {
 			return [
 				...options,
-				{ value: 'true', label: m.metamodel_yes() },
-				{ value: 'false', label: m.metamodel_no() }
+				{ value: 'true', label: shown(field, true) },
+				{ value: 'false', label: shown(field, false) }
 			];
 		}
-		return [...options, ...(field.values ?? []).map((value) => ({ value, label: value }))];
+		return [
+			...options,
+			...(field.values ?? []).map((value) => ({ value, label: shown(field, value) }))
+		];
 	}
 
 	function toggleListbox(event: MouseEvent) {
@@ -244,7 +266,7 @@
 		{ onSelect: pickUser, onEscape: () => (userQuery ? resetUserSearch() : cancel()) }
 	);
 
-	// Local mode (no productId, e.g. the create wizard): just update the bound metadata, the
+	// Local mode (no target, e.g. the create wizard): just update the bound metadata, the
 	// same way MetadataView's own free-field editor does before the product exists to PUT to.
 	async function save(field: MetamodelField) {
 		if (saving) return;
@@ -266,7 +288,7 @@
 		}
 		const updated = writeMetadataValue(metadata, field.storage, parsed.value);
 
-		if (!productId) {
+		if (!target) {
 			metadata = updated;
 			editingId = null;
 			return;
@@ -275,7 +297,7 @@
 		saving = true;
 		errorCode = null;
 		try {
-			const response = await fetchApi(`/products/${productId}`, {
+			const response = await fetchApi(target, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ metadata: updated })
@@ -344,22 +366,26 @@
 		</span>
 	{:else if field.presentation?.control === 'user' && typeof value === 'string'}
 		{@render ownerChip(value, false)}
+	{:else if field.presentation?.control === GLOSSARY_TERM_CONTROL}
+		<TermLinks ids={linkIds(value)} />
+	{:else if field.presentation?.control === 'search'}
+		<SearchLinks values={Array.isArray(value) ? value.map(String) : [String(value)]} />
 	{:else if Array.isArray(value)}
 		<div class="flex flex-wrap gap-1.5">
 			{#each value as item, i (i)}
 				<span
 					class="rounded-full bg-earthy-terracotta-100 px-2 py-0.5 text-xs whitespace-pre-wrap break-all text-earthy-terracotta-700 dark:bg-earthy-terracotta-900 dark:text-earthy-terracotta-100"
 				>
-					{text(item)}
+					{shown(field, item)}
 				</span>
 			{/each}
 		</div>
 	{:else if typeof value === 'boolean'}
 		<span class="rounded-full px-2 py-1 text-sm {valueClass(value)}">
-			{value ? m.metamodel_yes() : m.metamodel_no()}
+			{shown(field, value)}
 		</span>
 	{:else}
-		<span class="rounded-full px-2 py-1 text-sm {valueClass(value)}">{text(value)}</span>
+		<span class="rounded-full px-2 py-1 text-sm {valueClass(value)}">{shown(field, value)}</span>
 	{/if}
 {/snippet}
 
@@ -499,6 +525,20 @@
 		<div class="min-w-0 flex-1">
 			{#if field.presentation?.control === 'user'}
 				{@render userEditor(field, controlId, described)}
+			{:else if field.presentation?.control === GLOSSARY_TERM_CONTROL}
+				<TermLinkPicker
+					ids={linkIds(draft)}
+					multiple={field.type === 'list'}
+					exclude={selfId}
+					inputId={controlId}
+					labelledby={`governed-product-label-${field.id}`}
+					describedby={described}
+					onchange={(ids) => {
+						draft = field.type === 'list' ? ids : (ids[0] ?? '');
+						errorCode = null;
+					}}
+					onescape={cancel}
+				/>
 			{:else if field.type === 'integer' || field.type === 'number'}
 				<input
 					id={controlId}
@@ -547,7 +587,7 @@
 								onkeydown={(e) => onKey(e, field)}
 								use:focusIf={i === 0}
 							/>
-							{option}
+							{shown(field, option)}
 						</label>
 					{/each}
 				</div>

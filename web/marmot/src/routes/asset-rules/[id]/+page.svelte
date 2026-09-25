@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { catalogLabels } from '$lib/catalog/labels';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -652,7 +653,7 @@
 											<span
 												class="text-xs px-2 py-1 rounded-md font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
 											>
-												{asset.type?.replace(/_/g, ' ')}
+												{$catalogLabels.type(asset.type).replace(/_/g, ' ')}
 											</span>
 										</div>
 									{:else}

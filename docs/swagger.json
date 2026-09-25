@@ -2337,7 +2337,7 @@
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     }
                 }
@@ -2383,19 +2383,312 @@
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/domains/audit/{kind}/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Every change of domain recorded for an entity, oldest first. Kind is asset, data_product, glossary_term, ingestion_schedule or domain.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "Get an entity's domain history",
+                "operationId": "getDomainAuditLog",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Entity kind",
+                        "name": "kind",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Entity ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.AuditEntry"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/domains/capabilities": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Informative, for hiding actions in a UI; the server checks every operation again. Pass domain_id, or kind and id of an entity to use its domain.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "What the caller may do in a domain",
+                "operationId": "getDomainCapabilities",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Domain ID",
+                        "name": "domain_id",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asset",
+                            "data_product",
+                            "glossary_term",
+                            "ingestion_schedule"
+                        ],
+                        "type": "string",
+                        "description": "Entity kind",
+                        "name": "kind",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Entity ID",
+                        "name": "id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1_domains.Capabilities"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/domains/enforcement": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Whether writes are scoped by domain. Off, native RBAC alone decides.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "Get domain write enforcement state",
+                "operationId": "getDomainEnforcement",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.EnforcementState"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Turning it on needs the hash of the current plan; a plan that changed since it was reviewed is refused with plan_changed. Both directions are audited. Global scope only.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "Turn domain write enforcement on or off",
+                "operationId": "setDomainEnforcement",
+                "parameters": [
+                    {
+                        "description": "Target state",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1_domains.EnforcementRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.EnforcementState"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/domains/enforcement/plan": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Who would lose write access, and where, once writes are scoped by domain, and which pipelines have assets outside their domain. Its hash confirms the activation. Global scope only.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "Plan domain write enforcement",
+                "operationId": "getDomainEnforcementPlan",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.EnforcementPlan"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/domains/import": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Maps the values at a metadata path (such as metadata.dgu.domain) to domains. Only entities still in Unassigned are assigned. A dry run unless apply is true. Global administrators only.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "Import domain memberships from metadata",
+                "operationId": "importDomainMemberships",
+                "parameters": [
+                    {
+                        "description": "Source path, value-to-domain mapping and apply flag",
+                        "name": "import",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.ImportInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.ImportReport"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     }
                 }
@@ -2452,7 +2745,152 @@
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/domains/pipelines/{scheduleId}/assignment": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The domain new assets from this pipeline go to, and how many assets it ingested are still in that domain.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "Get a pipeline's domain",
+                "operationId": "getPipelineDomain",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ingestion schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.PipelineAssignment"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets the domain for the pipeline's new assets. With move_assets, the assets it already ingested that are still in its previous domain move too, in the same transaction; assets placed in another domain stay. Moving assets also requires assets:manage. Under write enforcement the caller must be able to write in both domains; the change is audited.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "Change a pipeline's domain",
+                "operationId": "setPipelineDomain",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ingestion schedule ID",
+                        "name": "scheduleId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Target domain and whether to move the ingested assets",
+                        "name": "assignment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1_domains.PipelineAssignmentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.PipelineMoveResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/domains/writable": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "For narrowing domain pickers. all is true while enforcement is off or for global scope; otherwise domain_ids lists every writable domain.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "Domains the caller may write in",
+                "operationId": "getWritableDomains",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.WritableDomains"
                         }
                     }
                 }
@@ -2495,7 +2933,7 @@
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     }
                 }
@@ -2549,19 +2987,19 @@
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     }
                 }
@@ -2606,13 +3044,13 @@
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     }
                 }
@@ -2628,7 +3066,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Sets the owning domain of every listed entity, all or none. Requires the entity kind's manage permission as well.",
+                "description": "Sets the owning domain of every listed entity, all or none. Requires the entity kind's manage permission and, under write enforcement, write access to both the current and the target domain. Every change is audited.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2671,19 +3109,19 @@
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     }
                 }
@@ -2739,19 +3177,195 @@
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/domains/{id}/roles": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Includes the assignments inherited from its ancestors, marked inherited.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "List a domain's role assignments",
+                "operationId": "listDomainRoles",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Domain ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.RoleAssignment"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Needs domain_admin on the domain or an ancestor, or global scope. The role applies to the whole subtree.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "Grant a role on a domain",
+                "operationId": "grantDomainRole",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Domain ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Subject and role",
+                        "name": "grant",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.GrantInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/domain.RoleAssignment"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "domains"
+                ],
+                "summary": "Revoke a role on a domain",
+                "operationId": "revokeDomainRole",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Domain ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Role assignment ID",
+                        "name": "assignment_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     }
                 }
@@ -2798,7 +3412,7 @@
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/ErrorResponse"
+                            "$ref": "#/definitions/DomainErrorResponse"
                         }
                     }
                 }
@@ -3025,6 +3639,112 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/GlossaryListResult"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/glossary/references/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "For each profile field with the glossary_term control, the live terms whose value names this term (for example, the acronyms that stand for it).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "glossary"
+                ],
+                "summary": "Terms pointing at a term",
+                "operationId": "getGlossaryTermReferences",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Term ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/GlossaryTermReferences"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/glossary/refs": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The live terms with the given IDs, for showing glossary_term values by name. Unknown or deleted IDs are left out.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "glossary"
+                ],
+                "summary": "Resolve term IDs",
+                "operationId": "getGlossaryTermRefs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Comma-separated term IDs (at most 100)",
+                        "name": "ids",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/GlossaryTermRef"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/ErrorResponse"
                         }
                     },
                     "500": {
@@ -10903,6 +11623,17 @@
                 }
             }
         },
+        "DomainErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                }
+            }
+        },
         "Environment": {
             "type": "object",
             "properties": {
@@ -11104,6 +11835,34 @@
                 "user_definition": {
                     "description": "UserDefinition is the wording a person gave the term. Ingestion\nreads it and never writes it, so it survives every run.",
                     "type": "string"
+                }
+            }
+        },
+        "GlossaryTermRef": {
+            "type": "object",
+            "properties": {
+                "definition": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "GlossaryTermReferences": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string"
+                },
+                "terms": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/GlossaryTermRef"
+                    }
                 }
             }
         },
@@ -13074,6 +13833,32 @@
                 }
             }
         },
+        "domain.AuditEntry": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "actor": {
+                    "type": "string"
+                },
+                "at": {
+                    "type": "string"
+                },
+                "entity_id": {
+                    "type": "string"
+                },
+                "entity_kind": {
+                    "type": "string"
+                },
+                "from_domain": {
+                    "type": "string"
+                },
+                "to_domain": {
+                    "type": "string"
+                }
+            }
+        },
         "domain.Domain": {
             "type": "object",
             "properties": {
@@ -13119,6 +13904,133 @@
                 }
             }
         },
+        "domain.DomainRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "path": {
+                    "description": "Path is the chain of names from the root, joined by \" / \".",
+                    "type": "string"
+                }
+            }
+        },
+        "domain.EnforcementPlan": {
+            "type": "object",
+            "properties": {
+                "generated_at": {
+                    "type": "string"
+                },
+                "hash": {
+                    "type": "string"
+                },
+                "pipelines": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.PlanPipeline"
+                    }
+                },
+                "principals": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.PlanPrincipal"
+                    }
+                },
+                "state": {
+                    "$ref": "#/definitions/domain.EnforcementState"
+                }
+            }
+        },
+        "domain.EnforcementState": {
+            "type": "object",
+            "properties": {
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "string"
+                },
+                "updated_by_name": {
+                    "description": "UpdatedByName is the user's or service account's name, when the\nchange was made by one that still exists.",
+                    "type": "string"
+                },
+                "write": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "domain.GrantInput": {
+            "type": "object",
+            "properties": {
+                "role": {
+                    "$ref": "#/definitions/domain.Role"
+                },
+                "subject_id": {
+                    "type": "string"
+                },
+                "subject_type": {
+                    "$ref": "#/definitions/domain.SubjectType"
+                }
+            }
+        },
+        "domain.ImportInput": {
+            "type": "object",
+            "properties": {
+                "apply": {
+                    "type": "boolean"
+                },
+                "mapping": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.ImportReport": {
+            "type": "object",
+            "properties": {
+                "already_assigned": {
+                    "type": "integer"
+                },
+                "applied": {
+                    "type": "boolean"
+                },
+                "mapped": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.ImportValue"
+                    }
+                },
+                "unmapped": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.ImportValue"
+                    }
+                }
+            }
+        },
+        "domain.ImportValue": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "domain_id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "$ref": "#/definitions/domain.Kind"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
         "domain.Kind": {
             "type": "string",
             "enum": [
@@ -13133,6 +14045,162 @@
                 "KindGlossaryTerm",
                 "KindIngestionSchedule"
             ]
+        },
+        "domain.PipelineAssignment": {
+            "type": "object",
+            "properties": {
+                "assets_in_domain": {
+                    "type": "integer"
+                },
+                "domain_id": {
+                    "type": "string"
+                },
+                "schedule_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.PipelineMoveResult": {
+            "type": "object",
+            "properties": {
+                "domain_id": {
+                    "type": "string"
+                },
+                "moved_assets": {
+                    "type": "integer"
+                }
+            }
+        },
+        "domain.PlanPipeline": {
+            "type": "object",
+            "properties": {
+                "assets_outside": {
+                    "type": "integer"
+                },
+                "domain": {
+                    "$ref": "#/definitions/domain.DomainRef"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "schedule_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.PlanPrincipal": {
+            "type": "object",
+            "properties": {
+                "keeps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.DomainRef"
+                    }
+                },
+                "loses": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.DomainRef"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "permissions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "subject_id": {
+                    "type": "string"
+                },
+                "subject_type": {
+                    "$ref": "#/definitions/domain.SubjectType"
+                }
+            }
+        },
+        "domain.Role": {
+            "type": "string",
+            "enum": [
+                "domain_admin",
+                "steward",
+                "reader"
+            ],
+            "x-enum-varnames": [
+                "RoleDomainAdmin",
+                "RoleSteward",
+                "RoleReader"
+            ]
+        },
+        "domain.RoleAssignment": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "domain_id": {
+                    "type": "string"
+                },
+                "domain_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "inherited": {
+                    "type": "boolean"
+                },
+                "role": {
+                    "$ref": "#/definitions/domain.Role"
+                },
+                "subject_id": {
+                    "type": "string"
+                },
+                "subject_missing": {
+                    "description": "SubjectMissing marks a row whose user, team or service account was deleted.",
+                    "type": "boolean"
+                },
+                "subject_name": {
+                    "type": "string"
+                },
+                "subject_type": {
+                    "$ref": "#/definitions/domain.SubjectType"
+                }
+            }
+        },
+        "domain.SubjectType": {
+            "type": "string",
+            "enum": [
+                "user",
+                "team",
+                "service_account"
+            ],
+            "x-enum-varnames": [
+                "SubjectUser",
+                "SubjectTeam",
+                "SubjectServiceAccount"
+            ]
+        },
+        "domain.WritableDomains": {
+            "type": "object",
+            "properties": {
+                "all": {
+                    "type": "boolean"
+                },
+                "domain_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "enforced": {
+                    "type": "boolean"
+                }
+            }
         },
         "importer.Action": {
             "type": "string",
@@ -13361,8 +14429,12 @@
         "metamodel.Presentation": {
             "type": "object",
             "properties": {
+                "badge": {
+                    "description": "Badge asks clients to show an enum field's value as a chip next to the\nentity's name, on its page and in search results.",
+                    "type": "boolean"
+                },
                 "control": {
-                    "description": "Control names an alternate editor for a string field's value; the stored\nvalue and its validation are unaffected. Only \"user\" is defined so far,\nfor a string field that holds a native Marmot user ID.",
+                    "description": "Control names an alternate editor for a string field's value; the stored\nvalue and its validation are unaffected. \"user\" holds a native Marmot\nuser ID. \"glossary_term\" holds glossary term IDs, in a string or a list\nof strings, on glossary_term fields only; the glossary checks the terms\nexist. \"search\" shows each value of a string or list of strings as a\nlink to a catalog search for it, such as a term's synonyms.",
                     "type": "string"
                 },
                 "descriptionKey": {
@@ -13375,6 +14447,10 @@
                 "helpTextKey": {
                     "type": "string"
                 },
+                "inverseLabelKey": {
+                    "description": "InverseLabelKey names a glossary_term link seen from the term it points\nto, such as \"Acronyms\" for a \"Stands for\" field.",
+                    "type": "string"
+                },
                 "labelKey": {
                     "type": "string"
                 },
@@ -13383,6 +14459,13 @@
                 },
                 "section": {
                     "type": "string"
+                },
+                "valueLabelKeys": {
+                    "description": "ValueLabelKeys maps stored values to message keys, for showing a label\nin place of the value. Only enum values (also as list items) and, for\nboolean fields, \"true\" and \"false\" may be keyed. Storage, search and\nfilters keep using the value.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -13626,6 +14709,26 @@
                 }
             }
         },
+        "v1_domains.Capabilities": {
+            "type": "object",
+            "properties": {
+                "admin": {
+                    "description": "Admin: manage its subdomains and role assignments.",
+                    "type": "boolean"
+                },
+                "domain_id": {
+                    "type": "string"
+                },
+                "enforced": {
+                    "description": "Enforced reports whether writes are scoped by domain at all.",
+                    "type": "boolean"
+                },
+                "write": {
+                    "description": "Write: edit entities in the domain, as far as domains decide. Always true\nwhile enforcement is off, when native RBAC alone applies.",
+                    "type": "boolean"
+                }
+            }
+        },
         "v1_domains.CreateRequest": {
             "type": "object",
             "properties": {
@@ -13650,6 +14753,18 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "v1_domains.EnforcementRequest": {
+            "type": "object",
+            "properties": {
+                "confirm": {
+                    "description": "Confirm is the hash of the plan the caller reviewed. Required to turn\nenforcement on; ignored when turning it off.",
+                    "type": "string"
+                },
+                "write": {
+                    "type": "boolean"
                 }
             }
         },
@@ -13683,6 +14798,18 @@
                 "parent_id": {
                     "description": "ParentID is the new parent; null moves the domain to the root.",
                     "type": "string"
+                }
+            }
+        },
+        "v1_domains.PipelineAssignmentRequest": {
+            "type": "object",
+            "properties": {
+                "domain_id": {
+                    "type": "string"
+                },
+                "move_assets": {
+                    "description": "MoveAssets also moves the assets this pipeline ingested that are still\nin its previous domain. Never implied: the client must ask for it.",
+                    "type": "boolean"
                 }
             }
         },

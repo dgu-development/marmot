@@ -28,14 +28,33 @@ type Presentation struct {
 	Section        string `json:"section,omitempty"`
 	Order          int    `json:"order,omitempty"`
 	// Control names an alternate editor for a string field's value; the stored
-	// value and its validation are unaffected. Only "user" is defined so far,
-	// for a string field that holds a native Marmot user ID.
+	// value and its validation are unaffected. "user" holds a native Marmot
+	// user ID. "glossary_term" holds glossary term IDs, in a string or a list
+	// of strings, on glossary_term fields only; the glossary checks the terms
+	// exist. "search" shows each value of a string or list of strings as a
+	// link to a catalog search for it, such as a term's synonyms.
 	Control string `json:"control,omitempty"`
+	// InverseLabelKey names a glossary_term link seen from the term it points
+	// to, such as "Acronyms" for a "Stands for" field.
+	InverseLabelKey string `json:"inverseLabelKey,omitempty"`
 	// Facet asks Discover to offer this field as a segmented filter. Only enum and boolean fields qualify
 	Facet bool `json:"facet,omitempty"`
+	// ValueLabelKeys maps stored values to message keys, for showing a label
+	// in place of the value. Only enum values (also as list items) and, for
+	// boolean fields, "true" and "false" may be keyed. Storage, search and
+	// filters keep using the value.
+	ValueLabelKeys map[string]string `json:"valueLabelKeys,omitempty"`
+	// Badge asks clients to show an enum field's value as a chip next to the
+	// entity's name, on its page and in search results.
+	Badge bool `json:"badge,omitempty"`
 }
 
-var supportedControls = []string{"", "user"}
+const (
+	ControlGlossaryTerm = "glossary_term"
+	ControlSearch       = "search"
+)
+
+var supportedControls = []string{"", "user", ControlGlossaryTerm, ControlSearch}
 
 type Constraints struct {
 	Minimum   *float64 `json:"minimum,omitempty"`
@@ -351,7 +370,7 @@ func validateDefinition(f Field) error {
 	} else if !strings.HasPrefix(f.Storage, "marmot.") {
 		return errors.New("unknown storage binding")
 	}
-	for _, key := range []string{f.Presentation.LabelKey, f.Presentation.HelpTextKey, f.Presentation.DescriptionKey} {
+	for _, key := range []string{f.Presentation.LabelKey, f.Presentation.HelpTextKey, f.Presentation.DescriptionKey, f.Presentation.InverseLabelKey} {
 		if key != "" && !messageKey.MatchString(key) {
 			return errors.New("invalid message key")
 		}
@@ -362,8 +381,28 @@ func validateDefinition(f Field) error {
 	if f.Presentation.Control == "user" && f.Type != "string" {
 		return errors.New("the user control requires type string")
 	}
+	if f.Presentation.Control == ControlGlossaryTerm {
+		if f.Type != "string" && (f.Type != "list" || f.ItemType != "string") {
+			return errors.New("the glossary_term control requires type string or a list of strings")
+		}
+		if kinds := f.AppliesTo.EffectiveKinds(); len(kinds) != 1 || kinds[0] != "glossary_term" {
+			return errors.New("the glossary_term control applies to glossary_term fields only")
+		}
+	}
+	if f.Presentation.Control == ControlSearch && f.Type != "string" && (f.Type != "list" || f.ItemType != "string") {
+		return errors.New("the search control requires type string or a list of strings")
+	}
+	if f.Presentation.Badge && f.Type != "enum" {
+		return errors.New("badge requires type enum")
+	}
+	if f.Presentation.InverseLabelKey != "" && f.Presentation.Control != ControlGlossaryTerm {
+		return errors.New("inverseLabelKey requires the glossary_term control")
+	}
 	if f.Presentation.Facet && f.Type != "enum" && f.Type != "boolean" {
 		return errors.New("facet requires type enum or boolean")
+	}
+	if err := validateValueLabelKeys(f); err != nil {
+		return err
 	}
 	v := f.Validation
 	valueType := f.Type
@@ -568,4 +607,28 @@ func number(value any) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func validateValueLabelKeys(f Field) error {
+	if len(f.Presentation.ValueLabelKeys) == 0 {
+		return nil
+	}
+	var allowed []string
+	switch {
+	case f.Type == "enum", f.Type == "list" && f.ItemType == "enum":
+		allowed = f.Values
+	case f.Type == "boolean":
+		allowed = []string{"true", "false"}
+	default:
+		return errors.New("valueLabelKeys requires an enum, a list of enum or a boolean")
+	}
+	for value, key := range f.Presentation.ValueLabelKeys {
+		if !slices.Contains(allowed, value) {
+			return fmt.Errorf("valueLabelKeys names %q, which is not a value of the field", value)
+		}
+		if !messageKey.MatchString(key) {
+			return errors.New("invalid message key")
+		}
+	}
+	return nil
 }

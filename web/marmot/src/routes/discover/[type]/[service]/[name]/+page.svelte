@@ -27,6 +27,8 @@
 	import Tags from '$components/shared/Tags.svelte';
 	import ExternalLinks from '$components/shared/ExternalLinks.svelte';
 	import OwnerSelector from '$components/shared/OwnerSelector.svelte';
+	import DomainChip from '$components/domain/DomainChip.svelte';
+	import { entityWritable } from '$lib/domains/writable';
 	import SubscribeButton from '$components/asset/SubscribeButton.svelte';
 	import { auth } from '$lib/stores/auth';
 	import { tablePreviewEnabled } from '$lib/stores/features';
@@ -61,7 +63,8 @@
 	let previewLoading = $state(false);
 	let previewError: string | null = $state(null);
 
-	let canManageAssets = $derived(auth.hasPermission('assets', 'manage'));
+	const domainWrite = $derived(entityWritable('asset', asset?.id));
+	let canManageAssets = $derived(auth.hasPermission('assets', 'manage') && $domainWrite);
 	let metamodel = $state<MetamodelSchema | null>(null);
 	let governed = $derived(metamodel?.enabled ? governedFields(metamodel.fields) : []);
 	let governedHidePaths = $derived(governedPaths(governed));
@@ -515,6 +518,7 @@
 										/>
 									{/if}
 								</div>
+								<DomainChip kind="asset" entityId={asset.id} canEdit={canManageAssets} />
 								{#if asset}
 									<div>
 										<div class="flex items-center gap-1.5 mb-1">

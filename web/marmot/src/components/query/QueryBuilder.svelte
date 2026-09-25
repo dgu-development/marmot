@@ -4,6 +4,14 @@
 	import QueryInput from './QueryInput.svelte';
 	import { fetchApi } from '$lib/api';
 	import { m } from '$lib/paraglide/messages';
+	import { domainsEnabled } from '$lib/domains/api';
+	import { domainQueryValues } from '$lib/domains/query';
+	import { catalogLabels } from '$lib/catalog/labels';
+	import { locale } from '$lib/i18n';
+	import { fetchMetamodel } from '$lib/metamodel/api';
+	import { nativeMessage } from '$lib/metamodel/i18n';
+	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
+	import type { MetamodelSchema } from '$lib/metamodel/types';
 
 	let {
 		query = '',
@@ -58,8 +66,8 @@
 	// Value suggestions state
 	let showValueSuggestions = $state(false);
 	let activeValueIndex: number | null = $state(null);
-	let valueSuggestions: { value: string }[] = $state([]);
-	let allValueSuggestions: { value: string }[] = $state([]); // Store all fetched values
+	let valueSuggestions: { value: string; label?: string }[] = $state([]);
+	let allValueSuggestions: { value: string; label?: string }[] = $state([]); // Store all fetched values
 	let selectedValueIndex = $state(-1);
 	let valueDropdownPosition = $state({ top: 0, left: 0, width: 0 });
 	let valueFetchCache: { [key: string]: { value: string }[] } = {};
@@ -110,7 +118,7 @@
 	});
 
 	// Field structure - separate simple fields from nested metadata
-	const simpleFields = [
+	const simpleFields = $state([
 		{
 			value: 'kind',
 			label: '@kind',
@@ -129,7 +137,49 @@
 			description: m.query_field_provider_description(),
 			category: 'Simple Field'
 		}
-	];
+	]);
+
+	// Profile labels for metadata paths and values; the query keeps the identifiers.
+	let schema = $state<MetamodelSchema | null>(null);
+	$effect(() => {
+		fetchMetamodel()
+			.then((loaded) => (schema = loaded.enabled ? loaded : null))
+			.catch(() => (schema = null));
+	});
+	const labelContext = $derived({
+		locale: $locale,
+		defaultLocale: schema?.defaultLocale ?? 'en',
+		messages: schema?.messages,
+		native: nativeMessage
+	});
+
+	function profileField(path: string) {
+		return schema?.fields.find((f) => f.storage === `metadata.${path}`);
+	}
+
+	function fieldDescription(path: string): string {
+		const field = profileField(path);
+		return (field && resolveMessage(field.presentation?.labelKey, labelContext)) ?? path;
+	}
+
+	function withLabels(field: string, suggestions: { value: string }[]) {
+		return suggestions.map(({ value }) => {
+			let label: string | undefined;
+			if (field === 'type') label = $catalogLabels.type(value);
+			else if (field === 'provider') label = $catalogLabels.provider(value);
+			else {
+				const governed = profileField(field);
+				if (governed) {
+					const typed = governed.type === 'boolean' ? value === 'true' : value;
+					label = valueLabel(governed, typed, labelContext);
+					if (!label && governed.type === 'boolean' && (value === 'true' || value === 'false')) {
+						label = value === 'true' ? m.metamodel_yes() : m.metamodel_no();
+					}
+				}
+			}
+			return label && label !== value ? { value, label: `${label} · ${value}` } : { value };
+		});
+	}
 
 	// Metadata fields fetched from API
 	interface MetadataFieldEntry {
@@ -154,18 +204,43 @@
 		{ value: 'range', label: m.query_op_range() }
 	];
 
+	const domainOperators = operators.filter((op) => op.value === '=');
+	let activeOperators = $derived(
+		activeOperatorIndex !== null && filters[activeOperatorIndex]?.field === 'domain'
+			? domainOperators
+			: operators
+	);
+
 	const booleanOperators: BooleanOperator[] = ['AND', 'OR', 'NOT'];
+
+	function toFieldOption(f: MetadataFieldEntry) {
+		return {
+			value: `metadata.${f.field}`,
+			label: `@metadata.${f.field}`,
+			description: fieldDescription(f.field),
+			category: 'Metadata'
+		};
+	}
+
+	// Profile fields first, by their full path: the metadata suggestions only list top-level keys.
+	function fieldOptions(entries: MetadataFieldEntry[]) {
+		const profile = (schema?.fields ?? [])
+			.filter((f) => f.storage.startsWith('metadata.'))
+			.map((f) => toFieldOption({ field: f.storage.slice('metadata.'.length) }));
+		const seen = new Set(profile.map((o) => o.value));
+		return [...profile, ...entries.map(toFieldOption).filter((o) => !seen.has(o.value))];
+	}
+
+	// The profile may load after the fields: relabel them when it does.
+	$effect(() => {
+		if (schema) metadataFields = fieldOptions(metadataFieldsCache ?? []);
+	});
 
 	// Fetch metadata fields from API
 	async function fetchMetadataFields() {
 		// Use cache if available
 		if (metadataFieldsCache && metadataFieldsCache.length > 0) {
-			metadataFields = metadataFieldsCache.map((f) => ({
-				value: `metadata.${f.field}`,
-				label: `@metadata.${f.field}`,
-				description: f.field,
-				category: 'Metadata'
-			}));
+			metadataFields = fieldOptions(metadataFieldsCache);
 			return;
 		}
 
@@ -180,12 +255,7 @@
 			const data: unknown = await response.json();
 			if (Array.isArray(data) && data.length > 0) {
 				metadataFieldsCache = data as MetadataFieldEntry[];
-				metadataFields = (data as MetadataFieldEntry[]).map((f) => ({
-					value: `metadata.${f.field}`,
-					label: `@metadata.${f.field}`,
-					description: f.field,
-					category: 'Metadata'
-				}));
+				metadataFields = fieldOptions(data as MetadataFieldEntry[]);
 			}
 		} catch (error) {
 			console.error('Error fetching metadata fields:', error);
@@ -338,6 +408,7 @@
 
 	function selectField(index: number, fieldValue: string) {
 		filters[index].field = fieldValue;
+		if (fieldValue === 'domain') filters[index].operator = '=';
 		showFieldSuggestions = false;
 		selectedSuggestionIndex = -1;
 
@@ -400,9 +471,21 @@
 
 	async function fetchValueSuggestions(field: string, prefix: string) {
 		try {
+			if (field === 'domain') {
+				return domainQueryValues();
+			}
+			const governed = profileField(field);
+			if (governed?.type === 'boolean')
+				return withLabels(field, [{ value: 'true' }, { value: 'false' }]);
+			if (governed?.values?.length) {
+				return withLabels(
+					field,
+					governed.values.map((value) => ({ value }))
+				);
+			}
 			const cacheKey = `${field}-${prefix}`;
 			if (valueFetchCache[cacheKey]) {
-				return valueFetchCache[cacheKey];
+				return withLabels(field, valueFetchCache[cacheKey]);
 			}
 
 			const params = new URLSearchParams({
@@ -450,7 +533,7 @@
 			}
 
 			valueFetchCache[cacheKey] = suggestions;
-			return suggestions;
+			return withLabels(field, suggestions);
 		} catch (error) {
 			console.error('Error fetching value suggestions:', error);
 			return [];
@@ -502,7 +585,7 @@
 		} else {
 			const lowerSearch = searchText.toLowerCase();
 			valueSuggestions = allValueSuggestions.filter((s) =>
-				s.value.toLowerCase().includes(lowerSearch)
+				`${s.value} ${s.label ?? ''}`.toLowerCase().includes(lowerSearch)
 			);
 		}
 		showValueSuggestions = valueSuggestions.length > 0;
@@ -563,14 +646,14 @@
 
 		if (event.key === 'ArrowDown') {
 			event.preventDefault();
-			selectedOperatorIndex = Math.min(selectedOperatorIndex + 1, operators.length - 1);
+			selectedOperatorIndex = Math.min(selectedOperatorIndex + 1, activeOperators.length - 1);
 		} else if (event.key === 'ArrowUp') {
 			event.preventDefault();
 			selectedOperatorIndex = Math.max(selectedOperatorIndex - 1, -1);
 		} else if (event.key === 'Enter') {
 			event.preventDefault();
-			if (selectedOperatorIndex >= 0 && operators[selectedOperatorIndex]) {
-				selectOperator(index, operators[selectedOperatorIndex].value);
+			if (selectedOperatorIndex >= 0 && activeOperators[selectedOperatorIndex]) {
+				selectOperator(index, activeOperators[selectedOperatorIndex].value);
 			}
 		} else if (event.key === 'Escape') {
 			event.preventDefault();
@@ -603,6 +686,16 @@
 	onMount(() => {
 		// Fetch metadata fields from API
 		fetchMetadataFields();
+		domainsEnabled().then((on) => {
+			if (on) {
+				simpleFields.push({
+					value: 'domain',
+					label: '@domain',
+					description: m.domains_query_field_description(),
+					category: 'Simple Field'
+				});
+			}
+		});
 
 		if (query) {
 			rawQuery = query;
@@ -925,7 +1018,8 @@
 													? 'bg-earthy-terracotta-100 dark:bg-earthy-terracotta-900/40'
 													: 'hover:bg-earthy-terracotta-50 dark:hover:bg-earthy-terracotta-900/20'}"
 											>
-												<span class="font-mono text-sm">{suggestion.value}</span>
+												<span class="font-mono text-sm">{suggestion.label ?? suggestion.value}</span
+												>
 											</button>
 										{/each}
 									{/if}
@@ -937,7 +1031,7 @@
 									class="fixed z-[9999] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-2xl max-h-60 overflow-auto"
 									style="left: {operatorDropdownPosition.left}px; top: {operatorDropdownPosition.top}px; width: {operatorDropdownPosition.width}px;"
 								>
-									{#each operators as op, idx (op.value)}
+									{#each activeOperators as op, idx (op.value)}
 										<button
 											onclick={() => selectOperator(activeOperatorIndex, op.value)}
 											class="w-full text-left px-3 py-2 text-sm text-gray-900 dark:text-gray-100 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-b-0 {selectedOperatorIndex ===

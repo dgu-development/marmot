@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { catalogLabels } from '$lib/catalog/labels';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -838,7 +839,7 @@
 									<span
 										class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
 									>
-										{asset.type}
+										{$catalogLabels.type(asset.type)}
 									</span>
 								</a>
 							{/each}

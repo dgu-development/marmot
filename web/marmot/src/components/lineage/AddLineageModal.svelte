@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { catalogLabels } from '$lib/catalog/labels';
 	import { fetchApi } from '$lib/api';
 	import { m } from '$lib/paraglide/messages';
 	import IconifyIcon from '@iconify/svelte';
@@ -237,7 +238,7 @@
 										{asset.name}
 									</div>
 									<div class="text-xs text-gray-500 dark:text-gray-400 truncate">
-										{asset.type}
+										{$catalogLabels.type(asset.type)}
 									</div>
 								</div>
 								{#if isAdding}

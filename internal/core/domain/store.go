@@ -14,23 +14,49 @@ type Repository interface {
 	Create(ctx context.Context, in CreateInput) (*Domain, error)
 	Get(ctx context.Context, id string) (*Domain, error)
 	Children(ctx context.Context, parentID *string) ([]*Domain, error)
+	Named(ctx context.Context, name string) ([]*Domain, error)
 	Subtree(ctx context.Context, id string) ([]*Domain, error)
 	Update(ctx context.Context, id string, in UpdateInput) (*Domain, error)
 	Delete(ctx context.Context, id string) error
 	Move(ctx context.Context, id string, parentID *string) (*Domain, error)
 	Assign(ctx context.Context, kind Kind, entityIDs []string, domainID string) error
 	DomainOf(ctx context.Context, kind Kind, entityID string) (string, error)
+	PipelineDomain(ctx context.Context, pipelineName string) (string, bool, error)
+	PipelineAssetsIn(ctx context.Context, scheduleID, domainID string) ([]string, error)
+	EntityExists(ctx context.Context, kind Kind, id string) (bool, error)
+	Grants(ctx context.Context, subject SubjectType, subjectID string) ([]Grant, error)
+	Roles(ctx context.Context, d *Domain) ([]RoleAssignment, error)
+	SubjectExists(ctx context.Context, subject SubjectType, id string) (bool, error)
+	GrantRole(ctx context.Context, d *Domain, in GrantInput, createdBy string) (*RoleAssignment, error)
+	RevokeRole(ctx context.Context, domainID, assignmentID string) error
+	AssignPipeline(ctx context.Context, scheduleID, domainID string, moveAssets bool) (int, error)
+	ImportCandidates(ctx context.Context, kind Kind, path []string) ([]ImportCandidate, error)
+	ApplyImport(ctx context.Context, plan map[Kind]map[string][]string) error
+	WriteEnforced(ctx context.Context) (bool, error)
+	SetWriteEnforced(ctx context.Context, on bool, by string) error
+	Placements(ctx context.Context, kind Kind, ids []string) (map[string]Placement, error)
+	TermPlacements(ctx context.Context, names []string) (map[string]Placement, error)
+	Audit(ctx context.Context, entries []AuditEntry) error
+	AuditLog(ctx context.Context, entityKind, entityID string) ([]AuditEntry, error)
+	AssetIDsByMRN(ctx context.Context, mrns []string) (map[string]string, error)
+	DocOwner(ctx context.Context, pageID, imageID string) (entityType, entityID string, found bool, err error)
+	All(ctx context.Context) ([]*Domain, error)
+	EnforcementState(ctx context.Context) (*EnforcementState, error)
+	EditorPrincipals(ctx context.Context) ([]EditorPrincipal, error)
+	PipelinesOutsideDomain(ctx context.Context) ([]PlanPipeline, error)
 }
 
 type membership struct {
 	table, column, columnType, entityTable string
+	// live excludes soft-deleted entities, where the kind has them.
+	live string
 }
 
 var memberships = map[Kind]membership{
-	KindAsset:             {"asset_domains", "asset_id", "varchar", "assets"},
-	KindDataProduct:       {"data_product_domains", "data_product_id", "uuid", "data_products"},
-	KindGlossaryTerm:      {"glossary_term_domains", "glossary_term_id", "uuid", "glossary_terms"},
-	KindIngestionSchedule: {"ingestion_schedule_domains", "schedule_id", "uuid", "ingestion_schedules"},
+	KindAsset:             {"asset_domains", "asset_id", "varchar", "assets", "true"},
+	KindDataProduct:       {"data_product_domains", "data_product_id", "uuid", "data_products", "true"},
+	KindGlossaryTerm:      {"glossary_term_domains", "glossary_term_id", "uuid", "glossary_terms", "e.deleted_at IS NULL"},
+	KindIngestionSchedule: {"ingestion_schedule_domains", "schedule_id", "uuid", "ingestion_schedules", "true"},
 }
 
 // treeLock serializes structural changes. A move rewrites the paths of a
@@ -158,6 +184,14 @@ func (r *PostgresRepository) Children(ctx context.Context, parentID *string) ([]
 	return scanDomains(rows)
 }
 
+func (r *PostgresRepository) Named(ctx context.Context, name string) ([]*Domain, error) {
+	rows, err := r.db.Query(ctx, "SELECT "+columns+" FROM domains WHERE lower(name) = lower($1) ORDER BY depth, lower(name)", name)
+	if err != nil {
+		return nil, err
+	}
+	return scanDomains(rows)
+}
+
 func (r *PostgresRepository) Subtree(ctx context.Context, id string) ([]*Domain, error) {
 	root, err := r.Get(ctx, id)
 	if err != nil {
@@ -228,6 +262,11 @@ func (r *PostgresRepository) Delete(ctx context.Context, id string) error {
 		return ErrHasChildren
 	}
 	for _, m := range memberships {
+		// A soft-deleted entity keeps its membership row but is invisible;
+		// it must not pin the domain forever.
+		if _, err := tx.Exec(ctx, "DELETE FROM "+m.table+" mm USING "+m.entityTable+" e WHERE e.id = mm."+m.column+" AND mm.domain_id = $1 AND NOT ("+m.live+")", id); err != nil {
+			return fmt.Errorf("dropping memberships of deleted %s: %w", m.entityTable, err)
+		}
 		var hasMembers bool
 		if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM "+m.table+" WHERE domain_id = $1)", id).Scan(&hasMembers); err != nil {
 			return err
@@ -368,4 +407,186 @@ func (r *PostgresRepository) DomainOf(ctx context.Context, kind Kind, entityID s
 		return UnassignedID, nil
 	}
 	return id, err
+}
+
+// PipelineDomain returns the domain assigned to the ingestion schedule named
+// pipelineName. Runs started by the scheduler use the schedule name as their
+// pipeline name; other pipelines have no schedule and report found=false.
+func (r *PostgresRepository) PipelineDomain(ctx context.Context, pipelineName string) (string, bool, error) {
+	var id string
+	err := r.db.QueryRow(ctx, `
+		SELECT sd.domain_id
+		  FROM ingestion_schedule_domains sd
+		  JOIN ingestion_schedules s ON s.id = sd.schedule_id
+		 WHERE s.name = $1`, pipelineName).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return id, true, nil
+}
+
+func (r *PostgresRepository) ImportCandidates(ctx context.Context, kind Kind, path []string) ([]ImportCandidate, error) {
+	m, ok := memberships[kind]
+	if !ok {
+		return nil, ErrInvalidInput
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT e.id::text, e.metadata #>> $1::text[], mm.`+m.column+` IS NOT NULL
+		  FROM `+m.entityTable+` e
+		  LEFT JOIN `+m.table+` mm ON mm.`+m.column+` = e.id
+		 WHERE COALESCE(e.metadata #>> $1::text[], '') <> '' AND `+m.live, path)
+	if err != nil {
+		return nil, fmt.Errorf("reading import candidates for %s: %w", kind, err)
+	}
+	defer rows.Close()
+	var out []ImportCandidate
+	for rows.Next() {
+		var c ImportCandidate
+		if err := rows.Scan(&c.ID, &c.Value, &c.Assigned); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// ApplyImport assigns every planned entity in one transaction. An entity
+// assigned since the plan was read keeps that assignment.
+func (r *PostgresRepository) ApplyImport(ctx context.Context, plan map[Kind]map[string][]string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	for kind, byDomain := range plan {
+		m, ok := memberships[kind]
+		if !ok {
+			return ErrInvalidInput
+		}
+		for domainID, ids := range byDomain {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO `+m.table+` (`+m.column+`, domain_id)
+				SELECT unnest($1::text[])::`+m.columnType+`, $2::uuid
+				ON CONFLICT (`+m.column+`) DO NOTHING`, ids, domainID); err != nil {
+				return fmt.Errorf("importing %s memberships: %w", kind, err)
+			}
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+type querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
+// pipelineAssetsIn lists the assets a schedule has ingested that are in
+// domainID now. Runs are found through the job that started them, which
+// survives a rename, and by the schedule's current name, which covers runs
+// reported from outside the scheduler.
+func pipelineAssetsIn(ctx context.Context, q querier, scheduleID, domainID string) ([]string, error) {
+	rows, err := q.Query(ctx, `
+		WITH pipeline_runs AS (
+			SELECT jr.plugin_run_id AS run_id
+			  FROM ingestion_job_runs jr
+			 WHERE jr.schedule_id::text = $1 AND jr.plugin_run_id IS NOT NULL
+			UNION
+			SELECT r.id
+			  FROM runs r
+			  JOIN ingestion_schedules s ON s.name = r.pipeline_name
+			 WHERE s.id::text = $1
+		)
+		SELECT DISTINCT a.id
+		  FROM run_checkpoints c
+		  JOIN pipeline_runs pr ON pr.run_id = c.run_id
+		  JOIN assets a ON a.mrn = c.entity_mrn
+		  LEFT JOIN asset_domains ad ON ad.asset_id = a.id
+		 WHERE c.entity_type = 'asset'
+		   AND COALESCE(ad.domain_id, $2::uuid) = $3::uuid`,
+		scheduleID, UnassignedID, domainID)
+	if err != nil {
+		return nil, fmt.Errorf("listing pipeline assets: %w", err)
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (r *PostgresRepository) PipelineAssetsIn(ctx context.Context, scheduleID, domainID string) ([]string, error) {
+	return pipelineAssetsIn(ctx, r.db, scheduleID, domainID)
+}
+
+func (r *PostgresRepository) AssignPipeline(ctx context.Context, scheduleID, domainID string, moveAssets bool) (int, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var exists bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM ingestion_schedules WHERE id::text = $1)", scheduleID).Scan(&exists); err != nil {
+		return 0, err
+	}
+	if !exists {
+		return 0, ErrEntityNotFound
+	}
+
+	current := UnassignedID
+	err = tx.QueryRow(ctx, "SELECT domain_id FROM ingestion_schedule_domains WHERE schedule_id::text = $1 FOR UPDATE", scheduleID).Scan(&current)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return 0, err
+	}
+	if current == domainID {
+		return 0, nil
+	}
+
+	var assets []string
+	if moveAssets {
+		if assets, err = pipelineAssetsIn(ctx, tx, scheduleID, current); err != nil {
+			return 0, err
+		}
+	}
+
+	set := func(m membership, ids []string) error {
+		if len(ids) == 0 {
+			return nil
+		}
+		var err error
+		if domainID == UnassignedID {
+			_, err = tx.Exec(ctx, "DELETE FROM "+m.table+" WHERE "+m.column+"::text = ANY($1::text[])", ids)
+		} else {
+			_, err = tx.Exec(ctx, `
+				INSERT INTO `+m.table+` (`+m.column+`, domain_id)
+				SELECT unnest($1::text[])::`+m.columnType+`, $2::uuid
+				ON CONFLICT (`+m.column+`) DO UPDATE SET domain_id = EXCLUDED.domain_id, assigned_at = now()`,
+				ids, domainID)
+		}
+		return err
+	}
+	if err := set(memberships[KindIngestionSchedule], []string{scheduleID}); err != nil {
+		return 0, fmt.Errorf("assigning schedule: %w", err)
+	}
+	if err := set(memberships[KindAsset], assets); err != nil {
+		return 0, fmt.Errorf("moving pipeline assets: %w", err)
+	}
+	return len(assets), tx.Commit(ctx)
+}
+
+func (r *PostgresRepository) EntityExists(ctx context.Context, kind Kind, id string) (bool, error) {
+	m, ok := memberships[kind]
+	if !ok {
+		return false, ErrInvalidInput
+	}
+	var exists bool
+	err := r.db.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM "+m.entityTable+" WHERE id::text = $1)", id).Scan(&exists)
+	return exists, err
 }

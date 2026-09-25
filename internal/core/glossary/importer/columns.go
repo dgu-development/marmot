@@ -33,8 +33,9 @@ type Column struct {
 	Values   []string
 	// Validation holds a profile field's constraints: range, length, items.
 	Validation metamodel.Constraints
-	// Format names how a term's own column is written ("text", "term",
-	// "owners", "tags"); profile columns are described by their type.
+	// Format names how a term's own column is written ("name", "text",
+	// "term", "owners", "tags"); profile columns are described by their type,
+	// except "terms" for a glossary_term field, written as term names.
 	Format string
 	// Storage is the metadata.* binding of a profile field; empty for the
 	// term's own columns.
@@ -51,11 +52,13 @@ func (c Column) profile() bool { return c.Storage != "" }
 
 func (c Column) list() bool { return c.Type == "list" }
 
+func (c Column) links() bool { return c.Format == "terms" }
+
 // Columns lists the term's own columns followed by the profile fields that
 // apply to glossary_term and are stored in metadata.
 func Columns(registry *metamodel.Registry) []Column {
 	cols := []Column{
-		{ID: ColumnName, Type: "string", Required: true, LabelKey: "glossary.import.name", Label: "Name", Help: "The term's name. It identifies the term: rows with a name that already exists update or skip that term.", Format: "text"},
+		{ID: ColumnName, Type: "string", Required: true, LabelKey: "glossary.import.name", Label: "Name", Help: "The term's name. It identifies the term: rows with a name that already exists update or skip that term.", Format: "name"},
 		{ID: ColumnDefinition, Type: "string", Required: true, LabelKey: "glossary.import.definition", Label: "Definition", Help: "What the term means. Required for new terms.", Format: "text"},
 		{ID: ColumnDescription, Type: "string", LabelKey: "glossary.import.description", Label: "Description", Help: "Optional longer description.", Format: "text"},
 		{ID: ColumnParent, Type: "string", LabelKey: "glossary.import.parent", Label: "Parent term", Help: "Name of the parent term, existing or in this file.", Format: "term"},
@@ -69,7 +72,12 @@ func Columns(registry *metamodel.Registry) []Column {
 		if !strings.HasPrefix(f.Storage, "metadata.") {
 			continue
 		}
+		var format string
+		if f.Presentation.Control == metamodel.ControlGlossaryTerm {
+			format = "terms"
+		}
 		cols = append(cols, Column{
+			Format:     format,
 			ID:         f.ID,
 			Type:       f.Type,
 			ItemType:   f.ItemType,
@@ -118,12 +126,19 @@ func (t Texts) Help(c Column) string { return t.resolve(c.HelpKey, c.Help) }
 // guide sheet; the web UI builds its own localized text from the same data.
 func Describe(c Column) string {
 	switch c.Format {
+	case "name":
+		return "Text. Identifies the term ignoring case: a row matches an existing term that differs only in case, and keeps its name."
 	case "term":
-		return "The name of another term, existing or in this file."
+		return "The name of another term, existing or in this file, ignoring case."
+	case "terms":
+		if c.list() {
+			return "Names of other terms, existing or in this file, separated by " + ListSeparator + ", ignoring case."
+		}
+		return "The name of another term, existing or in this file, ignoring case."
 	case "owners":
-		return "Usernames, or team:<team name>, separated by " + ListSeparator + "."
+		return "Usernames, or team:<team name>, separated by " + ListSeparator + ", ignoring case."
 	case "tags":
-		return "Tags separated by " + ListSeparator + "."
+		return "Tags separated by " + ListSeparator + ". Case is kept: PII and pii are different tags."
 	case "text":
 		return "Text."
 	}
@@ -140,20 +155,21 @@ func Describe(c Column) string {
 	case "number":
 		text = "Number (a dot or comma for decimals)"
 	case "boolean":
-		text = "true or false"
+		text = "true or false (also yes/no), ignoring case"
 	case "date":
 		text = "Date as YYYY-MM-DD"
 	case "enum":
-		text = "One of the allowed values"
+		text = "One of the allowed values, ignoring case; stored as the profile spells it"
 	default:
 		text = kind
 	}
 	v := c.Validation
-	if v.Minimum != nil && v.Maximum != nil {
+	switch {
+	case v.Minimum != nil && v.Maximum != nil:
 		text += fmt.Sprintf(", from %g to %g", *v.Minimum, *v.Maximum)
-	} else if v.Minimum != nil {
+	case v.Minimum != nil:
 		text += fmt.Sprintf(", at least %g", *v.Minimum)
-	} else if v.Maximum != nil {
+	case v.Maximum != nil:
 		text += fmt.Sprintf(", at most %g", *v.Maximum)
 	}
 	if v.MinLength != nil {
