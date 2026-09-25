@@ -19,17 +19,22 @@ func (r *PostgresRepository) All(ctx context.Context) ([]*Domain, error) {
 
 func (r *PostgresRepository) EnforcementState(ctx context.Context) (*EnforcementState, error) {
 	var state EnforcementState
-	var by *string
+	var by, name *string
 	var at time.Time
-	err := r.db.QueryRow(ctx, "SELECT value = 'true'::jsonb, updated_by, updated_at FROM domain_settings WHERE key = $1", writeEnforcementKey).
-		Scan(&state.Write, &by, &at)
+	err := r.db.QueryRow(ctx, `
+		SELECT s.value = 'true'::jsonb, s.updated_by, COALESCE(NULLIF(u.name, ''), u.username, sa.name), s.updated_at
+		  FROM domain_settings s
+		  LEFT JOIN users u ON s.updated_by = 'user:' || u.id::text
+		  LEFT JOIN service_accounts sa ON s.updated_by = 'service_account:' || sa.id::text
+		 WHERE s.key = $1`, writeEnforcementKey).
+		Scan(&state.Write, &by, &name, &at)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &state, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	state.UpdatedBy, state.UpdatedAt = by, &at
+	state.UpdatedBy, state.UpdatedByName, state.UpdatedAt = by, name, &at
 	return &state, nil
 }
 

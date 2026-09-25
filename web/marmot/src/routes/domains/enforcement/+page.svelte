@@ -3,6 +3,8 @@
 	import { resolve } from '$app/paths';
 	import Icon from '@iconify/svelte';
 	import Button from '$components/ui/Button.svelte';
+	import Avatar from '$components/user/Avatar.svelte';
+	import { formatDateTime } from '$lib/utils/format';
 	import { toasts } from '$lib/stores/toast';
 	import { m } from '$lib/paraglide/messages';
 	import type { DomainRef, EnforcementPlan, EnforcementState } from '$lib/domains/types';
@@ -60,6 +62,13 @@
 		}
 	}
 
+	// Falls back to the raw type:id only for an actor that no longer exists.
+	function actorName(s: EnforcementState): string {
+		if (s.updated_by_name) return s.updated_by_name;
+		if (s.updated_by?.startsWith('operator:')) return m.domains_enforcement_operator();
+		return s.updated_by ?? '';
+	}
+
 	const paths = (refs: DomainRef[]) => refs.map((r) => r.path).join(', ') || '—';
 	const subjectLabel = (type: string) =>
 		type === 'service_account'
@@ -112,11 +121,19 @@
 						</span>
 					</p>
 					{#if state.updated_by && state.updated_at}
-						<p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-							{m.domains_enforcement_changed({
-								by: state.updated_by,
-								at: new Date(state.updated_at).toLocaleString()
-							})}
+						{@const actor = actorName(state)}
+						<p
+							class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"
+						>
+							{m.domains_enforcement_changed_by()}
+							<span
+								class="inline-flex items-center gap-1.5 rounded-full bg-gray-100 py-0.5 pl-0.5 pr-2 text-gray-800 dark:bg-gray-700 dark:text-gray-100"
+								title={state.updated_by}
+							>
+								<Avatar name={actor} size="xs" />
+								{actor}
+							</span>
+							{m.domains_enforcement_changed_at({ at: formatDateTime(state.updated_at) })}
 						</p>
 					{/if}
 				</div>

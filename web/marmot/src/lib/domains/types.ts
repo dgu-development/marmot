@@ -69,7 +69,10 @@ export interface WritableDomains {
 
 export interface EnforcementState {
 	write: boolean;
+	/** The actor as type:id, e.g. user:<id>. */
 	updated_by?: string;
+	/** The actor's name, when it is a user or service account that still exists. */
+	updated_by_name?: string;
 	updated_at?: string;
 }
 

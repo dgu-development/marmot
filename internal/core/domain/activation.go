@@ -24,9 +24,12 @@ const (
 )
 
 type EnforcementState struct {
-	Write     bool       `json:"write"`
-	UpdatedBy *string    `json:"updated_by,omitempty"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	Write     bool    `json:"write"`
+	UpdatedBy *string `json:"updated_by,omitempty"`
+	// UpdatedByName is the user's or service account's name, when the
+	// change was made by one that still exists.
+	UpdatedByName *string    `json:"updated_by_name,omitempty"`
+	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
 }
 
 type DomainRef struct {

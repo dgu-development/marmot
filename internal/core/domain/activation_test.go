@@ -104,7 +104,7 @@ func TestEnforcementPlanAndActivation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !state.Write || state.UpdatedBy == nil || *state.UpdatedBy != "user:"+admin.ID() {
+		if !state.Write || state.UpdatedBy == nil || *state.UpdatedBy != "user:"+admin.ID() || state.UpdatedByName == nil || *state.UpdatedByName != "ada" {
 			t.Fatalf("state = %+v", state)
 		}
 		w, err := svc.WritableDomains(ctx, editor)

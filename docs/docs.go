@@ -13825,6 +13825,10 @@ const docTemplate = `{
                 "updated_by": {
                     "type": "string"
                 },
+                "updated_by_name": {
+                    "description": "UpdatedByName is the user's or service account's name, when the\nchange was made by one that still exists.",
+                    "type": "string"
+                },
                 "write": {
                     "type": "boolean"
                 }
