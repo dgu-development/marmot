@@ -217,6 +217,7 @@
 	"asset_type_view": "View",
 	"asset_unsubscribe_button": "Unsubscribe",
 	"asset_user_notes_heading": "User Notes",
+	"asset_terms_filter": "Filter terms…",
 	"asset_user_notes_manual_title": "Manually added by user",
 	"assetnew_banner_cta": "Set up a Pipeline",
 	"assetnew_banner_description": "Instead of adding assets manually, set up a Pipeline to automatically discover and sync assets from your data sources.",
@@ -449,6 +450,10 @@
 	"discover_preview_fetch_error": "Failed to fetch preview data",
 	"discover_preview_permission_error": "You do not have permission to preview data. The \"assets:preview\" permission is required.",
 	"discover_product_icon_alt": "{name} icon",
+	"discover_facet_none": "No matches",
+	"discover_facet_search": "Filter {title}…",
+	"discover_facet_show_less": "Show less",
+	"discover_facet_show_more": "Show {count} more",
 	"discover_providers_heading": "Providers",
 	"discover_remove_filter_aria": "Remove {value} filter",
 	"discover_result_count": [

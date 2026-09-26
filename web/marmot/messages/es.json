@@ -217,6 +217,7 @@
 	"asset_type_view": "Vista",
 	"asset_unsubscribe_button": "Cancelar suscripción",
 	"asset_user_notes_heading": "Notas del usuario",
+	"asset_terms_filter": "Filtrar términos…",
 	"asset_user_notes_manual_title": "Añadido manualmente por un usuario",
 	"assetnew_banner_cta": "Configurar una canalización",
 	"assetnew_banner_description": "Configura una canalización para descubrir y sincronizar automáticamente los activos de tus fuentes de datos.",
@@ -449,6 +450,10 @@
 	"discover_preview_fetch_error": "No se pudieron obtener los datos de la vista previa",
 	"discover_preview_permission_error": "No tienes permiso para previsualizar datos. Se requiere el permiso «assets:preview».",
 	"discover_product_icon_alt": "Icono de {name}",
+	"discover_facet_none": "Sin coincidencias",
+	"discover_facet_search": "Filtrar {title}…",
+	"discover_facet_show_less": "Mostrar menos",
+	"discover_facet_show_more": "Mostrar {count} más",
 	"discover_providers_heading": "Proveedores",
 	"discover_remove_filter_aria": "Quitar filtro {value}",
 	"discover_result_count": [
