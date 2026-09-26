@@ -139,6 +139,7 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	}
 
 	assetSvc := asset.NewService(assetRepo, asset.WithMetamodel(metamodelRegistry))
+	searchRepo.SetAssetBadgePaths(metamodelRegistry.BadgeStorages("asset"))
 	var domainRepo *domainService.PostgresRepository
 	var domainSvc domainService.Service
 	var domainGuard *domainService.Guard

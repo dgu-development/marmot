@@ -80,3 +80,24 @@ func TestHardDeletingASoftDeletedTermKeepsTheCount(t *testing.T) {
 		t.Fatalf("glossary count = %d, want 1", n)
 	}
 }
+
+func TestAssetResultsCarryOnlyTheirBadges(t *testing.T) {
+	pool := pgtest.TempDB(t)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `INSERT INTO assets (id, name, mrn, type, providers, created_by, metadata) VALUES
+		('a-orders', 'orders', 'mrn://table/pg/orders', 'Table', '{pg}', 'test',
+		 '{"dgu": {"asset_type": "table", "asset_family": "data"}, "columns": 42}')`); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewPostgresRepository(pool, noopRecorder{})
+	repo.SetAssetBadgePaths([]string{"metadata.dgu.asset_type", "metadata.dgu.missing", "marmot.name"})
+	results, _, _, err := repo.Search(ctx, Filter{Query: "orders", Limit: 10})
+	if err != nil || len(results) != 1 {
+		t.Fatalf("results = %v, %v", results, err)
+	}
+	metadata, _ := results[0].Metadata["metadata"].(map[string]interface{})
+	dgu, _ := metadata["dgu"].(map[string]interface{})
+	if dgu["asset_type"] != "table" || len(dgu) != 1 || len(metadata) != 1 {
+		t.Fatalf("result metadata = %+v, want only the badge value", metadata)
+	}
+}

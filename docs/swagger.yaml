@@ -2914,12 +2914,33 @@ definitions:
       minimum:
         type: number
     type: object
+  metamodel.Derivation:
+    properties:
+      from:
+        type: string
+      map:
+        additionalProperties:
+          type: string
+        type: object
+    type: object
   metamodel.Field:
     properties:
       appliesTo:
         $ref: '#/definitions/metamodel.AppliesTo'
       core:
         type: boolean
+      default:
+        allOf:
+        - $ref: '#/definitions/metamodel.Derivation'
+        description: |-
+          Default fills an asset field that has no value from the asset's native
+          type, so every discovery plugin is classified by one table.
+      derive:
+        allOf:
+        - $ref: '#/definitions/metamodel.Derivation'
+        description: |-
+          Derive computes an asset field from another enum field of the profile, so
+          the two can never disagree; writers cannot set it.
       id:
         type: string
       itemType:

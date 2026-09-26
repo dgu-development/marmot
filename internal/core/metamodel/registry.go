@@ -79,6 +79,16 @@ func (a AppliesTo) EffectiveKinds() []string {
 	return a.Kinds
 }
 
+// Derivation maps the value of a source to a value of the field. Keys are
+// source values; values must be values of the field.
+type Derivation struct {
+	From string            `json:"from"`
+	Map  map[string]string `json:"map"`
+}
+
+// DefaultFromType is the only Default source: the asset's native type.
+const DefaultFromType = "type"
+
 type Field struct {
 	ID           string       `json:"id"`
 	Type         string       `json:"type"`
@@ -91,6 +101,12 @@ type Field struct {
 	Values       []string     `json:"values,omitempty"`
 	Validation   Constraints  `json:"validation,omitempty"`
 	Presentation Presentation `json:"presentation,omitempty"`
+	// Derive computes an asset field from another enum field of the profile, so
+	// the two can never disagree; writers cannot set it.
+	Derive *Derivation `json:"derive,omitempty"`
+	// Default fills an asset field that has no value from the asset's native
+	// type, so every discovery plugin is classified by one table.
+	Default *Derivation `json:"default,omitempty"`
 }
 
 type Profile struct {
@@ -235,6 +251,9 @@ func New(profile *Profile) (*Registry, error) {
 				schema.Fields = append(schema.Fields, field)
 			}
 		}
+	}
+	if err := validateDerivations(schema.Fields); err != nil {
+		return nil, err
 	}
 	// Unique per kind, not globally: different kinds never share a row.
 	storageByKind := make(map[string]map[string]bool)
@@ -487,6 +506,139 @@ func kindNativeFields(kind string) []Field {
 		fields[i].Presentation.Order = i
 	}
 	return fields
+}
+
+func validateDerivations(fields []Field) error {
+	byID := make(map[string]Field, len(fields))
+	for _, f := range fields {
+		byID[f.ID] = f
+	}
+	for _, f := range fields {
+		if f.Derive == nil && f.Default == nil {
+			continue
+		}
+		kinds := f.AppliesTo.EffectiveKinds()
+		if f.Type != "enum" || len(kinds) != 1 || kinds[0] != "asset" || len(f.AppliesTo.AssetTypes) > 0 {
+			return fmt.Errorf("field %q: derive and default require an enum field of every asset", f.ID)
+		}
+		if f.Derive != nil && (f.Default != nil || f.Required) {
+			return fmt.Errorf("field %q: a derived field takes no default and cannot be required", f.ID)
+		}
+		if d := f.Default; d != nil {
+			if d.From != DefaultFromType {
+				return fmt.Errorf("field %q: default must come from %q", f.ID, DefaultFromType)
+			}
+			if err := validateMap(f, d.Map, nil); err != nil {
+				return fmt.Errorf("field %q default: %w", f.ID, err)
+			}
+		}
+		if d := f.Derive; d != nil {
+			source, ok := byID[d.From]
+			sourceKinds := source.AppliesTo.EffectiveKinds()
+			if !ok || source.Type != "enum" || source.Derive != nil || len(sourceKinds) != 1 || sourceKinds[0] != "asset" || len(source.AppliesTo.AssetTypes) > 0 {
+				return fmt.Errorf("field %q: derive requires an underived enum asset field as source", f.ID)
+			}
+			if err := validateMap(f, d.Map, source.Values); err != nil {
+				return fmt.Errorf("field %q derive: %w", f.ID, err)
+			}
+		}
+	}
+	return nil
+}
+
+func validateMap(f Field, mapping map[string]string, sources []string) error {
+	if len(mapping) == 0 || len(mapping) > 1024 {
+		return errors.New("map requires 1–1024 entries")
+	}
+	for from, to := range mapping {
+		if from == "" || (sources != nil && !slices.Contains(sources, from)) {
+			return fmt.Errorf("%q is not a source value", from)
+		}
+		if !slices.Contains(f.Values, to) {
+			return fmt.Errorf("%q is not a value of the field", to)
+		}
+	}
+	return nil
+}
+
+// Derive sets the defaulted and derived fields of an asset's metadata:
+// defaults first, so a derivation can build on a defaulted value.
+func (r *Registry) Derive(assetType string, metadata map[string]any) error {
+	if !r.Enabled() {
+		return nil
+	}
+	for _, f := range r.Fields("asset") {
+		if f.Default == nil {
+			continue
+		}
+		if value, ok := ValueAt(metadata, f.Storage); ok && value != nil && value != "" {
+			continue
+		}
+		if to, ok := f.Default.Map[assetType]; ok {
+			if err := SetValueAt(metadata, f.Storage, to); err != nil {
+				return err
+			}
+		}
+	}
+	for _, f := range r.Fields("asset") {
+		if f.Derive == nil {
+			continue
+		}
+		var derived any
+		if source, ok := ValueAt(metadata, r.byID[f.Derive.From].Storage); ok {
+			if key, ok := source.(string); ok {
+				if to, ok := f.Derive.Map[key]; ok {
+					derived = to
+				}
+			}
+		}
+		if err := SetValueAt(metadata, f.Storage, derived); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetValueAt writes value at a metadata.* storage binding, creating parents;
+// nil removes it.
+func SetValueAt(metadata map[string]any, storage string, value any) error {
+	parts := strings.Split(strings.TrimPrefix(storage, "metadata."), ".")
+	object := metadata
+	for _, part := range parts[:len(parts)-1] {
+		next, ok := object[part]
+		if !ok {
+			if value == nil {
+				return nil
+			}
+			next = map[string]any{}
+			object[part] = next
+		}
+		child, ok := next.(map[string]any)
+		if !ok {
+			return fmt.Errorf("metadata path %q is not an object", part)
+		}
+		object = child
+	}
+	if value == nil {
+		delete(object, parts[len(parts)-1])
+	} else {
+		object[parts[len(parts)-1]] = value
+	}
+	return nil
+}
+
+// BadgeStorages lists the metadata.* bindings of kind's badge fields.
+func (r *Registry) BadgeStorages(kind string) []string {
+	if !r.Enabled() {
+		return nil
+	}
+	var out []string
+	for _, f := range r.Fields(kind) {
+		if f.Presentation.Badge && isGoverned(f) {
+			out = append(out, f.Storage)
+		}
+	}
+	return out
 }
 
 func (r *Registry) Field(id string) (Field, bool) { f, ok := r.byID[id]; return f, ok }

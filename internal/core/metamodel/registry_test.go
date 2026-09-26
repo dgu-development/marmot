@@ -538,3 +538,37 @@ fields:
 		t.Fatalf("definition bindings = %v", storages)
 	}
 }
+
+func TestRejectInvalidDerivations(t *testing.T) {
+	base := `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: kind
+    type: enum
+    core: true
+    nullable: true
+    storage: metadata.example.kind
+    values: [table, report]
+    presentation: {labelKey: kind}
+`
+	cases := map[string]string{
+		"derived from a missing field": `  - {id: family, type: enum, core: true, nullable: true, storage: metadata.example.family, values: [data], derive: {from: nope, map: {table: data}}, presentation: {labelKey: family}}`,
+		"map value outside the field":  `  - {id: family, type: enum, core: true, nullable: true, storage: metadata.example.family, values: [data], derive: {from: kind, map: {table: other}}, presentation: {labelKey: family}}`,
+		"map key outside the source":   `  - {id: family, type: enum, core: true, nullable: true, storage: metadata.example.family, values: [data], derive: {from: kind, map: {view: data}}, presentation: {labelKey: family}}`,
+		"derived and required":         `  - {id: family, type: enum, core: true, required: true, storage: metadata.example.family, values: [data], derive: {from: kind, map: {table: data}}, presentation: {labelKey: family}}`,
+		"default from a field":         `  - {id: family, type: enum, core: true, nullable: true, storage: metadata.example.family, values: [data], default: {from: kind, map: {table: data}}, presentation: {labelKey: family}}`,
+		"derive on a string":           `  - {id: family, type: string, core: true, nullable: true, storage: metadata.example.family, derive: {from: kind, map: {table: data}}, presentation: {labelKey: family}}`,
+		"derive on a product field":    `  - {id: family, type: enum, core: true, nullable: true, storage: metadata.example.family, values: [data], appliesTo: {kinds: [data_product]}, derive: {from: kind, map: {table: data}}, presentation: {labelKey: family}}`,
+	}
+	for name, field := range cases {
+		if _, err := Load(strings.NewReader(base + field + "\n")); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	valid := `  - {id: family, type: enum, core: true, nullable: true, storage: metadata.example.family, values: [data], derive: {from: kind, map: {table: data}}, presentation: {labelKey: family}}`
+	if _, err := Load(strings.NewReader(base + valid + "\n")); err != nil {
+		t.Fatalf("valid derivation rejected: %v", err)
+	}
+}

@@ -31,6 +31,8 @@ export function violationMessage(code: string): string {
 			return m.metamodel_error_date();
 		case 'term_not_found':
 			return m.metamodel_error_term_not_found();
+		case 'derived':
+			return m.metamodel_error_derived();
 		case 'self_reference':
 			return m.metamodel_error_self_reference();
 		default:

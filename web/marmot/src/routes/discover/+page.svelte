@@ -122,7 +122,7 @@
 	let kindSchemas = $state<Record<string, MetamodelSchema | null>>({});
 
 	$effect(() => {
-		for (const kind of ['glossary_term', 'data_product']) {
+		for (const kind of ['asset', 'glossary_term', 'data_product']) {
 			fetchMetamodel(kind)
 				.then((schema) => (kindSchemas = { ...kindSchemas, [kind]: schema }))
 				.catch(() => {});
@@ -1022,6 +1022,13 @@
 												</div>
 											</div>
 											<div class="flex items-center gap-1.5 flex-shrink-0">
+												<FieldBadges
+													schema={kindSchemas.asset}
+													metadata={result.metadata?.metadata as
+														| Record<string, unknown>
+														| undefined}
+													size="xs"
+												/>
 												<button
 													onclick={(e) => handleTypeClick(result.metadata?.type ?? '', e)}
 													class="text-xs {getTagColor(

@@ -14396,6 +14396,20 @@ const docTemplate = `{
                 }
             }
         },
+        "metamodel.Derivation": {
+            "type": "object",
+            "properties": {
+                "from": {
+                    "type": "string"
+                },
+                "map": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "metamodel.Field": {
             "type": "object",
             "properties": {
@@ -14404,6 +14418,22 @@ const docTemplate = `{
                 },
                 "core": {
                     "type": "boolean"
+                },
+                "default": {
+                    "description": "Default fills an asset field that has no value from the asset's native\ntype, so every discovery plugin is classified by one table.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/metamodel.Derivation"
+                        }
+                    ]
+                },
+                "derive": {
+                    "description": "Derive computes an asset field from another enum field of the profile, so\nthe two can never disagree; writers cannot set it.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/metamodel.Derivation"
+                        }
+                    ]
                 },
                 "id": {
                     "type": "string"
