@@ -6463,11 +6463,12 @@ paths:
   /api/v1/metamodel:
     get:
       description: Returns the composed native and configured field schema for an
-        entity kind. Clients must not reinterpret source YAML.
+        entity kind, led by that kind's native attributes. Clients must not reinterpret
+        source YAML.
       operationId: getMetamodel
       parameters:
       - default: asset
-        description: Entity kind (asset, data_product)
+        description: Entity kind (asset, data_product, glossary_term)
         in: query
         name: kind
         type: string

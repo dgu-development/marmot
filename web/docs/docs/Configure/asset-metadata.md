@@ -237,6 +237,16 @@ Clients consume this response instead of parsing the YAML themselves. The
 schema describes editable fields, not every property or relationship in an
 asset.
 
+Each kind's schema starts with its native attributes, bound to `marmot.*`:
+`name`, `description`, `user_description` and `tags` for assets; `name`,
+`description` and `tags` for data products; and `name`, `definition`,
+`description` and `tags` for glossary terms. Data product and term attributes
+are listed so clients see the whole record, but their own create and update
+endpoints validate them (for instance, `name` is required and at most 255
+characters), not the profile: they never appear in validation errors or in
+missing-field reports. A profile field with the same id replaces the native
+entry.
+
 ## Write metadata
 
 A write is rejected only for validity: wrong type, out of range, too long, an

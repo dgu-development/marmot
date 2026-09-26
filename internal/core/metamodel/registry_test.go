@@ -466,3 +466,75 @@ fields:
 		t.Fatal("search control not carried")
 	}
 }
+
+func TestSchemaForKindPublishesEachKindsNativeAttributes(t *testing.T) {
+	r, err := Load(strings.NewReader(`formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: cost_center
+    type: string
+    core: true
+    storage: metadata.example.cost_center
+    appliesTo:
+      kinds: [data_product]
+    presentation:
+      labelKey: example.cost_center.label
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	product := r.SchemaForKind("data_product")
+	if got := fieldIDs(product.Fields); !slices.Equal(got, []string{"name", "description", "tags", "cost_center"}) {
+		t.Fatalf("data_product schema = %v", got)
+	}
+	if !product.Fields[0].Required || product.Fields[0].Storage != "marmot.name" {
+		t.Fatalf("a product's name is required and native: %+v", product.Fields[0])
+	}
+	if got := fieldIDs(r.SchemaForKind("glossary_term").Fields); !slices.Equal(got, []string{"name", "definition", "description", "tags"}) {
+		t.Fatalf("glossary_term schema = %v", got)
+	}
+	if got := fieldIDs(r.SchemaForKind("asset").Fields); slices.Contains(got, "definition") || !slices.Contains(got, "name") {
+		t.Fatalf("asset schema = %v", got)
+	}
+	// Read-only: validation keeps seeing only the profile's fields.
+	if slices.Contains(fieldIDs(r.Fields("data_product")), "name") {
+		t.Fatal("native product attributes must not enter Fields")
+	}
+	if err := r.Validate(map[string]any{}, "data_product", true); err != nil {
+		t.Fatalf("a missing native name must not fail registry validation: %v", err)
+	}
+	if missing := r.Missing(map[string]any{}, "glossary_term", true); len(missing) != 0 {
+		t.Fatalf("native term attributes must not count as missing: %v", missing)
+	}
+}
+
+func TestSchemaForKindLetsTheProfileOverrideANativeID(t *testing.T) {
+	r, err := Load(strings.NewReader(`formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: definition
+    type: string
+    core: true
+    storage: metadata.example.definition
+    appliesTo:
+      kinds: [glossary_term]
+    presentation:
+      labelKey: example.definition.label
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var storages []string
+	for _, f := range r.SchemaForKind("glossary_term").Fields {
+		if f.ID == "definition" {
+			storages = append(storages, f.Storage)
+		}
+	}
+	if !slices.Equal(storages, []string{"metadata.example.definition"}) {
+		t.Fatalf("definition bindings = %v", storages)
+	}
+}
