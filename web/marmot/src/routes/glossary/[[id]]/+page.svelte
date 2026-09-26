@@ -39,6 +39,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages';
 	import { formatDate } from '$lib/utils';
+	import EntityPanels from '$components/extensions/EntityPanels.svelte';
 
 	const terms: Writable<GlossaryTerm[]> = writable([]);
 	const totalTerms: Writable<number> = writable(0);
@@ -676,6 +677,8 @@
 										onload={(count) => (referencingCount = count)}
 									/>
 								{/if}
+
+								<EntityPanels entity={{ kind: 'glossary_term', id: selectedTerm.id }} />
 
 								<!-- Description (Markdown Body) -->
 								{#if selectedTerm.description || (isEditing && editedTerm)}

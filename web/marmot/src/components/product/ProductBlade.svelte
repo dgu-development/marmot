@@ -17,6 +17,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages';
 	import { formatDateTime } from '$lib/utils';
+	import EntityPanels from '$components/extensions/EntityPanels.svelte';
 
 	export let product: DataProduct | null = null;
 	export let onClose: () => void;
@@ -339,6 +340,8 @@
 								</p>
 							</div>
 						{/if}
+
+						<EntityPanels entity={{ kind: 'data_product', id: product.id }} />
 
 						<!-- Assets Preview -->
 						{#if resolvedAssets && resolvedAssets.all_assets.length > 0}
