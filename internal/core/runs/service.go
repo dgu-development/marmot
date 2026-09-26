@@ -387,6 +387,7 @@ func (s *service) ProcessEntities(ctx context.Context, runID string, assets []Cr
 				QueryLanguage:    ast.QueryLanguage,
 				Sources:          ast.Sources,
 				SkipNotification: true,
+				FromSync:         true,
 			}
 			// Not cached when another writer created the asset after the fetch above.
 			existingAsset := existingAssets[assetMRN]

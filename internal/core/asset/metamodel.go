@@ -220,6 +220,15 @@ func (s *service) preserveGoverned(current *Asset, input *UpdateInput) error {
 		}
 		previous, existed := metamodel.ValueAt(current.Metadata, field.Storage)
 		next, supplied := metamodel.ValueAt(metadata, field.Storage)
+		if input.FromSync {
+			// Curated values win over the source, as for glossary terms (keepGoverned).
+			if existed {
+				if err := setMetadataValue(metadata, strings.Split(strings.TrimPrefix(field.Storage, "metadata."), "."), previous); err != nil {
+					return err
+				}
+			}
+			continue
+		}
 		if supplied && (!existed || !reflect.DeepEqual(previous, next)) && input.ExpectedVersion == nil {
 			if _, patched := input.GovernedFields[field.ID]; !patched {
 				return ErrVersionRequired

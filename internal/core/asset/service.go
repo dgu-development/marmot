@@ -102,6 +102,9 @@ type UpdateInput struct {
 	Query            *string                `json:"query,omitempty"`
 	QueryLanguage    *string                `json:"query_language,omitempty"`
 	SkipNotification bool                   `json:"-"`
+	// FromSync marks a discovery run: the source fills governed fields that are still
+	// empty but never overwrites a value already set, so it needs no expected version.
+	FromSync bool `json:"-"`
 }
 
 type Filter struct {
