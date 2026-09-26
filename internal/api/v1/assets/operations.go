@@ -359,10 +359,10 @@ func (h *Handler) getAssetByMRN(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Get the effective metamodel schema
-// @Description Returns the composed native and configured field schema for an entity kind. Clients must not reinterpret source YAML.
+// @Description Returns the composed native and configured field schema for an entity kind, led by that kind's native attributes. Clients must not reinterpret source YAML.
 // @Tags metamodel
 // @Produce json
-// @Param kind query string false "Entity kind (asset, data_product)" default(asset)
+// @Param kind query string false "Entity kind (asset, data_product, glossary_term)" default(asset)
 // @Security ApiKeyAuth
 // @Security BearerAuth
 // @Success 200 {object} metamodel.Schema

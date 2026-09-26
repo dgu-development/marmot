@@ -436,7 +436,8 @@ func (r *Registry) Schema() Schema {
 	return schema
 }
 
-// SchemaForKind is Schema with Fields narrowed to those that apply to kind.
+// SchemaForKind is Schema with Fields narrowed to those that apply to kind, led by that kind's
+// own native attributes so a reader sees the whole record, not only the profile's part.
 func (r *Registry) SchemaForKind(kind string) Schema {
 	schema := r.Schema()
 	filtered := []Field{}
@@ -445,8 +446,47 @@ func (r *Registry) SchemaForKind(kind string) Schema {
 			filtered = append(filtered, f)
 		}
 	}
-	schema.Fields = filtered
+	native := []Field{}
+	for _, f := range kindNativeFields(kind) {
+		if !slices.ContainsFunc(filtered, func(other Field) bool { return other.ID == f.ID }) {
+			native = append(native, f)
+		}
+	}
+	schema.Fields = append(native, filtered...)
 	return schema
+}
+
+// kindNativeFields describes the native attributes of data products and glossary terms. Their
+// own services validate them (struct tags on the create and update inputs), so these are read-only
+// here: they never enter Fields, Validate or Missing, which only see metadata-bound values.
+// Assets need none: their native fields are part of the registry itself.
+func kindNativeFields(kind string) []Field {
+	maxName := 255
+	minOne := 1
+	name := Field{ID: "name", Type: "string", Required: true, Storage: "marmot.name",
+		Validation: Constraints{MinLength: &minOne, MaxLength: &maxName}, Presentation: Presentation{LabelKey: "common_name"}}
+	description := Field{ID: "description", Type: "string", Nullable: true, Storage: "marmot.description",
+		Presentation: Presentation{LabelKey: "common_description"}}
+	tags := Field{ID: "tags", Type: "list", ItemType: "string", Storage: "marmot.tags",
+		Presentation: Presentation{LabelKey: "common_tags"}}
+	var fields []Field
+	switch kind {
+	case "data_product":
+		fields = []Field{name, description, tags}
+	case "glossary_term":
+		definition := Field{ID: "definition", Type: "string", Required: true, Storage: "marmot.definition",
+			Validation: Constraints{MinLength: &minOne}, Presentation: Presentation{LabelKey: "glossary_definition_label"}}
+		fields = []Field{name, definition, description, tags}
+	default:
+		return nil
+	}
+	for i := range fields {
+		fields[i].Core = true
+		fields[i].AppliesTo = AppliesTo{Kinds: []string{kind}}
+		fields[i].Presentation.Section = "general"
+		fields[i].Presentation.Order = i
+	}
+	return fields
 }
 
 func (r *Registry) Field(id string) (Field, bool) { f, ok := r.byID[id]; return f, ok }

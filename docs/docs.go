@@ -5058,7 +5058,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the composed native and configured field schema for an entity kind. Clients must not reinterpret source YAML.",
+                "description": "Returns the composed native and configured field schema for an entity kind, led by that kind's native attributes. Clients must not reinterpret source YAML.",
                 "produces": [
                     "application/json"
                 ],
@@ -5071,7 +5071,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "default": "asset",
-                        "description": "Entity kind (asset, data_product)",
+                        "description": "Entity kind (asset, data_product, glossary_term)",
                         "name": "kind",
                         "in": "query"
                     }
