@@ -22,6 +22,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { m } from '$lib/paraglide/messages';
 	import { formatDateTime } from '$lib/utils';
+	import EntityPanels from '$components/extensions/EntityPanels.svelte';
 
 	interface Owner {
 		id: string;
@@ -379,6 +380,10 @@
 								</div>
 							{/if}
 							<AssetGlossaryTerms {asset} editable={true} />
+						{/if}
+
+						{#if asset.mrn}
+							<EntityPanels entity={{ kind: 'asset', id: asset.id, mrn: asset.mrn }} />
 						{/if}
 
 						<!-- Run History -->
