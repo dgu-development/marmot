@@ -381,3 +381,39 @@ func (m *memoryRepo) GetAssetsByTerm(context.Context, string, int, int) ([]*Asse
 }
 
 var _ Repository = (*memoryRepo)(nil)
+
+func TestSyncFillsEmptyGovernedFieldWithoutVersion(t *testing.T) {
+	svc := newGovernedService(t)
+	created := mustCreateGoverned(t, svc, 30)
+	updated, err := svc.Update(context.Background(), created.ID, UpdateInput{
+		FromSync: true,
+		Metadata: map[string]any{
+			"example": map[string]any{"note": "from the source"},
+			"plugin":  map[string]any{"extra": "yes"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("a sync must not need a version to fill an empty governed field: %v", err)
+	}
+	if note, ok := metamodel.ValueAt(updated.Metadata, "metadata.example.note"); !ok || note != "from the source" {
+		t.Fatalf("empty governed field was not filled: %v %v", note, ok)
+	}
+	if extra, ok := metamodel.ValueAt(updated.Metadata, "metadata.plugin.extra"); !ok || extra != "yes" {
+		t.Fatal("the rest of the source's metadata was not applied")
+	}
+}
+
+func TestSyncKeepsCuratedGovernedValues(t *testing.T) {
+	svc := newGovernedService(t)
+	created := mustCreateGoverned(t, svc, 30)
+	updated, err := svc.Update(context.Background(), created.ID, UpdateInput{
+		FromSync: true,
+		Metadata: map[string]any{"example": map[string]any{"retention": 1.0}},
+	})
+	if err != nil {
+		t.Fatalf("a sync that disagrees with a curated value must still apply: %v", err)
+	}
+	if got, ok := metamodel.ValueAt(updated.Metadata, "metadata.example.retention"); !ok || got != 30.0 {
+		t.Fatalf("the curated value must win over the source: %v %v", got, ok)
+	}
+}

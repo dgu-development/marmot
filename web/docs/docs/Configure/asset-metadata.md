@@ -306,7 +306,12 @@ Validation errors look like `{"fields":[{"field":"retention","code":"type"}]}`.
 PUT keeps its existing full-replacement semantics, except configured metadata
 fields it omits are preserved (changing one still requires `If-Match`) — it is
 not a general deep merge, so other omitted metadata may still be lost.
-Ingestion and OpenLineage use the same service and are subject to these rules.
+Ingestion and OpenLineage use the same service and are subject to these rules,
+with one difference for discovery runs: a run needs no version. It fills a
+configured field that is still empty with the source's value, and keeps any value
+already set, so a curated value wins over the source, as it does for glossary
+terms. A run whose source disagrees with a curated value no longer fails the
+asset; the rest of its metadata still syncs.
 
 **Completeness.** `GET` and `PATCH` responses add a `metamodel` object naming
 the still-missing required fields:
