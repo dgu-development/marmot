@@ -227,8 +227,16 @@
 		const profile = (schema?.fields ?? [])
 			.filter((f) => f.storage.startsWith('metadata.'))
 			.map((f) => toFieldOption({ field: f.storage.slice('metadata.'.length) }));
-		const seen = new Set(profile.map((o) => o.value));
-		return [...profile, ...entries.map(toFieldOption).filter((o) => !seen.has(o.value))];
+		// The suggestions list a key once per JSON type it holds, such as a string on some assets and a list on others.
+		const seen: Record<string, true> = {};
+		for (const option of profile) seen[option.value] = true;
+		const options = [...profile];
+		for (const option of entries.map(toFieldOption)) {
+			if (seen[option.value]) continue;
+			seen[option.value] = true;
+			options.push(option);
+		}
+		return options;
 	}
 
 	// The profile may load after the fields: relabel them when it does.
