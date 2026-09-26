@@ -30,9 +30,10 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	db             *pgxpool.Pool
-	recorder       metrics.Recorder
-	domainResolver DomainResolver
+	db              *pgxpool.Pool
+	recorder        metrics.Recorder
+	domainResolver  DomainResolver
+	assetBadgePaths []string
 }
 
 func NewPostgresRepository(db *pgxpool.Pool, recorder metrics.Recorder) *PostgresRepository {

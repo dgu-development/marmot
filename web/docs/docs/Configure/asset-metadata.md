@@ -97,6 +97,8 @@ rejected at startup.
 | `values` | for `enum` | Allowed enum members |
 | `validation` | no | Constraints object (see below) |
 | `presentation` | no | UI/message hints (see below) |
+| `default` | no | Fills an empty asset field from the asset's native type (see below) |
+| `derive` | no | Computes an asset field from another field (see below) |
 
 Stub creation is an internal ingestion step, not an HTTP exemption — see
 [Write metadata](#write-metadata) for how stubs affect completeness.
@@ -117,6 +119,39 @@ appliesTo:
 `data_product` and `glossary_term` are supported. A field's storage binding
 only needs to be unique within a kind: an `asset` field and a `data_product`
 field may share a binding, since they never share a row.
+
+### default and derive
+
+A classification that every discovery plugin should produce belongs in one
+table, not in each plugin's configuration:
+
+```yaml
+- id: asset_type
+  type: enum
+  values: [table, view, report]
+  default:
+    from: type
+    map: { Table: table, View: view, Dashboard: report }
+- id: asset_family
+  type: enum
+  values: [data, business]
+  derive:
+    from: asset_type
+    map: { table: data, view: data, report: business }
+```
+
+`default` fills the field on every create or update while it has no value,
+from the asset's native `type`; an unmapped type leaves it empty. A value set
+by a person or a source is kept, and clearing it lets the default return.
+
+`derive` recomputes the field from another enum field on every write, and
+removes it when the source is empty or unmapped. Writers cannot set it: a
+PATCH that names it fails with `derived`. A derived field cannot be required,
+cannot have a default, and cannot be the source of another derivation.
+
+Both apply to `enum` asset fields that are not scoped by `assetTypes`, and
+map values must be values of the field. Existing assets are classified on
+their next write, such as the next run of their pipeline.
 
 ### Types
 

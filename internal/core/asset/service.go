@@ -484,6 +484,9 @@ func (s *service) Create(ctx context.Context, input CreateInput) (*Asset, error)
 	if asset.Tags == nil {
 		asset.Tags = []string{}
 	}
+	if err := s.derive(asset); err != nil {
+		return nil, err
+	}
 
 	if err := s.validateAsset(asset); err != nil {
 		return nil, err
@@ -677,6 +680,9 @@ func (s *service) Update(ctx context.Context, id string, input UpdateInput) (*As
 
 	if !updated {
 		return asset, nil
+	}
+	if err := s.derive(asset); err != nil {
+		return nil, err
 	}
 
 	if err := s.validateAsset(asset); err != nil {

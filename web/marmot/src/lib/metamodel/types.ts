@@ -33,6 +33,12 @@ export interface MetamodelAppliesTo {
 	assetTypes?: string[];
 }
 
+/** Maps a source value to a value of the field. */
+export interface MetamodelDerivation {
+	from: string;
+	map: Record<string, string>;
+}
+
 export interface MetamodelField {
 	id: string;
 	type: string;
@@ -45,6 +51,10 @@ export interface MetamodelField {
 	values?: string[];
 	validation?: MetamodelConstraints;
 	presentation?: MetamodelPresentation;
+	/** Computed by the server from another field; clients show it read-only. */
+	derive?: MetamodelDerivation;
+	/** Filled from the asset's native type while the field has no value. */
+	default?: MetamodelDerivation;
 }
 
 export interface MetamodelSchema {

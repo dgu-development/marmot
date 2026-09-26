@@ -60,6 +60,19 @@ func (s *service) validateAsset(a *Asset) error {
 	return s.registry().Validate(MetamodelValues(s.registry(), a), "asset", !a.IsStub)
 }
 
+func (s *service) derive(a *Asset) error {
+	if !s.registry().Enabled() {
+		return nil
+	}
+	if a.Metadata == nil {
+		a.Metadata = make(map[string]any)
+	}
+	if err := s.registry().Derive(a.Type, a.Metadata); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	return nil
+}
+
 func applyFields(registry *metamodel.Registry, asset *Asset, fields map[string]any) error {
 	if asset.Metadata == nil {
 		asset.Metadata = make(map[string]any)
@@ -68,6 +81,9 @@ func applyFields(registry *metamodel.Registry, asset *Asset, fields map[string]a
 		field, ok := registry.Field(id)
 		if !ok || !slices.Contains(field.AppliesTo.EffectiveKinds(), "asset") {
 			return &metamodel.ValidationError{Fields: []metamodel.Violation{{Field: id, Code: "unknown_field"}}}
+		}
+		if field.Derive != nil {
+			return &metamodel.ValidationError{Fields: []metamodel.Violation{{Field: id, Code: "derived"}}}
 		}
 		if value == nil && (!field.Nullable || field.Required) {
 			return &metamodel.ValidationError{Fields: []metamodel.Violation{{Field: id, Code: "not_nullable"}}}
@@ -215,7 +231,7 @@ func (s *service) preserveGoverned(current *Asset, input *UpdateInput) error {
 		return err
 	}
 	for _, field := range registry.Fields("asset") {
-		if !strings.HasPrefix(field.Storage, "metadata.") {
+		if !strings.HasPrefix(field.Storage, "metadata.") || field.Derive != nil {
 			continue
 		}
 		previous, existed := metamodel.ValueAt(current.Metadata, field.Storage)

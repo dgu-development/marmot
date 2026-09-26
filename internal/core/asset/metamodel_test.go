@@ -417,3 +417,114 @@ func TestSyncKeepsCuratedGovernedValues(t *testing.T) {
 		t.Fatalf("the curated value must win over the source: %v %v", got, ok)
 	}
 }
+
+const classifiedProfile = `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: asset_type
+    type: enum
+    core: true
+    nullable: true
+    storage: metadata.example.asset_type
+    values: [table, report]
+    default:
+      from: type
+      map: {table: table, dashboard: report}
+    presentation:
+      labelKey: example.type
+  - id: asset_family
+    type: enum
+    core: true
+    nullable: true
+    storage: metadata.example.asset_family
+    values: [data, business]
+    derive:
+      from: asset_type
+      map: {table: data, report: business}
+    presentation:
+      labelKey: example.family
+`
+
+func newClassifiedService(t *testing.T) Service {
+	t.Helper()
+	registry, err := metamodel.Load(strings.NewReader(classifiedProfile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return NewService(newMemoryRepo(), WithMetamodel(registry))
+}
+
+func TestCreateClassifiesFromNativeType(t *testing.T) {
+	created, err := newClassifiedService(t).Create(context.Background(), validCreate("orders"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := metamodel.ValueAt(created.Metadata, "metadata.example.asset_type"); got != "table" {
+		t.Fatalf("asset_type not defaulted from the native type: %v", got)
+	}
+	if got, _ := metamodel.ValueAt(created.Metadata, "metadata.example.asset_family"); got != "data" {
+		t.Fatalf("asset_family not derived: %v", got)
+	}
+	if extra, _ := metamodel.ValueAt(created.Metadata, "metadata.plugin.extra"); extra != "yes" {
+		t.Fatal("unrelated metadata was lost")
+	}
+}
+
+func TestPatchReclassifiesFamilyAndRejectsWritingIt(t *testing.T) {
+	svc := newClassifiedService(t)
+	created, err := svc.Create(context.Background(), validCreate("orders"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := svc.PatchFields(context.Background(), created.ID, created.Version, map[string]any{"asset_type": "report"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := metamodel.ValueAt(updated.Metadata, "metadata.example.asset_family"); got != "business" {
+		t.Fatalf("family did not follow the type: %v", got)
+	}
+	var validation *metamodel.ValidationError
+	_, err = svc.PatchFields(context.Background(), created.ID, updated.Version, map[string]any{"asset_family": "data"})
+	if !errors.As(err, &validation) || validation.Fields[0].Code != "derived" {
+		t.Fatalf("writing a derived field must fail with derived: %v", err)
+	}
+}
+
+func TestSyncKeepsCuratedTypeOverDefault(t *testing.T) {
+	svc := newClassifiedService(t)
+	created, err := svc.Create(context.Background(), validCreate("orders"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	curated, err := svc.PatchFields(context.Background(), created.ID, created.Version, map[string]any{"asset_type": "report"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	synced, err := svc.Update(context.Background(), curated.ID, UpdateInput{FromSync: true, Metadata: map[string]any{"plugin": map[string]any{"extra": "again"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := metamodel.ValueAt(synced.Metadata, "metadata.example.asset_type"); got != "report" {
+		t.Fatalf("a sync replaced the curated type with the default: %v", got)
+	}
+	if got, _ := metamodel.ValueAt(synced.Metadata, "metadata.example.asset_family"); got != "business" {
+		t.Fatalf("family lost on sync: %v", got)
+	}
+}
+
+func TestUnmappedNativeTypeStaysUnclassified(t *testing.T) {
+	input := validCreate("topic")
+	input.Type = "topic"
+	created, err := newClassifiedService(t).Create(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := metamodel.ValueAt(created.Metadata, "metadata.example.asset_type"); ok {
+		t.Fatal("an unmapped native type must leave asset_type empty")
+	}
+	if _, ok := metamodel.ValueAt(created.Metadata, "metadata.example.asset_family"); ok {
+		t.Fatal("no type, no family")
+	}
+}

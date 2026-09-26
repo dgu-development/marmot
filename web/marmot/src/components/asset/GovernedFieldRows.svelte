@@ -695,7 +695,17 @@
 			{:else}
 				<div class="inline-flex items-center gap-1.5">
 					{@render display(field, value)}
-					{#if editable}
+					{#if field.derive}
+						{@const source = fields.find((candidate) => candidate.id === field.derive?.from)}
+						<span
+							class="flex-shrink-0 text-gray-400 dark:text-gray-500"
+							title={m.metamodel_derived_from({
+								field: source ? label(source) : field.derive.from
+							})}
+						>
+							<IconifyIcon icon="material-symbols:function" class="h-4 w-4" />
+						</span>
+					{:else if editable}
 						<button
 							type="button"
 							onclick={() => startEdit(field, value)}

@@ -11,6 +11,7 @@
 	import GovernedFieldRows from '$components/asset/GovernedFieldRows.svelte';
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import type { MetamodelSchema } from '$lib/metamodel/types';
+	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
 	import { governedFields, governedPaths } from '$lib/metamodel/values';
 	import Lineage from '$components/lineage/Lineage.svelte';
 	import AssetContents from '$components/asset/AssetContents.svelte';
@@ -406,6 +407,7 @@
 								<h1 class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
 									{asset.name}
 								</h1>
+								<FieldBadges schema={metamodel} metadata={asset.metadata} />
 							</div>
 
 							<p class="text-xs text-gray-500 dark:text-gray-400 font-mono">{asset.mrn}</p>
