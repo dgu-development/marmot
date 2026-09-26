@@ -35,6 +35,7 @@ type UIConfigResponse struct {
 	AllowUnencrypted     bool           `json:"allow_unencrypted"`
 	TablePreviewEnabled  bool           `json:"table_preview_enabled"`
 	DefaultLanguage      string         `json:"default_language"`
+	DomainLandingURL     string         `json:"domain_landing_url,omitempty"`
 } // @name UIConfigResponse
 
 type BannerResponse struct {
@@ -65,6 +66,7 @@ func (h *Handler) getUIConfig(w http.ResponseWriter, r *http.Request) {
 		AllowUnencrypted:     h.config.Server.AllowUnencrypted,
 		TablePreviewEnabled:  h.config.Experimental.TablePreview,
 		DefaultLanguage:      h.config.UI.DefaultLanguage,
+		DomainLandingURL:     h.config.UI.DomainLandingURL,
 	}
 
 	common.RespondJSON(w, http.StatusOK, response)

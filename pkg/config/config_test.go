@@ -7,6 +7,7 @@ func TestLoad_DCRAllowedRedirectHostsFromEnv(t *testing.T) {
 	t.Setenv("MARMOT_AUTH_DCR_ALLOWED_REDIRECT_HOSTS", "claude.ai,example.com:8443")
 	t.Setenv("MARMOT_METAMODEL_PROFILE", "/etc/marmot/metamodel.yaml")
 	t.Setenv("MARMOT_DOMAINS_ENABLED", "true")
+	t.Setenv("MARMOT_UI_DOMAIN_LANDING_URL", "/dgu/landing/domains/{id}")
 
 	cfg, err := Load("")
 	if err != nil {
@@ -22,6 +23,9 @@ func TestLoad_DCRAllowedRedirectHostsFromEnv(t *testing.T) {
 	}
 	if !cfg.Domains.Enabled {
 		t.Fatal("domains.enabled not read from env")
+	}
+	if cfg.UI.DomainLandingURL != "/dgu/landing/domains/{id}" {
+		t.Fatalf("unexpected domain landing url from env: %q", cfg.UI.DomainLandingURL)
 	}
 }
 
@@ -83,5 +87,22 @@ func TestValidate_DCRAllowedRedirectHostsNormalised(t *testing.T) {
 	got := cfg.Auth.DCR.AllowedRedirectHosts
 	if got[0] != "claude.ai" || got[1] != "example.com:8443" {
 		t.Fatalf("expected trimmed lowercase entries, got %v", got)
+	}
+}
+
+func TestValidate_DomainLandingURL(t *testing.T) {
+	for _, url := range []string{"", "/dgu/landing/domains/{id}", "/portal?domain={id}"} {
+		cfg := validBaseConfig()
+		cfg.UI.DomainLandingURL = url
+		if err := validate(cfg); err != nil {
+			t.Errorf("%q: %v", url, err)
+		}
+	}
+	for _, url := range []string{"https://example.com/{id}", "//evil/{id}", "/dgu/landing"} {
+		cfg := validBaseConfig()
+		cfg.UI.DomainLandingURL = url
+		if err := validate(cfg); err == nil {
+			t.Errorf("%q: expected an error", url)
+		}
 	}
 }

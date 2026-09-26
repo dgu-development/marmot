@@ -2068,5 +2068,6 @@
 	"pipelines_text_clear": "Clear",
 	"pipelines_text_lines": "{count} lines",
 	"pipelines_text_too_large": "The file is larger than {size}.",
-	"pipelines_text_read_error": "The file could not be read."
+	"pipelines_text_read_error": "The file could not be read.",
+	"domains_open_landing": "Domain portal"
 }

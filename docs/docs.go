@@ -13403,6 +13403,9 @@ const docTemplate = `{
                 "default_language": {
                     "type": "string"
                 },
+                "domain_landing_url": {
+                    "type": "string"
+                },
                 "encryption_configured": {
                     "type": "boolean"
                 },

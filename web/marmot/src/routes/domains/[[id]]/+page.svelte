@@ -16,6 +16,7 @@
 		capabilities,
 		createDomain,
 		deleteDomain,
+		domainLandingTemplate,
 		errorMessage,
 		flatten,
 		loadTree,
@@ -42,6 +43,7 @@
 	let formName = $state('');
 	let formDescription = $state('');
 	let formParent = $state('');
+	let landingTemplate = $state('');
 
 	const selectedId = $derived($page.params.id ?? null);
 	const entries = $derived(flatten(forest));
@@ -99,7 +101,10 @@
 		}
 	}
 
-	onMount(refresh);
+	onMount(() => {
+		refresh();
+		domainLandingTemplate().then((template) => (landingTemplate = template));
+	});
 
 	$effect(() => {
 		// Keep the selected domain visible by expanding its ancestors.
@@ -373,12 +378,27 @@
 									</p>
 								{/if}
 							</div>
-							<Button
-								variant="clear"
-								icon="material-symbols:manage-search-rounded"
-								text={m.domains_view_contents()}
-								href={resolve(`/discover?q=${encodeURIComponent(discoverQuery(selected.id))}`)}
-							/>
+							<div class="flex flex-wrap gap-2">
+								{#if landingTemplate && !isUnassigned(selected)}
+									<Button
+										variant="filled"
+										icon="material-symbols:web-outline-rounded"
+										text={m.domains_open_landing()}
+										href={resolve(
+											landingTemplate.replace(
+												'{id}',
+												encodeURIComponent(selected.id)
+											) as `/${string}`
+										)}
+									/>
+								{/if}
+								<Button
+									variant="clear"
+									icon="material-symbols:manage-search-rounded"
+									text={m.domains_view_contents()}
+									href={resolve(`/discover?q=${encodeURIComponent(discoverQuery(selected.id))}`)}
+								/>
+							</div>
 						</div>
 
 						{#if caps && (caps.admin || caps.parentAdmin) && !isUnassigned(selected)}

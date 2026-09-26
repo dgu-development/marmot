@@ -225,6 +225,12 @@ See [Customisable Banner](./banner.md) for examples.
 
 See [Translations](../Develop/translations.md) for the available languages and how to contribute one.
 
+## Domain portals
+
+| Key | Description | Default |
+| --- | --- | --- |
+| `ui.domain_landing_url` | Path with an `{id}` placeholder, such as `/dgu/landing/domains/{id}`. Domain pages then show a link to each domain's portal page | - |
+
 ## Telemetry
 
 | Key                  | Description                          | Default                                    |

@@ -49,6 +49,21 @@ function send<T>(endpoint: string, method: string, body: unknown): Promise<T> {
 }
 
 let enabled: Promise<boolean> | undefined;
+let landing: Promise<string> | undefined;
+
+/**
+ * The instance's domain portal path, with {id} for the domain (ui.domain_landing_url);
+ * empty when the distribution does not provide one. Asked once per session.
+ */
+export function domainLandingTemplate(): Promise<string> {
+	landing ??= fetch('/api/v1/ui/config')
+		.then((response) => (response.ok ? response.json() : {}))
+		.then((config) =>
+			typeof config?.domain_landing_url === 'string' ? config.domain_landing_url : ''
+		)
+		.catch(() => '');
+	return landing;
+}
 
 /** Whether the server has domains enabled and the user may see them; asked once per session. */
 export function domainsEnabled(): Promise<boolean> {
