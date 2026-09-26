@@ -3,7 +3,8 @@
 	import type { MetamodelSchema } from '$lib/metamodel/types';
 	import { nativeMessage } from '$lib/metamodel/i18n';
 	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
-	import { readMetadataValue } from '$lib/metamodel/values';
+	import { resolve } from '$app/paths';
+	import { facetHref, readMetadataValue } from '$lib/metamodel/values';
 
 	let {
 		schema,
@@ -22,7 +23,7 @@
 		native: nativeMessage
 	});
 
-	type Part = { id: string; field: string; text: string };
+	type Part = { id: string; field: string; text: string; href: string | null };
 
 	// A badge derived from another one (asset family from asset type) joins it in one chip,
 	// read from the general to the specific.
@@ -38,7 +39,8 @@
 			parts[field.id] = {
 				id: field.id,
 				field: resolveMessage(field.presentation.labelKey, context) ?? field.id,
-				text: valueLabel(field, value, context) ?? value
+				text: valueLabel(field, value, context) ?? value,
+				href: facetHref(field, value)
 			};
 		}
 		const joined: Record<string, true> = {};
@@ -64,12 +66,24 @@
 		title={chip.map((part) => `${part.field}: ${part.text}`).join(' · ')}
 	>
 		{#each chip as part, index (part.id)}
-			<span
-				class="{size === 'sm' ? 'px-2.5 py-0.5' : 'px-2 py-0.5'} {chip.length > 1 && index === 0
+			{@const segment = `${size === 'sm' ? 'px-2.5 py-0.5' : 'px-2 py-0.5'} ${
+				chip.length > 1 && index === 0
 					? 'bg-earthy-terracotta-600 text-white dark:bg-earthy-terracotta-700'
-					: ''}"
-				data-field-badge={part.id}>{part.text}</span
-			>
+					: ''
+			}`}
+			{#if part.href}
+				<!-- Inside a Discover card the chip filters instead of opening the card. -->
+				<a
+					href={resolve(part.href as `/${string}`)}
+					class="{segment} transition hover:brightness-110 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-earthy-terracotta-500"
+					title={`${part.field}: ${part.text}`}
+					data-field-badge={part.id}
+					onclick={(event) => event.stopPropagation()}
+					onkeydown={(event) => event.stopPropagation()}>{part.text}</a
+				>
+			{:else}
+				<span class={segment} data-field-badge={part.id}>{part.text}</span>
+			{/if}
 		{/each}
 	</span>
 {/each}

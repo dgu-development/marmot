@@ -925,6 +925,7 @@
 	"metamodel_error_term_not_found": "That term does not exist or was deleted.",
 	"metamodel_error_type": "The value has the wrong type.",
 	"metamodel_error_unknown": "The value is not valid.",
+	"metamodel_filter_by": "See everything with “{value}”",
 	"metamodel_list_placeholder": "Add a value and press Enter",
 	"metamodel_list_remove": "Remove {value}",
 	"metamodel_missing_version": "Asset version is missing. Reload the asset before saving.",

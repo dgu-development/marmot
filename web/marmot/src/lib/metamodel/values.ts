@@ -76,6 +76,17 @@ export function governedFields(fields: MetamodelField[]): MetamodelField[] {
 		);
 }
 
+/**
+ * Discover filtered by one value of a facet field, or null: the server drops a
+ * `governed.` filter on any other field, so the link would list everything.
+ */
+export function facetHref(field: MetamodelField, value: unknown): string | null {
+	if (!field.presentation?.facet || (typeof value !== 'string' && typeof value !== 'boolean'))
+		return null;
+	const params = new URLSearchParams({ [`governed.${field.id}`]: String(value) });
+	return `/discover?${params}`;
+}
+
 /** Governed fields the profile offers as segmented Discover filters, in the same order as governedFields. */
 export function facetableFields(fields: MetamodelField[]): MetamodelField[] {
 	return governedFields(fields).filter((field) => field.presentation?.facet);

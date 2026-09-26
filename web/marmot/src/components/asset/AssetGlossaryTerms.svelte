@@ -134,7 +134,8 @@
 		</div>
 
 		{#if terms.length > 0 || showTermPicker}
-			<div class="space-y-2.5">
+			<!-- A long list scrolls inside its card instead of stretching the whole page. -->
+			<div class="max-h-[28rem] space-y-2.5 overflow-y-auto overscroll-contain pr-1">
 				{#each terms as term (term.term_id)}
 					<div class="rounded border border-gray-200 dark:border-gray-700">
 						<a
