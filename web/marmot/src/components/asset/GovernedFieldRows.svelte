@@ -1,5 +1,6 @@
 <script lang="ts">
 	import SearchLinks from '$components/metamodel/SearchLinks.svelte';
+	import { resolve } from '$app/paths';
 	import IconifyIcon from '@iconify/svelte';
 	import { toasts } from '$lib/stores/toast';
 	import { locale } from '$lib/i18n';
@@ -18,6 +19,7 @@
 	} from '$lib/metamodel/owners';
 	import {
 		draftFromValue,
+		facetHref,
 		isUnset,
 		readMetadataValue,
 		sameValue,
@@ -364,11 +366,33 @@
 			{/each}
 		</div>
 	{:else if typeof value === 'boolean'}
-		<span class="rounded-full px-2 py-1 text-sm {valueClass(value)}">
-			{shown(field, value)}
-		</span>
+		{@const href = facetHref(field, value)}
+		{#if href}
+			<a
+				href={resolve(href as `/${string}`)}
+				class="rounded-full px-2 py-1 text-sm transition hover:underline hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 {valueClass(
+					value
+				)}"
+				title={m.metamodel_filter_by({ value: shown(field, value) })}>{shown(field, value)}</a
+			>
+		{:else}
+			<span class="rounded-full px-2 py-1 text-sm {valueClass(value)}">
+				{shown(field, value)}
+			</span>
+		{/if}
 	{:else}
-		<span class="rounded-full px-2 py-1 text-sm {valueClass(value)}">{shown(field, value)}</span>
+		{@const href = facetHref(field, value)}
+		{#if href}
+			<a
+				href={resolve(href as `/${string}`)}
+				class="rounded-full px-2 py-1 text-sm transition hover:underline hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 {valueClass(
+					value
+				)}"
+				title={m.metamodel_filter_by({ value: shown(field, value) })}>{shown(field, value)}</a
+			>
+		{:else}
+			<span class="rounded-full px-2 py-1 text-sm {valueClass(value)}">{shown(field, value)}</span>
+		{/if}
 	{/if}
 {/snippet}
 

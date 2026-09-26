@@ -115,13 +115,34 @@
 	function isRuleManaged(source: string): boolean {
 		return source.startsWith('rule:');
 	}
+
+	const FIRST = 5;
+	const SEARCH_FROM = 8;
+	let expanded = $state(false);
+	let filter = $state('');
+	const matching = $derived.by(() => {
+		const needle = filter.trim().toLowerCase();
+		if (!needle) return terms;
+		return terms.filter(
+			(term) =>
+				term.term_name.toLowerCase().includes(needle) ||
+				(term.definition ?? '').toLowerCase().includes(needle)
+		);
+	});
+	const shownTerms = $derived(expanded || filter.trim() ? matching : matching.slice(0, FIRST));
 </script>
 
 {#if terms.length > 0 || canManageAssets}
 	<div>
 		<div class="flex items-center justify-between mb-2">
-			<h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">
+			<h3 class="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
 				{m.asset_glossary_terms_heading()}
+				{#if terms.length > 0}
+					<span
+						class="rounded-full bg-gray-100 px-2 text-xs font-medium text-gray-600 tabular-nums dark:bg-gray-700 dark:text-gray-300"
+						>{terms.length}</span
+					>
+				{/if}
 			</h3>
 			{#if canManageAssets && !showTermPicker}
 				<button
@@ -134,15 +155,26 @@
 		</div>
 
 		{#if terms.length > 0 || showTermPicker}
-			<div class="space-y-2.5">
-				{#each terms as term (term.term_id)}
+			{#if terms.length > SEARCH_FROM}
+				<input
+					type="search"
+					bind:value={filter}
+					placeholder={m.asset_terms_filter()}
+					aria-label={m.asset_terms_filter()}
+					class="mb-2 w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-earthy-terracotta-500 focus:ring-1 focus:ring-earthy-terracotta-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+				/>
+			{/if}
+			<!-- Long lists open with a few terms and the rest on demand, so the column stays short. -->
+			<div class="space-y-1.5">
+				{#each shownTerms as term (term.term_id)}
 					<div class="rounded border border-gray-200 dark:border-gray-700">
 						<a
 							href={resolve(`/glossary/${term.term_id}`)}
-							class="flex items-start gap-2 p-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group"
+							class="flex items-start gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group"
+							title={term.definition}
 						>
 							<div class="flex-1 min-w-0">
-								<div class="flex items-center gap-2 mb-1">
+								<div class="flex items-center gap-2">
 									<h4 class="text-sm font-medium text-gray-900 dark:text-gray-100">
 										{term.term_name}
 									</h4>
@@ -194,9 +226,11 @@
 										{/if}
 									</div>
 								</div>
-								<p class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-									{term.definition}
-								</p>
+								{#if term.definition}
+									<p class="mt-0.5 line-clamp-1 text-xs text-gray-600 dark:text-gray-400">
+										{term.definition}
+									</p>
+								{/if}
 							</div>
 							<div class="flex items-center gap-1.5 flex-shrink-0">
 								<svg
@@ -235,6 +269,18 @@
 						</a>
 					</div>
 				{/each}
+
+				{#if matching.length > FIRST && !filter.trim()}
+					<button
+						type="button"
+						class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-earthy-terracotta-700 hover:bg-earthy-terracotta-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 dark:text-earthy-terracotta-400 dark:hover:bg-gray-800"
+						onclick={() => (expanded = !expanded)}
+					>
+						{expanded
+							? m.discover_facet_show_less()
+							: m.discover_facet_show_more({ count: matching.length - FIRST })}
+					</button>
+				{/if}
 
 				{#if showTermPicker}
 					<div

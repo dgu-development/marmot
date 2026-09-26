@@ -30,6 +30,7 @@
 	import { catalogLabels } from '$lib/catalog/labels';
 	import type { MetamodelField, MetamodelSchema } from '$lib/metamodel/types';
 	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
+	import FacetGroup from '$components/discover/FacetGroup.svelte';
 
 	interface SearchResultMetadata {
 		type?: string;
@@ -569,144 +570,82 @@
 							<!-- Asset-specific filters (only show when Asset is selected) -->
 							{#if showAssetFilters}
 								{#if $facets.asset_types.length > 0}
-									<div class="mb-4">
-										<h3
-											class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wider"
-										>
-											{m.common_type()}
-										</h3>
-										{#each $facets.asset_types as { value, count } (value)}
-											<label class="flex items-center justify-between mb-2 cursor-pointer">
-												<div class="flex items-center gap-2">
-													<Checkbox
-														checked={selectedTypes.includes(value)}
-														onchange={(e) => {
-															if (e.currentTarget.checked) {
-																selectedTypes = [...selectedTypes, value];
-																selectedKinds = ['asset'];
-															} else {
-																selectedTypes = selectedTypes.filter((t) => t !== value);
-															}
-															handleFilterChange();
-														}}
-													/>
-													<span class="text-sm text-gray-700 dark:text-gray-300"
-														>{$catalogLabels.type(value)}</span
-													>
-												</div>
-												<span class="text-xs text-gray-500 dark:text-gray-400">({count})</span>
-											</label>
-										{/each}
-									</div>
+									<FacetGroup
+										title={m.common_type()}
+										items={$facets.asset_types.map(({ value, count }) => ({
+											value,
+											count,
+											label: $catalogLabels.type(value)
+										}))}
+										selected={selectedTypes}
+										ontoggle={(value, checked) => {
+											selectedTypes = checked
+												? [...selectedTypes, value]
+												: selectedTypes.filter((t) => t !== value);
+											if (checked) selectedKinds = ['asset'];
+											handleFilterChange();
+										}}
+									/>
 								{/if}
-
 								{#if $facets.providers.length > 0}
-									<div class="mb-4">
-										<h3
-											class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wider"
-										>
-											{m.discover_providers_heading()}
-										</h3>
-										{#each $facets.providers as { value, count } (value)}
-											<label class="flex items-center justify-between mb-2 cursor-pointer">
-												<div class="flex items-center gap-2">
-													<Checkbox
-														checked={selectedProviders.includes(value)}
-														onchange={(e) => {
-															if (e.currentTarget.checked) {
-																selectedProviders = [...selectedProviders, value];
-																selectedKinds = ['asset'];
-															} else {
-																selectedProviders = selectedProviders.filter((s) => s !== value);
-															}
-															handleFilterChange();
-														}}
-													/>
-													<span class="text-sm text-gray-700 dark:text-gray-300"
-														>{$catalogLabels.provider(value)}</span
-													>
-												</div>
-												<span class="text-xs text-gray-500 dark:text-gray-400">({count})</span>
-											</label>
-										{/each}
-									</div>
+									<FacetGroup
+										title={m.discover_providers_heading()}
+										items={$facets.providers.map(({ value, count }) => ({
+											value,
+											count,
+											label: $catalogLabels.provider(value)
+										}))}
+										selected={selectedProviders}
+										ontoggle={(value, checked) => {
+											selectedProviders = checked
+												? [...selectedProviders, value]
+												: selectedProviders.filter((s) => s !== value);
+											if (checked) selectedKinds = ['asset'];
+											handleFilterChange();
+										}}
+									/>
 								{/if}
-
 								{#if $facets.tags.length > 0}
-									<div>
-										<h3
-											class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wider"
-										>
-											{m.common_tags()}
-										</h3>
-										{#each $facets.tags as { value, count } (value)}
-											<label class="flex items-center justify-between mb-2 gap-2 cursor-pointer">
-												<div class="flex items-center gap-2 min-w-0">
-													<Checkbox
-														checked={selectedTags.includes(value)}
-														onchange={(e) => {
-															if (e.currentTarget.checked) {
-																selectedTags = [...selectedTags, value];
-																selectedKinds = ['asset'];
-															} else {
-																selectedTags = selectedTags.filter((t) => t !== value);
-															}
-															handleFilterChange();
-														}}
-													/>
-													<span
-														class="text-sm text-gray-700 dark:text-gray-300 truncate"
-														title={value}
-													>
-														{value.length > 100 ? value.slice(0, 100) + '...' : value}
-													</span>
-												</div>
-												<span class="flex-shrink-0 text-xs text-gray-500 dark:text-gray-400"
-													>({count})</span
-												>
-											</label>
-										{/each}
-									</div>
+									<FacetGroup
+										title={m.common_tags()}
+										items={$facets.tags.map(({ value, count }) => ({
+											value,
+											count,
+											label: value.length > 100 ? value.slice(0, 100) + '...' : value
+										}))}
+										selected={selectedTags}
+										ontoggle={(value, checked) => {
+											selectedTags = checked
+												? [...selectedTags, value]
+												: selectedTags.filter((t) => t !== value);
+											if (checked) selectedKinds = ['asset'];
+											handleFilterChange();
+										}}
+									/>
 								{/if}
 								{#each facetFields as field (field.id)}
 									{@const values = $facets.metadata[field.storage] || []}
 									{#if values.length > 0}
-										<div class="mt-4">
-											<h3
-												class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wider"
-											>
-												{governedFieldLabel(field)}
-											</h3>
-											{#each values as { value, count } (value)}
-												<label class="flex items-center justify-between mb-2 cursor-pointer">
-													<div class="flex items-center gap-2">
-														<Checkbox
-															checked={(selectedGoverned[field.id] || []).includes(value)}
-															onchange={(e) => {
-																const current = selectedGoverned[field.id] || [];
-																if (e.currentTarget.checked) {
-																	selectedGoverned = {
-																		...selectedGoverned,
-																		[field.id]: [...current, value]
-																	};
-																	selectedKinds = ['asset'];
-																} else {
-																	selectedGoverned = {
-																		...selectedGoverned,
-																		[field.id]: current.filter((v) => v !== value)
-																	};
-																}
-																handleFilterChange();
-															}}
-														/>
-														<span class="text-sm text-gray-700 dark:text-gray-300"
-															>{governedValueLabel(field, value)}</span
-														>
-													</div>
-													<span class="text-xs text-gray-500 dark:text-gray-400">({count})</span>
-												</label>
-											{/each}
-										</div>
+										<FacetGroup
+											title={governedFieldLabel(field)}
+											items={values.map(({ value, count }) => ({
+												value,
+												count,
+												label: governedValueLabel(field, value)
+											}))}
+											selected={selectedGoverned[field.id] || []}
+											ontoggle={(value, checked) => {
+												const current = selectedGoverned[field.id] || [];
+												selectedGoverned = {
+													...selectedGoverned,
+													[field.id]: checked
+														? [...current, value]
+														: current.filter((v) => v !== value)
+												};
+												if (checked) selectedKinds = ['asset'];
+												handleFilterChange();
+											}}
+										/>
 									{/if}
 								{/each}
 							{/if}
