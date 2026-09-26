@@ -1,15 +1,17 @@
 <script lang="ts">
-	import { entityPanels, type EntityRef } from '$lib/extensions/entity-panels';
+	import { entityPanels, panelsFor, type EntityRef } from '$lib/extensions/entity-panels';
 
-	let { entity }: { entity: EntityRef } = $props();
+	/** `withTabs` shows tab panels here too, for pages without a tab bar. */
+	let { entity, withTabs = false }: { entity: EntityRef; withTabs?: boolean } = $props();
 
-	const shown = $derived(
-		$entityPanels.filter((panel) => !panel.kinds || panel.kinds.includes(entity.kind))
-	);
+	const shown = $derived([
+		...panelsFor($entityPanels, entity.kind, 'side'),
+		...(withTabs ? panelsFor($entityPanels, entity.kind, 'tab') : [])
+	]);
 </script>
 
 {#each shown as panel (panel.id)}
 	{#await panel.load() then module}
-		<module.default {entity} />
+		<module.default {entity} placement="side" />
 	{/await}
 {/each}

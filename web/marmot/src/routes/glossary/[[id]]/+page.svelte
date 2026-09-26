@@ -678,7 +678,7 @@
 									/>
 								{/if}
 
-								<EntityPanels entity={{ kind: 'glossary_term', id: selectedTerm.id }} />
+								<EntityPanels entity={{ kind: 'glossary_term', id: selectedTerm.id }} withTabs />
 
 								<!-- Description (Markdown Body) -->
 								{#if selectedTerm.description || (isEditing && editedTerm)}

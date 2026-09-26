@@ -25,6 +25,8 @@
 	import AssetIcon from '$components/ui/Icon.svelte';
 	import DocumentationSystem from '$components/docs/DocumentationSystem.svelte';
 	import Tabs, { type Tab } from '$components/ui/Tabs.svelte';
+	import EntityTab from '$components/extensions/EntityTab.svelte';
+	import { entityPanels, panelTabs } from '$lib/extensions/entity-panels';
 	import QueryBuilder from '$components/query/QueryBuilder.svelte';
 	import ConfirmModal from '$components/ui/ConfirmModal.svelte';
 	import IconUploader from '$components/product/IconUploader.svelte';
@@ -124,8 +126,7 @@
 		{ id: 'rules', label: m.products_tab_rules(), icon: 'material-symbols:filter-list' }
 	];
 
-	// All tabs are always visible
-	let visibleTabs = $derived(tabs);
+	let visibleTabs = $derived([...tabs, ...panelTabs($entityPanels, 'data_product')]);
 
 	function setActiveTab(tab: string) {
 		const url = new URL(window.location.href);
@@ -798,7 +799,7 @@
 			</div>
 
 			<div class="flex-1 overflow-y-auto overflow-x-auto px-8">
-				<div class="pb-16 max-w-7xl mx-auto">
+				<div class="pb-16 {activeTab.startsWith('ext-') ? '' : 'max-w-7xl mx-auto'}">
 					<div class="rounded-lg max-w-full overflow-x-auto">
 						<!-- Metadata Tab -->
 						{#if activeTab === 'metadata'}
@@ -1102,6 +1103,12 @@
 										</p>
 									</div>
 								{/if}
+							</div>
+						{/if}
+
+						{#if activeTab.startsWith('ext-')}
+							<div class="mt-6">
+								<EntityTab tab={activeTab} entity={{ kind: 'data_product', id: productId }} />
 							</div>
 						{/if}
 

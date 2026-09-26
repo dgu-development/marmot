@@ -14,6 +14,8 @@
 	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
 	import { governedFields, governedPaths } from '$lib/metamodel/values';
 	import Lineage from '$components/lineage/Lineage.svelte';
+	import EntityTab from '$components/extensions/EntityTab.svelte';
+	import { entityPanels, panelTabs } from '$lib/extensions/entity-panels';
 	import AssetContents from '$components/asset/AssetContents.svelte';
 	import SchemaEditor from '$components/schema/SchemaEditor.svelte';
 	import AssetEnvironmentsView from '$components/asset/AssetEnvironmentsView.svelte';
@@ -312,6 +314,7 @@
 			return true;
 		})
 	);
+	let pageTabs = $derived([...visibleTabs, ...panelTabs($entityPanels, 'asset')]);
 
 	$effect(() => {
 		if (assetType && assetService && assetName) {
@@ -549,13 +552,15 @@
 						/>
 					</div>
 
-					<Tabs tabs={visibleTabs} bind:activeTab onTabChange={setActiveTab} />
+					<Tabs tabs={pageTabs} bind:activeTab onTabChange={setActiveTab} />
 				{/if}
 			</div>
 
 			<div class="flex-1 overflow-y-auto {activeTab === 'preview' ? '' : 'overflow-x-auto'} px-8">
 				<div
-					class="pb-16 {activeTab === 'lineage' || activeTab === 'preview'
+					class="pb-16 {activeTab === 'lineage' ||
+					activeTab === 'preview' ||
+					activeTab.startsWith('ext-')
 						? ''
 						: 'max-w-7xl mx-auto'}"
 				>
@@ -651,6 +656,13 @@
 						{:else if activeTab === 'lineage'}
 							<div class="mt-6">
 								<Lineage currentAsset={asset} />
+							</div>
+						{:else if activeTab.startsWith('ext-')}
+							<div class="mt-6">
+								<EntityTab
+									tab={activeTab}
+									entity={{ kind: 'asset', id: asset.id, mrn: asset.mrn }}
+								/>
 							</div>
 						{:else}
 							<div class="mt-6">
