@@ -223,6 +223,7 @@ func (s *Service) List(ctx context.Context, q string, limit, offset int) (*ListR
 			return nil, err
 		}
 		// The index carries summaries; full source lists and content are loaded on navigation.
+		p.Documents = nil
 		p.Content = ""
 		p.DraftContent = ""
 		p.Sources = []Source{}

@@ -124,6 +124,11 @@ func TestKnowledgeReviewFreshnessAndCatalogRelations(t *testing.T) {
 	if err != nil || list.Total != 4 {
 		t.Fatalf("all entities indexed before compilation: %+v %v", list, err)
 	}
+	for _, item := range list.Pages {
+		if len(item.Documents) != 0 {
+			t.Fatal("library index must not include full documents")
+		}
+	}
 	e := Entity{Kind: "asset", ID: assetID}
 	p, err := svc.Compile(ctx, e)
 	if err != nil {
