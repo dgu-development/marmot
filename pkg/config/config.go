@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -134,6 +135,13 @@ type Config struct {
 		Timeout       int                  `mapstructure:"timeout"` // seconds
 		Elasticsearch *ElasticsearchConfig `mapstructure:"elasticsearch"`
 	} `mapstructure:"search"`
+
+	Knowledge struct {
+		Endpoint        string `mapstructure:"endpoint"`
+		APIKey          string `mapstructure:"api_key"`
+		Model           string `mapstructure:"model"`
+		IntervalSeconds int    `mapstructure:"interval_seconds"`
+	} `mapstructure:"knowledge"`
 
 	Memory struct {
 		// LookupLimit is how many memories a lookup of one asset or data
@@ -401,6 +409,9 @@ func loadConfig(configPath string) error {
 	// Search env vars
 	v.BindEnv("search.timeout")
 	v.BindEnv("memory.lookup_limit")
+	for _, key := range []string{"endpoint", "api_key", "model", "interval_seconds"} {
+		v.BindEnv("knowledge." + key)
+	}
 	v.BindEnv("search.elasticsearch.enabled")
 	v.BindEnv("search.elasticsearch.addresses")
 	v.BindEnv("search.elasticsearch.username")
@@ -546,6 +557,10 @@ func setDefaults(v *viper.Viper) {
 	// Search defaults
 	v.SetDefault("search.timeout", 10) // 10 seconds
 	v.SetDefault("memory.lookup_limit", 25)
+	v.SetDefault("knowledge.endpoint", "")
+	v.SetDefault("knowledge.api_key", "")
+	v.SetDefault("knowledge.model", "")
+	v.SetDefault("knowledge.interval_seconds", 900)
 	v.SetDefault("search.elasticsearch.enabled", false)
 	v.SetDefault("search.elasticsearch.index", "marmot")
 	v.SetDefault("search.elasticsearch.bulk_size", 500)
@@ -572,6 +587,21 @@ func (c *Config) BuildDSN() string {
 }
 
 func validate(cfg *Config) error {
+	if cfg.Knowledge.IntervalSeconds < 0 || (cfg.Knowledge.IntervalSeconds > 0 && cfg.Knowledge.IntervalSeconds < 60) {
+		return fmt.Errorf("knowledge.interval_seconds must be 0 or at least 60")
+	}
+	if cfg.Knowledge.Endpoint != "" {
+		u, err := url.Parse(cfg.Knowledge.Endpoint)
+		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return fmt.Errorf("knowledge.endpoint must be an HTTP(S) chat completions URL without credentials, query or fragment")
+		}
+		if strings.TrimSpace(cfg.Knowledge.Model) == "" {
+			return fmt.Errorf("knowledge.model is required with knowledge.endpoint")
+		}
+	} else if cfg.Knowledge.Model != "" || cfg.Knowledge.APIKey != "" {
+		return fmt.Errorf("knowledge.endpoint is required with knowledge.model or knowledge.api_key")
+	}
+
 	if cfg.Server.Port < 1 || cfg.Server.Port > 65535 {
 		return fmt.Errorf("invalid server port: %d", cfg.Server.Port)
 	}

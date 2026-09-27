@@ -1,11 +1,12 @@
 package mcp
 
 import (
+	"context"
+	"github.com/marmotdata/marmot/internal/core/knowledge"
 	"net/http"
 
 	"github.com/marmotdata/marmot/internal/api/v1/common"
 	memoryAPI "github.com/marmotdata/marmot/internal/api/v1/memory"
-	"github.com/marmotdata/marmot/pkg/config"
 	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/auth"
 	"github.com/marmotdata/marmot/internal/core/dataproduct"
@@ -16,6 +17,7 @@ import (
 	"github.com/marmotdata/marmot/internal/core/user"
 	"github.com/marmotdata/marmot/internal/mcp"
 	"github.com/marmotdata/marmot/internal/telemetry/lookups"
+	"github.com/marmotdata/marmot/pkg/config"
 )
 
 type Handler struct {
@@ -81,4 +83,8 @@ func (h *Handler) Routes() []common.Route {
 // SetMemory enables the memory tools, with access checked like the REST API.
 func (h *Handler) SetMemory(svc memory.Service) {
 	h.mcpServer.SetMemory(svc, memoryAPI.Access{Users: h.userService})
+}
+
+func (h *Handler) SetKnowledge(svc *knowledge.Service, check func(context.Context, bool) error) {
+	h.mcpServer.SetKnowledge(svc, check)
 }

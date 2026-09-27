@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/dataproduct"
+	"github.com/marmotdata/marmot/internal/core/domain"
 	"github.com/marmotdata/marmot/internal/core/memory"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rs/zerolog/log"
@@ -274,6 +275,8 @@ func productTarget(p *dataproduct.DataProduct) *memoryTarget {
 
 func (tc *ToolContext) memoryError(err error) *mcpsdk.CallToolResult {
 	switch {
+	case errors.Is(err, domain.ErrForbidden):
+		return tc.errorWithGuidance("Permission denied", "Memory is outside your writable domains.", nil)
 	case errors.Is(err, memory.ErrNotFound):
 		return tc.errorWithGuidance("Memory not found", "Use recall to find the memory ID.", nil)
 	case errors.Is(err, memory.ErrInvalid):

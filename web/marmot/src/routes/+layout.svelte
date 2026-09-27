@@ -312,6 +312,13 @@
 							>
 								<Icon icon="material-symbols:search" class="w-5 h-5" />
 							</button>
+							<a
+								href={resolve('/wiki')}
+								class="sm:hidden p-2 text-gray-600 dark:text-gray-400 hover:text-earthy-terracotta-700"
+								aria-label={m.nav_wiki()}
+								aria-current={$page.url.pathname.startsWith('/wiki') ? 'page' : undefined}
+								><Icon icon="material-symbols:menu-book-outline-rounded" class="w-5 h-5" /></a
+							>
 
 							<a
 								href={resolve('/discover')}
@@ -441,6 +448,19 @@
 									</div>
 								{/if}
 							</div>
+
+							<a
+								href={resolve('/wiki')}
+								aria-current={$page.url.pathname.startsWith('/wiki') ? 'page' : undefined}
+								class="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium whitespace-nowrap px-4 py-2 rounded-md focus-visible:outline focus-visible:outline-2 {$page.url.pathname.startsWith(
+									'/wiki'
+								)
+									? 'text-earthy-terracotta-700'
+									: 'text-gray-600 dark:text-gray-300 hover:text-earthy-terracotta-700'}"
+							>
+								<Icon icon="material-symbols:menu-book-outline-rounded" class="w-4 h-4" />
+								<span>{m.nav_wiki()}</span>
+							</a>
 
 							{#if $auth}
 								<NotificationBell />

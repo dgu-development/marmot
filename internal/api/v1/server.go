@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -23,6 +24,7 @@ import (
 	docsAPI "github.com/marmotdata/marmot/internal/api/v1/docs"
 	domainsAPI "github.com/marmotdata/marmot/internal/api/v1/domains"
 	"github.com/marmotdata/marmot/internal/api/v1/glossary"
+	knowledgeAPI "github.com/marmotdata/marmot/internal/api/v1/knowledge"
 	"github.com/marmotdata/marmot/internal/api/v1/lineage"
 	mcpAPI "github.com/marmotdata/marmot/internal/api/v1/mcp"
 	memoryAPI "github.com/marmotdata/marmot/internal/api/v1/memory"
@@ -50,9 +52,10 @@ import (
 	"github.com/marmotdata/marmot/internal/core/enrichment"
 	glossaryService "github.com/marmotdata/marmot/internal/core/glossary"
 	glossaryImporter "github.com/marmotdata/marmot/internal/core/glossary/importer"
+	"github.com/marmotdata/marmot/internal/core/knowledge"
 	lineageService "github.com/marmotdata/marmot/internal/core/lineage"
-	"github.com/marmotdata/marmot/internal/core/metamodel"
 	memoryService "github.com/marmotdata/marmot/internal/core/memory"
+	"github.com/marmotdata/marmot/internal/core/metamodel"
 	notificationService "github.com/marmotdata/marmot/internal/core/notification"
 	roleService "github.com/marmotdata/marmot/internal/core/role"
 	runService "github.com/marmotdata/marmot/internal/core/runs"
@@ -90,10 +93,12 @@ import (
 // @description Type "Bearer" followed by a space and JWT.
 
 type Server struct {
-	config         *config.Config
-	metricsService *metrics.Service
-	wsHub          *websocket.Hub
-	scheduler      *runService.Scheduler
+	knowledgeCancel context.CancelFunc
+	knowledgeDone   chan struct{}
+	config          *config.Config
+	metricsService  *metrics.Service
+	wsHub           *websocket.Hub
+	scheduler       *runService.Scheduler
 
 	// Data product membership evaluation
 	membershipService    *dataproductService.MembershipService
@@ -187,6 +192,9 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	docsRepo := docsService.NewPostgresRepository(db)
 	docsSvc := docsService.NewService(docsRepo)
 	memorySvc := memoryService.NewService(memoryService.NewPostgresRepository(db))
+	if domainGuard != nil {
+		memorySvc = domainService.GuardMemory(memorySvc, domainGuard)
+	}
 	notificationRepo := notificationService.NewPostgresRepository(db)
 	notificationSvc := notificationService.NewService(
 		notificationRepo,
@@ -586,9 +594,17 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	}
 	mcpHandler := mcpAPI.NewHandler(assetSvc, glossarySvc, userSvc, teamSvc, dataProductSvc, lineageSvc, finalSearchSvc, authSvc, config, lookupsRecorder)
 	mcpHandler.SetMemory(memorySvc)
+	knowledgeSchema, err := json.Marshal(metamodelRegistry.Schema())
+	if err != nil {
+		log.Fatal().Err(err).Msg("Cannot encode knowledge metamodel")
+	}
+	knowledgeSvc := knowledge.NewService(db, knowledge.Options{Endpoint: config.Knowledge.Endpoint, APIKey: config.Knowledge.APIKey, Model: config.Knowledge.Model, Schema: knowledgeSchema, DomainsEnabled: config.Domains.Enabled})
+	knowledgeAccess := knowledgeAPI.Access{Users: userSvc, Guard: domainGuard, DomainsEnabled: config.Domains.Enabled}
+	mcpHandler.SetKnowledge(knowledgeSvc, knowledgeAccess.Check)
 
 	server.handlers = []interface{ Routes() []common.Route }{
 		health.NewHandler(),
+		knowledgeAPI.NewHandler(knowledgeSvc, knowledgeAccess, authSvc, config),
 		assets.NewHandler(assetSvc, assetDocsSvc, userSvc, authSvc, metricsService, runsSvc, scheduleSvc, teamSvc, assetRuleSvc, scheduleEncryptor, config, lookupsRecorder),
 		users.NewHandler(userSvc, authSvc, config),
 		authHandler,
@@ -666,10 +682,23 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 		}
 	}
 
+	if config.Knowledge.IntervalSeconds > 0 {
+		ctx, cancel := context.WithCancel(context.Background())
+		server.knowledgeCancel = cancel
+		server.knowledgeDone = make(chan struct{})
+		go func() {
+			defer close(server.knowledgeDone)
+			runKnowledge(ctx, db, knowledgeSvc, time.Duration(config.Knowledge.IntervalSeconds)*time.Second)
+		}()
+	}
 	return server
 }
 
 func (s *Server) Stop() {
+	if s.knowledgeCancel != nil {
+		s.knowledgeCancel()
+		<-s.knowledgeDone
+	}
 	if s.operatorSyncer != nil {
 		s.operatorSyncer.Stop()
 	}

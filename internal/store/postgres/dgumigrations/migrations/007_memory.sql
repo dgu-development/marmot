@@ -32,7 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_search
 -- Reading memory needs assets:view. Adding, editing and deleting it needs
 -- memory:write.
 INSERT INTO permissions (name, description, resource_type, action) VALUES
-('write_memory', 'Add, edit and delete memory on assets and data products', 'memory', 'write');
+('dgu_write_memory', 'Add, edit and delete memory on assets and data products', 'memory', 'write');
 
 -- Granted to admin only by default; other roles are given it explicitly.
 INSERT INTO role_permissions (role_id, permission_id)
@@ -40,13 +40,13 @@ SELECT
     (SELECT id FROM roles WHERE name = 'admin'),
     id
 FROM permissions
-WHERE name = 'write_memory';
+WHERE name = 'dgu_write_memory';
 
 ---- create above / drop below ----
 
 DELETE FROM role_permissions
-WHERE permission_id = (SELECT id FROM permissions WHERE name = 'write_memory');
+WHERE permission_id = (SELECT id FROM permissions WHERE name = 'dgu_write_memory');
 
-DELETE FROM permissions WHERE name = 'write_memory';
+DELETE FROM permissions WHERE name = 'dgu_write_memory';
 
 DROP TABLE IF EXISTS memories;

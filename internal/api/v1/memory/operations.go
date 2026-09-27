@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"github.com/marmotdata/marmot/internal/api/v1/common"
+	"github.com/marmotdata/marmot/internal/core/domain"
 	"github.com/marmotdata/marmot/internal/core/memory"
 	"github.com/rs/zerolog/log"
 )
@@ -23,6 +24,8 @@ type UpdateRequest struct {
 
 func respondServiceError(w http.ResponseWriter, err error, msg string) {
 	switch {
+	case errors.Is(err, domain.ErrForbidden):
+		common.RespondError(w, http.StatusForbidden, "Memory is outside your writable domains")
 	case errors.Is(err, memory.ErrNotFound):
 		common.RespondError(w, http.StatusNotFound, "Memory not found")
 	case errors.Is(err, memory.ErrInvalid):
