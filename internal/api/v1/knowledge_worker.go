@@ -41,19 +41,25 @@ func compileKnowledge(ctx context.Context, db *pgxpool.Pool, svc *knowledge.Serv
 		}
 	}()
 	for offset := 0; ctx.Err() == nil; {
-		result, err := svc.CompileBatch(ctx, 1, offset)
+		list, err := svc.List(ctx, "", 1, offset)
 		if err != nil {
 			if ctx.Err() == nil {
 				log.Error().Err(err).Msg("WikiLLM compilation failed")
 			}
 			return
 		}
-		for _, failure := range result.Errors {
-			log.Warn().Str("entity_type", failure.Kind).Str("entity_id", failure.ID).Str("error", failure.Error).Msg("WikiLLM entity compilation failed")
+		for _, entity := range list.Pages {
+			page, err := svc.Compile(ctx, entity.Entity)
+			if err == nil && page.DraftMode == "extractive" && (page.PublishedAt == nil || page.Mode == "extractive") && page.DraftFreshness == "fresh" && page.SourceHash != page.DraftSourceHash {
+				_, err = svc.Publish(ctx, entity.Entity, page.DraftHash, "system:knowledge-worker")
+			}
+			if err != nil && ctx.Err() == nil {
+				log.Warn().Str("entity_type", entity.Kind).Str("entity_id", entity.ID).Err(err).Msg("WikiLLM entity compilation failed")
+			}
 		}
-		if result.NextOffset >= result.Total || result.NextOffset <= offset {
+		offset++
+		if offset >= list.Total {
 			return
 		}
-		offset = result.NextOffset
 	}
 }
