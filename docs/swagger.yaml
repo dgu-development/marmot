@@ -1473,6 +1473,56 @@ definitions:
     - password
     - username
     type: object
+  Memory:
+    properties:
+      content:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        $ref: '#/definitions/memory.Author'
+      entity_id:
+        type: string
+      entity_type:
+        $ref: '#/definitions/memory.EntityType'
+      found_count:
+        description: FoundCount is how often a search has returned the memory.
+        type: integer
+      id:
+        type: string
+      last_found_at:
+        type: string
+      score:
+        description: |-
+          Score is the search relevance; higher is more relevant. Set on search
+          results only.
+        type: number
+      session_id:
+        description: SessionID is the session the entry was created in.
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        $ref: '#/definitions/memory.Author'
+      updated_session_id:
+        type: string
+    type: object
+  MemoryList:
+    properties:
+      memories:
+        items:
+          $ref: '#/definitions/Memory'
+        type: array
+      total:
+        type: integer
+    type: object
+  MemorySearchResult:
+    properties:
+      memories:
+        items:
+          $ref: '#/definitions/Memory'
+        type: array
+    type: object
   MessageResponse:
     properties:
       message:
@@ -1684,6 +1734,13 @@ definitions:
         type: boolean
       running:
         type: boolean
+    type: object
+  RememberRequest:
+    properties:
+      content:
+        type: string
+      session_id:
+        type: string
     type: object
   RemoveTermRequest:
     properties:
@@ -2344,6 +2401,13 @@ definitions:
       role:
         type: string
     type: object
+  UpdateMemoryRequest:
+    properties:
+      content:
+        type: string
+      session_id:
+        type: string
+    type: object
   UpdatePasswordRequest:
     properties:
       new_password:
@@ -2888,6 +2952,124 @@ definitions:
       update:
         type: integer
     type: object
+  knowledge.BatchError:
+    properties:
+      entity_id:
+        type: string
+      entity_type:
+        type: string
+      error:
+        type: string
+    type: object
+  knowledge.BatchResult:
+    properties:
+      compiled:
+        type: integer
+      errors:
+        items:
+          $ref: '#/definitions/knowledge.BatchError'
+        type: array
+      next_offset:
+        type: integer
+      skipped:
+        type: integer
+      total:
+        type: integer
+    type: object
+  knowledge.ListResult:
+    properties:
+      limit:
+        type: integer
+      offset:
+        type: integer
+      pages:
+        items:
+          $ref: '#/definitions/knowledge.Page'
+        type: array
+      total:
+        type: integer
+    type: object
+  knowledge.Page:
+    properties:
+      compiled_at:
+        type: string
+      content:
+        type: string
+      current_source_hash:
+        type: string
+      draft_content:
+        type: string
+      draft_freshness:
+        type: string
+      draft_hash:
+        type: string
+      draft_mode:
+        type: string
+      draft_source_hash:
+        type: string
+      draft_sources:
+        items:
+          $ref: '#/definitions/knowledge.Source'
+        type: array
+      entity_id:
+        type: string
+      entity_type:
+        type: string
+      entity_url:
+        type: string
+      error:
+        type: string
+      freshness:
+        type: string
+      mode:
+        type: string
+      published_at:
+        type: string
+      published_sources:
+        items:
+          $ref: '#/definitions/knowledge.Source'
+        type: array
+      source_hash:
+        type: string
+      sources:
+        items:
+          $ref: '#/definitions/knowledge.Source'
+        type: array
+      status:
+        type: string
+      title:
+        type: string
+    type: object
+  knowledge.Source:
+    properties:
+      field:
+        type: string
+      hash:
+        type: string
+      id:
+        type: string
+      title:
+        type: string
+      url:
+        type: string
+    type: object
+  memory.Author:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+    type: object
+  memory.EntityType:
+    enum:
+    - asset
+    - data_product
+    type: string
+    x-enum-varnames:
+    - EntityAsset
+    - EntityDataProduct
   metamodel.AppliesTo:
     properties:
       assetTypes:
@@ -3262,6 +3444,11 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  v1_knowledge.PublishRequest:
+    properties:
+      draft_hash:
+        type: string
     type: object
   v1_roles.createRoleRequest:
     properties:
@@ -6225,6 +6412,194 @@ paths:
       summary: Validate plugin configuration
       tags:
       - ingestion
+  /api/v1/knowledge:
+    get:
+      parameters:
+      - description: Search
+        in: query
+        name: q
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/knowledge.ListResult'
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Browse WikiLLM entities and publication status
+      tags:
+      - knowledge
+  /api/v1/knowledge/compile:
+    post:
+      parameters:
+      - default: 1
+        description: Batch size
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/knowledge.BatchResult'
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Compile a bounded batch of catalog entities
+      tags:
+      - knowledge
+  /api/v1/knowledge/context:
+    get:
+      parameters:
+      - description: Task or question
+        in: query
+        name: q
+        type: string
+      - default: 5
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/knowledge.Page'
+            type: array
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Retrieve fresh published knowledge with citations
+      tags:
+      - knowledge
+  /api/v1/knowledge/pages/{entityType}/{entityId}:
+    get:
+      parameters:
+      - description: Entity type
+        enum:
+        - asset
+        - data_product
+        - glossary_term
+        - domain
+        in: path
+        name: entityType
+        required: true
+        type: string
+      - description: Entity ID
+        in: path
+        name: entityId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/knowledge.Page'
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Read a WikiLLM entity page
+      tags:
+      - knowledge
+  /api/v1/knowledge/pages/{entityType}/{entityId}/compile:
+    post:
+      parameters:
+      - description: Entity type
+        enum:
+        - asset
+        - data_product
+        - glossary_term
+        - domain
+        in: path
+        name: entityType
+        required: true
+        type: string
+      - description: Entity ID
+        in: path
+        name: entityId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/knowledge.Page'
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Compile an entity into a review candidate
+      tags:
+      - knowledge
+  /api/v1/knowledge/pages/{entityType}/{entityId}/publish:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Entity type
+        enum:
+        - asset
+        - data_product
+        - glossary_term
+        - domain
+        in: path
+        name: entityType
+        required: true
+        type: string
+      - description: Entity ID
+        in: path
+        name: entityId
+        required: true
+        type: string
+      - description: Reviewed draft hash
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1_knowledge.PublishRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/knowledge.Page'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Publish the exact reviewed draft if its sources are still current
+      tags:
+      - knowledge
   /api/v1/lineage:
     post:
       consumes:
@@ -6481,6 +6856,299 @@ paths:
       summary: MCP endpoint
       tags:
       - mcp
+  /api/v1/memory/{entityType}/{entityId}:
+    get:
+      description: List an entity's memory. By default the most recently changed comes
+        first; sort=used ranks by use, sort=found by how often searches returned it,
+        sort=created lists the newest first.
+      parameters:
+      - description: Entity type
+        enum:
+        - asset
+        - data_product
+        in: path
+        name: entityType
+        required: true
+        type: string
+      - description: Entity ID
+        in: path
+        name: entityId
+        required: true
+        type: string
+      - description: Session ID
+        in: query
+        name: session_id
+        type: string
+      - default: changed
+        description: Sort order
+        enum:
+        - changed
+        - used
+        - created
+        in: query
+        name: sort
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/MemoryList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: List memory
+      tags:
+      - memory
+    post:
+      consumes:
+      - application/json
+      description: Add a memory entry to an entity.
+      parameters:
+      - description: Entity type
+        enum:
+        - asset
+        - data_product
+        in: path
+        name: entityType
+        required: true
+        type: string
+      - description: Entity ID
+        in: path
+        name: entityId
+        required: true
+        type: string
+      - description: Entry
+        in: body
+        name: memory
+        required: true
+        schema:
+          $ref: '#/definitions/RememberRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/Memory'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Remember
+      tags:
+      - memory
+  /api/v1/memory/{entityType}/{entityId}/{memoryId}:
+    delete:
+      parameters:
+      - description: Entity type
+        enum:
+        - asset
+        - data_product
+        in: path
+        name: entityType
+        required: true
+        type: string
+      - description: Entity ID
+        in: path
+        name: entityId
+        required: true
+        type: string
+      - description: Memory ID
+        in: path
+        name: memoryId
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Forget a memory entry
+      tags:
+      - memory
+    get:
+      parameters:
+      - description: Entity type
+        enum:
+        - asset
+        - data_product
+        in: path
+        name: entityType
+        required: true
+        type: string
+      - description: Entity ID
+        in: path
+        name: entityId
+        required: true
+        type: string
+      - description: Memory ID
+        in: path
+        name: memoryId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/Memory'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Get a memory entry
+      tags:
+      - memory
+    put:
+      consumes:
+      - application/json
+      description: Replace an entry's content in place.
+      parameters:
+      - description: Entity type
+        enum:
+        - asset
+        - data_product
+        in: path
+        name: entityType
+        required: true
+        type: string
+      - description: Entity ID
+        in: path
+        name: entityId
+        required: true
+        type: string
+      - description: Memory ID
+        in: path
+        name: memoryId
+        required: true
+        type: string
+      - description: Content
+        in: body
+        name: memory
+        required: true
+        schema:
+          $ref: '#/definitions/UpdateMemoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/Memory'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Update a memory entry
+      tags:
+      - memory
+  /api/v1/memory/{entityType}/{entityId}/search:
+    get:
+      description: Search an entity's memory.
+      parameters:
+      - description: Entity type
+        enum:
+        - asset
+        - data_product
+        in: path
+        name: entityType
+        required: true
+        type: string
+      - description: Entity ID
+        in: path
+        name: entityId
+        required: true
+        type: string
+      - description: Query
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: Session ID
+        in: query
+        name: session_id
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/MemorySearchResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Search memory
+      tags:
+      - memory
   /api/v1/metamodel:
     get:
       description: Returns the composed native and configured field schema for an

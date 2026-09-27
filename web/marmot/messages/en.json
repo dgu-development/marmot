@@ -37,8 +37,13 @@
 	"apikeys_expiration_custom": "Custom",
 	"apikeys_expiration_days_option": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} day",
 				"countPlural=other": "{count} days"
@@ -49,8 +54,13 @@
 	"apikeys_expiration_never": "No expiration",
 	"apikeys_expires_in_days": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "expires in {count} day",
 				"countPlural=other": "expires in {count} days"
@@ -87,8 +97,13 @@
 	"asset_agent_spec_system_prompt": "System Prompt",
 	"asset_agent_spec_tool_unit": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} tool",
 				"countPlural=other": "{count} tools"
@@ -101,8 +116,13 @@
 	"asset_blade_full_view": "Full View",
 	"asset_card_grid_asset_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} asset",
 				"countPlural=other": "{count} assets"
@@ -128,8 +148,13 @@
 	"asset_environments_empty": "No environments available",
 	"asset_environments_field_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} field",
 				"countPlural=other": "{count} fields"
@@ -153,8 +178,13 @@
 	"asset_preview_null_value": "null",
 	"asset_preview_row_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "Showing {count} row",
 				"countPlural=other": "Showing {count} rows"
@@ -274,8 +304,13 @@
 	"assetrules_heading": "Asset Rules",
 	"assetrules_link_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} link",
 				"countPlural=other": "{count} links"
@@ -287,8 +322,13 @@
 	"assetrules_load_one_error": "Failed to load asset rule",
 	"assetrules_matched_asset_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} matched asset",
 				"countPlural=other": "{count} matched assets"
@@ -311,8 +351,13 @@
 	"assetrules_preview_error": "Failed to preview rule",
 	"assetrules_preview_matches_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "Matches {count} asset",
 				"countPlural=other": "Matches {count} assets"
@@ -326,8 +371,13 @@
 	"assetrules_remove_term_aria": "Remove term {name}",
 	"assetrules_rule_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} rule",
 				"countPlural=other": "{count} rules"
@@ -336,8 +386,13 @@
 	],
 	"assetrules_rule_matches_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "This rule matches {count} asset",
 				"countPlural=other": "This rule matches {count} assets"
@@ -359,8 +414,13 @@
 	"assetrules_tab_matched_assets": "Matched Assets",
 	"assetrules_term_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} term",
 				"countPlural=other": "{count} terms"
@@ -405,6 +465,7 @@
 	"common_overview": "Overview",
 	"common_owner": "Owner",
 	"common_owners": "Owners",
+	"common_pagination_showing": "Showing {from}-{to} of {total}",
 	"common_previous": "Previous",
 	"common_remove": "Remove",
 	"common_required": "Required",
@@ -458,8 +519,13 @@
 	"discover_remove_filter_aria": "Remove {value} filter",
 	"discover_result_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} result",
 				"countPlural=other": "{count} results"
@@ -760,8 +826,13 @@
 	"glossary_synonyms_label": "Synonyms",
 	"glossary_term_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} term",
 				"countPlural=other": "{count} terms"
@@ -831,8 +902,14 @@
 	"lineage_click_to_expand": "Click to expand",
 	"lineage_cluster_asset_count": [
 		{
-			"declarations": ["input count", "input type", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"input type",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} {type}",
 				"countPlural=other": "{count} {type}s"
@@ -992,8 +1069,13 @@
 	"notif_batch_asset_change_title": "Asset Updates",
 	"notif_batch_asset_deleted_message": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} asset has been deleted.",
 				"countPlural=other": "{count} assets have been deleted."
@@ -1003,8 +1085,13 @@
 	"notif_batch_asset_deleted_title": "Assets Deleted",
 	"notif_batch_lineage_change_message": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} asset has lineage changes.",
 				"countPlural=other": "{count} assets have lineage changes."
@@ -1128,8 +1215,13 @@
 	"pipelines_edit_subtitle": "Update your data ingestion pipeline configuration",
 	"pipelines_error_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} error",
 				"countPlural=other": "{count} errors"
@@ -1200,8 +1292,13 @@
 	"products_asset_count": "{count} assets",
 	"products_asset_matched_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} asset matched",
 				"countPlural=other": "{count} assets matched"
@@ -1271,8 +1368,13 @@
 	"products_load_failed_title": "Failed to Load",
 	"products_manual_asset_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} manual asset",
 				"countPlural=other": "{count} manual assets"
@@ -1307,8 +1409,13 @@
 	"products_preview_hint": "Click \"Preview\" to see which assets match this rule",
 	"products_product_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} product",
 				"countPlural=other": "{count} products"
@@ -1322,8 +1429,13 @@
 	"products_rule_badge": "Rule",
 	"products_rule_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} rule",
 				"countPlural=other": "{count} rules"
@@ -1433,8 +1545,13 @@
 	"roles_creating_label": "Creating...",
 	"roles_delete_assigned_warning": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "This role is assigned to {count} user. You must reassign them before deletion.",
 				"countPlural=other": "This role is assigned to {count} users. You must reassign them before deletion."
@@ -1469,8 +1586,13 @@
 	"roles_optional_badge": "(Optional)",
 	"roles_permissions_granted_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} permission granted",
 				"countPlural=other": "{count} permissions granted"
@@ -1487,8 +1609,13 @@
 	"roles_update_success": "Role \"{name}\" updated",
 	"roles_users_assigned_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} user assigned",
 				"countPlural=other": "{count} users assigned"
@@ -1890,8 +2017,13 @@
 	"teams_webhook_test_title": "Send test notification",
 	"teams_webhook_types_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} type",
 				"countPlural=other": "{count} types"
@@ -1962,7 +2094,9 @@
 				"input count",
 				"local countPlural = count: plural"
 			],
-			"selectors": ["countPlural"],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{from}–{to} of {count} role",
 				"countPlural=other": "{from}–{to} of {count} roles"
@@ -1977,7 +2111,9 @@
 				"input count",
 				"local countPlural = count: plural"
 			],
-			"selectors": ["countPlural"],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{from}–{to} of {count} role matched",
 				"countPlural=other": "{from}–{to} of {count} roles matched"
@@ -2077,5 +2213,157 @@
 	"pipelines_text_lines": "{count} lines",
 	"pipelines_text_too_large": "The file is larger than {size}.",
 	"pipelines_text_read_error": "The file could not be read.",
-	"domains_open_landing": "Domain portal"
+	"domains_open_landing": "Domain portal",
+	"memory_add": "Add memory",
+	"memory_add_placeholder": "What should agents and people know?",
+	"memory_delete_message": "Delete this memory? This cannot be undone.",
+	"memory_delete_title": "Delete memory",
+	"memory_description": "What agents and people have recorded about this entity.",
+	"memory_edited_by": "edited by {name}",
+	"memory_empty": "Nothing remembered yet.",
+	"memory_error_delete": "Failed to delete memory",
+	"memory_error_load": "Failed to load memory",
+	"memory_error_save": "Failed to save memory",
+	"memory_error_search": "Memory search failed",
+	"memory_no_match": "Nothing matches.",
+	"memory_search_placeholder": "Search memory",
+	"memory_search_results": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} match",
+				"countPlural=other": "{count} matches"
+			}
+		}
+	],
+	"memory_session": "session {id}",
+	"memory_sort_changed": "Recently updated",
+	"memory_sort_created": "Newest",
+	"memory_sort_label": "Sort memory",
+	"memory_tab": "Memory",
+	"memory_found_count": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "found {count} time",
+				"countPlural=other": "found {count} times"
+			}
+		}
+	],
+	"memory_sort_used": "Popular",
+	"nav_wiki": "WikiLLM",
+	"wiki_title": "WikiLLM",
+	"wiki_search": "Search entities",
+	"wiki_search_action": "Search",
+	"wiki_compile_all": "Compile catalog",
+	"wiki_compile": "Refresh summary",
+	"wiki_compiling": "Compiling…",
+	"wiki_stop": "Stop compilation",
+	"wiki_refresh": "Refresh",
+	"wiki_empty": "No entities match this search.",
+	"wiki_select": "Explore your knowledge",
+	"wiki_select_help": "Choose an entity to read its page, explore the evidence and review new knowledge.",
+	"wiki_uncompiled": "Not compiled",
+	"wiki_draft": "Draft",
+	"wiki_published": "Published",
+	"wiki_fresh": "Current",
+	"wiki_stale": "Sources changed",
+	"wiki_unverified": "Needs attention",
+	"wiki_asset": "Asset",
+	"wiki_data_product": "Data product",
+	"wiki_glossary_term": "Glossary term",
+	"wiki_domain": "Domain",
+	"wiki_entity": "Open in catalog",
+	"wiki_published_view": "Published page",
+	"wiki_draft_view": "Review draft",
+	"wiki_publish": "Publish reviewed draft",
+	"wiki_sources": "Evidence and sources",
+	"wiki_sources_help": "Each citation links to the source used by this revision.",
+	"wiki_no_page": "This entity has no published knowledge yet.",
+	"wiki_no_draft": "Compile this entity to prepare a draft for review.",
+	"wiki_stale_help": "The automatic summary is being updated. The description, sections and memories remain available.",
+	"wiki_review_help": "Check the claims and citations before publishing. Generated content is a proposal.",
+	"wiki_extractive": "Source compilation",
+	"wiki_llm": "AI synthesis",
+	"wiki_automatic": "Automatic compilation every {minutes} minutes",
+	"wiki_manual": "Manual compilation",
+	"wiki_progress": "{done} of {total} entities processed · {failed} errors",
+	"wiki_complete": "Compilation finished. New drafts are ready for review.",
+	"wiki_error": "Could not complete the operation. Please try again.",
+	"wiki_conflict": "The draft or its sources changed. Compile and review again.",
+	"wiki_denied": "You do not have permission for this knowledge operation.",
+	"wiki_loading": "Loading knowledge…",
+	"wiki_previous": "Previous",
+	"wiki_next": "Next",
+	"wiki_page_count": "{total} entities",
+	"wiki_saved": "Reviewed knowledge published.",
+	"wiki_memory": "Shared learnings",
+	"wiki_memory_help": "Capture discoveries, caveats and lessons from people and agents. They become sources for the next summary update.",
+	"wiki_compile_errors": "Some entities could not be compiled. Open the affected entity and retry.",
+	"wiki_library": "Library",
+	"wiki_contents": "On this page",
+	"wiki_source_count": "{total} sources",
+	"wiki_full_document": "View complete compiled document",
+	"wiki_open_source": "Open source",
+	"wiki_group_catalog": "Catalog facts",
+	"wiki_group_docs": "Documentation",
+	"wiki_group_memory": "Shared learnings",
+	"wiki_group_relations": "Relationships",
+	"wiki_group_model": "Metamodel",
+	"wiki_unavailable": "The WikiLLM interface is open, but the server does not offer its API yet. Update the overlay kernel.",
+	"wiki_description": "Description",
+	"wiki_no_description": "This entity does not have a description yet.",
+	"wiki_sections": "Sections",
+	"wiki_no_sections": "Add usage guidance, examples or decisions here. These sections are shared with the catalog documentation.",
+	"wiki_add_section": "Add section",
+	"wiki_section_title": "Section title",
+	"wiki_section_content": "Content (Markdown)",
+	"wiki_empty_section": "This section has no content yet.",
+	"wiki_edit": "Edit",
+	"wiki_facts": "Entity details",
+	"wiki_no_facts": "No more metadata is available.",
+	"wiki_no_relations": "No relations have been recorded yet.",
+	"wiki_maintenance": "Review options",
+	"ui_markdown_guide": "Markdown syntax guide ↗",
+	"wiki_field_defined_by": "Defined by",
+	"wiki_field_inverse_defined_by": "Defines",
+	"wiki_field_derived_from": "Derived from",
+	"wiki_field_inverse_derived_from": "Used to derive",
+	"wiki_field_member_of": "Part of the product",
+	"wiki_field_inverse_member_of": "Includes asset",
+	"wiki_field_flows_to": "Sends data to",
+	"wiki_field_inverse_flows_to": "Receives data from",
+	"wiki_field_child_of": "Parent",
+	"wiki_field_inverse_child_of": "Contains",
+	"wiki_field_in_domain": "Belongs to domain",
+	"wiki_field_inverse_in_domain": "Groups",
+	"wiki_field_mrn": "Catalog identifier",
+	"wiki_field_type": "Asset type",
+	"wiki_field_providers": "Sources",
+	"wiki_field_environments": "Environments",
+	"wiki_field_content": "Documentation",
+	"wiki_field_tags": "Tags",
+	"wiki_field_synonyms": "Also known as",
+	"wiki_field_parent_id": "Parent identifier",
+	"wiki_field_parent_term_id": "Parent term",
+	"wiki_field_restricted": "Restricted access",
+	"wiki_field_name": "Name",
+	"wiki_field_description": "Description",
+	"wiki_field_user_description": "Edited description",
+	"wiki_field_definition": "Definition",
+	"wiki_field_user_definition": "Edited definition",
+	"wiki_field_metadata": "Metadata",
+	"wiki_field_schema": "Schema"
 }

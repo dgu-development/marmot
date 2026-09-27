@@ -37,8 +37,13 @@
 	"apikeys_expiration_custom": "Personalizado",
 	"apikeys_expiration_days_option": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} día",
 				"countPlural=other": "{count} días"
@@ -49,8 +54,13 @@
 	"apikeys_expiration_never": "Sin caducidad",
 	"apikeys_expires_in_days": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "caduca en {count} día",
 				"countPlural=other": "caduca en {count} días"
@@ -87,8 +97,13 @@
 	"asset_agent_spec_system_prompt": "Instrucciones del sistema",
 	"asset_agent_spec_tool_unit": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} herramienta",
 				"countPlural=other": "{count} herramientas"
@@ -101,8 +116,13 @@
 	"asset_blade_full_view": "Vista completa",
 	"asset_card_grid_asset_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} activo",
 				"countPlural=other": "{count} activos"
@@ -128,8 +148,13 @@
 	"asset_environments_empty": "No hay entornos disponibles",
 	"asset_environments_field_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} campo",
 				"countPlural=other": "{count} campos"
@@ -153,8 +178,13 @@
 	"asset_preview_null_value": "null",
 	"asset_preview_row_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "Mostrando {count} fila",
 				"countPlural=other": "Mostrando {count} filas"
@@ -274,8 +304,13 @@
 	"assetrules_heading": "Reglas de activos",
 	"assetrules_link_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} enlace",
 				"countPlural=other": "{count} enlaces"
@@ -287,8 +322,13 @@
 	"assetrules_load_one_error": "No se ha podido cargar regla de activos",
 	"assetrules_matched_asset_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} activo coincidente",
 				"countPlural=other": "{count} activos coincidentes"
@@ -311,8 +351,13 @@
 	"assetrules_preview_error": "No se ha podido previsualizar regla",
 	"assetrules_preview_matches_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "Selecciona {count} activo",
 				"countPlural=other": "Selecciona {count} activos"
@@ -326,8 +371,13 @@
 	"assetrules_remove_term_aria": "Eliminar término {name}",
 	"assetrules_rule_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} regla",
 				"countPlural=other": "{count} reglas"
@@ -336,8 +386,13 @@
 	],
 	"assetrules_rule_matches_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "Esta regla selecciona {count} activo",
 				"countPlural=other": "Esta regla selecciona {count} activos"
@@ -359,8 +414,13 @@
 	"assetrules_tab_matched_assets": "Activos coincidentes",
 	"assetrules_term_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} término",
 				"countPlural=other": "{count} términos"
@@ -405,6 +465,7 @@
 	"common_overview": "Resumen",
 	"common_owner": "Propietario",
 	"common_owners": "Propietarios",
+	"common_pagination_showing": "Mostrando {from}-{to} de {total}",
 	"common_previous": "Anterior",
 	"common_remove": "Quitar",
 	"common_required": "Obligatorio",
@@ -458,8 +519,13 @@
 	"discover_remove_filter_aria": "Quitar filtro {value}",
 	"discover_result_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} resultado",
 				"countPlural=other": "{count} resultados"
@@ -760,8 +826,13 @@
 	"glossary_synonyms_label": "Sinónimos",
 	"glossary_term_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} término",
 				"countPlural=other": "{count} términos"
@@ -831,8 +902,14 @@
 	"lineage_click_to_expand": "Haz clic para expandir",
 	"lineage_cluster_asset_count": [
 		{
-			"declarations": ["input count", "input type", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"input type",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} de tipo {type}",
 				"countPlural=other": "{count} de tipo {type}"
@@ -992,8 +1069,13 @@
 	"notif_batch_asset_change_title": "Actualizaciones de activos",
 	"notif_batch_asset_deleted_message": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "Se ha eliminado {count} activo.",
 				"countPlural=other": "Se han eliminado {count} activos."
@@ -1003,8 +1085,13 @@
 	"notif_batch_asset_deleted_title": "Activos eliminados",
 	"notif_batch_lineage_change_message": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} activo tiene cambios de linaje.",
 				"countPlural=other": "{count} activos tienen cambios de linaje."
@@ -1128,8 +1215,13 @@
 	"pipelines_edit_subtitle": "Actualiza la configuración de tu canalización de ingesta",
 	"pipelines_error_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} error",
 				"countPlural=other": "{count} errores"
@@ -1200,8 +1292,13 @@
 	"products_asset_count": "{count} activos",
 	"products_asset_matched_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} activo coincidente",
 				"countPlural=other": "{count} activos coincidentes"
@@ -1271,8 +1368,13 @@
 	"products_load_failed_title": "No se ha podido cargar",
 	"products_manual_asset_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} activo manual",
 				"countPlural=other": "{count} activos manuales"
@@ -1307,8 +1409,13 @@
 	"products_preview_hint": "Pulsa «Vista previa» para ver qué activos coinciden con esta regla",
 	"products_product_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} producto",
 				"countPlural=other": "{count} productos"
@@ -1322,8 +1429,13 @@
 	"products_rule_badge": "Regla",
 	"products_rule_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} regla",
 				"countPlural=other": "{count} reglas"
@@ -1433,8 +1545,13 @@
 	"roles_creating_label": "Creando...",
 	"roles_delete_assigned_warning": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "Este rol está asignado a {count} usuario. Debes reasignarle un rol antes de eliminarlo.",
 				"countPlural=other": "Este rol está asignado a {count} usuarios. Debes reasignarles un rol antes de eliminarlo."
@@ -1469,8 +1586,13 @@
 	"roles_optional_badge": "(Opcional)",
 	"roles_permissions_granted_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} permiso concedido",
 				"countPlural=other": "{count} permisos concedidos"
@@ -1487,8 +1609,13 @@
 	"roles_update_success": "Rol «{name}» actualizado",
 	"roles_users_assigned_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} usuario asignado",
 				"countPlural=other": "{count} usuarios asignados"
@@ -1890,8 +2017,13 @@
 	"teams_webhook_test_title": "Enviar notificación de prueba",
 	"teams_webhook_types_count": [
 		{
-			"declarations": ["input count", "local countPlural = count: plural"],
-			"selectors": ["countPlural"],
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{count} tipo",
 				"countPlural=other": "{count} tipos"
@@ -1962,7 +2094,9 @@
 				"input count",
 				"local countPlural = count: plural"
 			],
-			"selectors": ["countPlural"],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{from}–{to} de {count} rol",
 				"countPlural=other": "{from}–{to} de {count} roles"
@@ -1977,7 +2111,9 @@
 				"input count",
 				"local countPlural = count: plural"
 			],
-			"selectors": ["countPlural"],
+			"selectors": [
+				"countPlural"
+			],
 			"match": {
 				"countPlural=one": "{from}–{to} de {count} rol coincidente",
 				"countPlural=other": "{from}–{to} de {count} roles coincidentes"
@@ -2077,5 +2213,157 @@
 	"pipelines_text_lines": "{count} líneas",
 	"pipelines_text_too_large": "El fichero supera {size}.",
 	"pipelines_text_read_error": "No se pudo leer el fichero.",
-	"domains_open_landing": "Portada del dominio"
+	"domains_open_landing": "Portada del dominio",
+	"memory_add": "Añadir memoria",
+	"memory_add_placeholder": "¿Qué deben saber los agentes y las personas?",
+	"memory_delete_message": "¿Eliminar esta memoria? No se puede deshacer.",
+	"memory_delete_title": "Eliminar memoria",
+	"memory_description": "Lo que agentes y personas han registrado sobre esta entidad.",
+	"memory_edited_by": "editado por {name}",
+	"memory_empty": "Todavía no hay nada en la memoria.",
+	"memory_error_delete": "No se pudo eliminar la memoria",
+	"memory_error_load": "No se pudo cargar la memoria",
+	"memory_error_save": "No se pudo guardar la memoria",
+	"memory_error_search": "La búsqueda en la memoria falló",
+	"memory_no_match": "No hay coincidencias.",
+	"memory_search_placeholder": "Buscar en la memoria",
+	"memory_search_results": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} coincidencia",
+				"countPlural=other": "{count} coincidencias"
+			}
+		}
+	],
+	"memory_session": "sesión {id}",
+	"memory_sort_changed": "Actualizadas recientemente",
+	"memory_sort_created": "Más recientes",
+	"memory_sort_label": "Ordenar la memoria",
+	"memory_tab": "Memoria",
+	"memory_found_count": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "encontrada {count} vez",
+				"countPlural=other": "encontrada {count} veces"
+			}
+		}
+	],
+	"memory_sort_used": "Populares",
+	"nav_wiki": "WikiLLM",
+	"wiki_title": "WikiLLM",
+	"wiki_search": "Buscar entidades",
+	"wiki_search_action": "Buscar",
+	"wiki_compile_all": "Compilar catálogo",
+	"wiki_compile": "Actualizar resumen",
+	"wiki_compiling": "Compilando…",
+	"wiki_stop": "Detener compilación",
+	"wiki_refresh": "Actualizar",
+	"wiki_empty": "No hay entidades que coincidan con la búsqueda.",
+	"wiki_select": "Explora tu conocimiento",
+	"wiki_select_help": "Selecciona una entidad para leer su página, explorar las evidencias y revisar nuevo conocimiento.",
+	"wiki_uncompiled": "Sin compilar",
+	"wiki_draft": "Borrador",
+	"wiki_published": "Publicado",
+	"wiki_fresh": "Actualizado",
+	"wiki_stale": "Fuentes modificadas",
+	"wiki_unverified": "Requiere atención",
+	"wiki_asset": "Activo",
+	"wiki_data_product": "Producto de datos",
+	"wiki_glossary_term": "Término del glosario",
+	"wiki_domain": "Dominio",
+	"wiki_entity": "Abrir en el catálogo",
+	"wiki_published_view": "Página publicada",
+	"wiki_draft_view": "Revisar borrador",
+	"wiki_publish": "Publicar borrador revisado",
+	"wiki_sources": "Evidencias y fuentes",
+	"wiki_sources_help": "Cada cita enlaza a la fuente utilizada por esta revisión.",
+	"wiki_no_page": "Esta entidad aún no tiene conocimiento publicado.",
+	"wiki_no_draft": "Compila esta entidad para preparar un borrador para revisión.",
+	"wiki_stale_help": "El resumen automático se está actualizando. La descripción, las secciones y las memorias siguen disponibles.",
+	"wiki_review_help": "Comprueba las afirmaciones y sus citas antes de publicar. El contenido generado es una propuesta.",
+	"wiki_extractive": "Recopilación de fuentes",
+	"wiki_llm": "Síntesis con IA",
+	"wiki_automatic": "Compilación automática cada {minutes} minutos",
+	"wiki_manual": "Compilación manual",
+	"wiki_progress": "{done} de {total} entidades procesadas · {failed} errores",
+	"wiki_complete": "Compilación finalizada. Los nuevos borradores están listos para revisar.",
+	"wiki_error": "No se ha podido completar la operación. Inténtalo de nuevo.",
+	"wiki_conflict": "El borrador o sus fuentes han cambiado. Compila y revisa de nuevo.",
+	"wiki_denied": "No tienes permiso para esta operación de conocimiento.",
+	"wiki_loading": "Cargando conocimiento…",
+	"wiki_previous": "Anterior",
+	"wiki_next": "Siguiente",
+	"wiki_page_count": "{total} entidades",
+	"wiki_saved": "Conocimiento revisado publicado.",
+	"wiki_memory": "Aprendizajes compartidos",
+	"wiki_memory_help": "Recoge descubrimientos, precauciones y aprendizajes de personas y agentes. Servirán como fuentes en la próxima actualización del resumen.",
+	"wiki_compile_errors": "Algunas entidades no se han podido compilar. Abre la entidad afectada e inténtalo de nuevo.",
+	"wiki_library": "Biblioteca",
+	"wiki_contents": "En esta página",
+	"wiki_source_count": "{total} fuentes",
+	"wiki_full_document": "Ver documento compilado completo",
+	"wiki_open_source": "Abrir fuente",
+	"wiki_group_catalog": "Datos del catálogo",
+	"wiki_group_docs": "Documentación",
+	"wiki_group_memory": "Aprendizajes compartidos",
+	"wiki_group_relations": "Relaciones",
+	"wiki_group_model": "Metamodelo",
+	"wiki_unavailable": "La interfaz WikiLLM está abierta, pero el servidor aún no ofrece su API. Actualiza el kernel del overlay.",
+	"wiki_description": "Descripción",
+	"wiki_no_description": "Todavía no hay una descripción para esta entidad.",
+	"wiki_sections": "Secciones",
+	"wiki_no_sections": "Añade instrucciones de uso, ejemplos o decisiones. Estas secciones se comparten con la documentación del catálogo.",
+	"wiki_add_section": "Añadir sección",
+	"wiki_section_title": "Título de la sección",
+	"wiki_section_content": "Contenido (Markdown)",
+	"wiki_empty_section": "Esta sección aún no tiene contenido.",
+	"wiki_edit": "Editar",
+	"wiki_facts": "Ficha de la entidad",
+	"wiki_no_facts": "No hay más metadatos disponibles.",
+	"wiki_no_relations": "Todavía no hay relaciones registradas.",
+	"wiki_maintenance": "Opciones de revisión",
+	"ui_markdown_guide": "Guía de sintaxis Markdown ↗",
+	"wiki_field_defined_by": "Definido por",
+	"wiki_field_inverse_defined_by": "Define",
+	"wiki_field_derived_from": "Derivado de",
+	"wiki_field_inverse_derived_from": "Da origen a",
+	"wiki_field_member_of": "Forma parte del producto",
+	"wiki_field_inverse_member_of": "Incluye el activo",
+	"wiki_field_flows_to": "Envía datos a",
+	"wiki_field_inverse_flows_to": "Recibe datos de",
+	"wiki_field_child_of": "Elemento superior",
+	"wiki_field_inverse_child_of": "Contiene",
+	"wiki_field_in_domain": "Pertenece al dominio",
+	"wiki_field_inverse_in_domain": "Agrupa",
+	"wiki_field_mrn": "Identificador en el catálogo",
+	"wiki_field_type": "Tipo de activo",
+	"wiki_field_providers": "Sistemas de origen",
+	"wiki_field_environments": "Entornos",
+	"wiki_field_content": "Documentación",
+	"wiki_field_tags": "Etiquetas",
+	"wiki_field_synonyms": "También llamado",
+	"wiki_field_parent_id": "Identificador del elemento superior",
+	"wiki_field_parent_term_id": "Término superior",
+	"wiki_field_restricted": "Acceso restringido",
+	"wiki_field_name": "Nombre",
+	"wiki_field_description": "Descripción",
+	"wiki_field_user_description": "Descripción editada",
+	"wiki_field_definition": "Definición",
+	"wiki_field_user_definition": "Definición editada",
+	"wiki_field_metadata": "Metadatos",
+	"wiki_field_schema": "Esquema"
 }

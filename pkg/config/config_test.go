@@ -106,3 +106,28 @@ func TestValidate_DomainLandingURL(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateKnowledgeProviderAndSchedule(t *testing.T) {
+	for _, tc := range []struct {
+		endpoint, model string
+		interval        int
+		valid           bool
+	}{
+		{"", "", 0, true},
+		{"http://127.0.0.1:11434/v1/chat/completions", "local", 60, true},
+		{"https://provider.example/v1/chat/completions", "remote", 900, true},
+		{"https://provider.example/v1/chat/completions", "", 900, false},
+		{"https://user:pass@provider.example/v1/chat/completions", "remote", 900, false},
+		{"file:///tmp/model", "local", 900, false},
+		{"", "model", 900, false},
+		{"", "", 5, false},
+	} {
+		cfg := validBaseConfig()
+		cfg.Knowledge.Endpoint = tc.endpoint
+		cfg.Knowledge.Model = tc.model
+		cfg.Knowledge.IntervalSeconds = tc.interval
+		if err := validate(cfg); (err == nil) != tc.valid {
+			t.Errorf("%+v: %v", tc, err)
+		}
+	}
+}
