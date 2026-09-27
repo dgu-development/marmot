@@ -16,7 +16,11 @@
 	} from '$lib/memory/api';
 	import type { Memory, MemoryEntityType, MemorySort } from '$lib/memory/types';
 
-	let { entityType, entityId }: { entityType: MemoryEntityType; entityId: string } = $props();
+	let {
+		entityType,
+		entityId,
+		showHeading = true
+	}: { entityType: MemoryEntityType; entityId: string; showHeading?: boolean } = $props();
 
 	let canWrite = $derived(auth.hasPermission('memory', 'write'));
 
@@ -222,20 +226,32 @@
 </script>
 
 <section class="space-y-4">
-	<div class="flex items-center justify-between">
-		<div>
-			<h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">{m.memory_tab()}</h3>
-			<p class="text-sm text-gray-500 dark:text-gray-400">{m.memory_description()}</p>
+	{#if showHeading}
+		<div class="flex items-center justify-between">
+			<div>
+				<h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">{m.memory_tab()}</h3>
+				<p class="text-sm text-gray-500 dark:text-gray-400">{m.memory_description()}</p>
+			</div>
+			{#if canWrite && !adding}
+				<Button
+					variant="clear"
+					icon="material-symbols:add"
+					text={m.memory_add()}
+					click={() => (adding = true)}
+				/>
+			{/if}
 		</div>
-		{#if canWrite && !adding}
+	{/if}
+	{#if !showHeading && canWrite && !adding}
+		<div class="flex justify-end">
 			<Button
 				variant="clear"
 				icon="material-symbols:add"
 				text={m.memory_add()}
 				click={() => (adding = true)}
 			/>
-		{/if}
-	</div>
+		</div>
+	{/if}
 
 	{#if adding}
 		<div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">

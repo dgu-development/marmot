@@ -106,7 +106,7 @@ func TestKnowledgeReviewFreshnessAndCatalogRelations(t *testing.T) {
 	}{
 		{`INSERT INTO data_product_memberships(data_product_id,asset_id,source) VALUES($1,$2,'manual')`, []any{productID, assetID}},
 		{`INSERT INTO asset_terms(asset_id,glossary_term_id) VALUES($1,$2)`, []any{assetID, termID}},
-		{`INSERT INTO doc_pages(entity_type,entity_id,title,content,position) VALUES('asset',$1,'Usage','One row per contract and month',0)`, []any{assetID}},
+		{`INSERT INTO doc_pages(entity_type,entity_id,title,content,position) SELECT 'asset',mrn,'Usage','One row per contract and month',0 FROM assets WHERE id=$1`, []any{assetID}},
 		{`INSERT INTO global_documentation(source,content) VALUES('contract-guide','Contracts use calendar months')`, nil},
 		{`INSERT INTO documentation(mrn,source,content,global_docs) SELECT mrn,'dbt','Imported contract description',ARRAY['contract-guide'] FROM assets WHERE id=$1`, []any{assetID}},
 	} {

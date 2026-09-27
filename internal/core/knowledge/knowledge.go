@@ -38,6 +38,8 @@ type Page struct {
 	Entity
 	Title             string     `json:"title"`
 	EntityURL         string     `json:"entity_url"`
+	Description       string     `json:"description"`
+	DocEntityID       string     `json:"doc_entity_id"`
 	Content           string     `json:"content"`
 	DraftContent      string     `json:"draft_content"`
 	DraftHash         string     `json:"draft_hash"`

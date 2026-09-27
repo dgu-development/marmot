@@ -73,12 +73,18 @@ func (s *Service) snapshot(ctx context.Context, tx pgx.Tx, e Entity) (*Page, err
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil, err
 	}
-	p := &Page{Entity: e, EntityURL: entityURL(e), Sources: []Source{}, PublishedSources: []Source{}, DraftSources: []Source{}, Status: "uncompiled", Freshness: "uncompiled", DraftFreshness: "uncompiled", Mode: "extractive", DraftMode: "extractive"}
+	p := &Page{Entity: e, EntityURL: entityURL(e), DocEntityID: e.ID, Sources: []Source{}, PublishedSources: []Source{}, DraftSources: []Source{}, Status: "uncompiled", Freshness: "uncompiled", DraftFreshness: "uncompiled", Mode: "extractive", DraftMode: "extractive"}
 	_ = json.Unmarshal(fields["name"], &p.Title)
+	for _, field := range []string{"user_description", "description", "user_definition", "definition"} {
+		if json.Unmarshal(fields[field], &p.Description) == nil && strings.TrimSpace(p.Description) != "" {
+			break
+		}
+	}
 	if e.Kind == "asset" {
 		var mrn string
 		_ = json.Unmarshal(fields["mrn"], &mrn)
 		p.EntityURL = "/discover?q=" + url.QueryEscape(mrn)
+		p.DocEntityID = mrn
 	}
 	size := 0
 	add := func(id, title, link, field, text string) error {
@@ -118,9 +124,9 @@ func (s *Service) snapshot(ctx context.Context, tx pgx.Tx, e Entity) (*Page, err
 		}
 	}
 	if e.Kind == "asset" || e.Kind == "data_product" {
-		rows, err := tx.Query(ctx, `SELECT 'doc:'||id::text id,title,coalesce(content,'') FROM doc_pages WHERE entity_type=$1 AND entity_id=$2
+		rows, err := tx.Query(ctx, `SELECT 'doc:'||id::text id,title,coalesce(content,'') FROM doc_pages WHERE entity_type=$1 AND (entity_id=$2 OR entity_id=$3)
  UNION ALL SELECT 'imported-doc:'||d.id::text,d.source,d.content FROM documentation d JOIN assets a ON a.mrn=d.mrn WHERE $1='asset' AND a.id=$2
- UNION SELECT 'global-doc:'||g.id::text,g.source,g.content FROM global_documentation g JOIN documentation d ON g.source=ANY(d.global_docs) JOIN assets a ON a.mrn=d.mrn WHERE $1='asset' AND a.id=$2 ORDER BY id LIMIT 1001`, e.Kind, e.ID)
+ UNION SELECT 'global-doc:'||g.id::text,g.source,g.content FROM global_documentation g JOIN documentation d ON g.source=ANY(d.global_docs) JOIN assets a ON a.mrn=d.mrn WHERE $1='asset' AND a.id=$2 ORDER BY id LIMIT 1001`, e.Kind, e.ID, p.DocEntityID)
 		if err != nil {
 			return nil, fmt.Errorf("read knowledge documentation: %w", err)
 		}
