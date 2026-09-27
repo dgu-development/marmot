@@ -1,6 +1,13 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve -- entity and evidence URLs are supplied by the catalog API. */
 	import Icon from '@iconify/svelte';
+	import MarkdownEditor from '$components/ui/MarkdownEditor.svelte';
+	import { locale } from '$lib/i18n';
+	import { fetchMetamodel } from '$lib/metamodel/api';
+	import { resolveMessage } from '$lib/metamodel/labels';
+	import type { MetamodelSchema } from '$lib/metamodel/types';
+	import { nativeMessage } from '$lib/metamodel/i18n';
+	import { resolve } from '$app/paths';
 	import MarkdownRenderer from '$components/ui/MarkdownRenderer.svelte';
 	import MemoryPanel from '$components/memory/MemoryPanel.svelte';
 	import { fetchApi } from '$lib/api';
@@ -36,10 +43,23 @@
 	let editContent = $state('');
 	let saving = $state(false);
 	let docsSeq = 0;
+	let schema = $state<MetamodelSchema | null>(null);
+	$effect(() => {
+		let active = true;
+		schema = null;
+		void fetchMetamodel(page.entity_type)
+			.then((value) => {
+				if (active) schema = value;
+			})
+			.catch(() => {});
+		return () => {
+			active = false;
+		};
+	});
 
 	let canEditDocs = $derived(auth.hasPermission('assets', 'manage'));
 	let supportsDocs = $derived(page.entity_type === 'asset' || page.entity_type === 'data_product');
-	let sources = $derived((draft ? page.draft_sources : page.published_sources) || []);
+	let sources = $derived((draft ? page.draft_sources : page.sources) || []);
 	let facts = $derived(
 		sources
 			.filter(
@@ -52,17 +72,18 @@
 						'definition',
 						'user_definition',
 						'metadata',
-						'schema'
+						'schema',
+						'mrn',
+						'parent_id',
+						'parent_term_id'
 					].includes(source.field)
 			)
 			.slice(0, 8)
 	);
 	let relations = $derived(
-		sources.filter((source) => source.id.startsWith('relation:')).slice(0, 12)
+		sources.filter((source) => /^(relation:|metamodel-link:)/.test(source.id))
 	);
-	let imported = $derived(
-		sources.filter((source) => /^(imported-doc:|global-doc:)/.test(source.id))
-	);
+	let imported = $derived(page.documents || []);
 	let sections = $derived(flatten(docs));
 
 	function flatten(pages: Page[], depth = 0): Section[] {
@@ -142,7 +163,41 @@
 	}
 
 	function readable(field: string) {
-		return field.replaceAll('_', ' ');
+		const inverse = field.startsWith('inverse_');
+		const definition = schema?.fields.find(
+			(item) => item.id === (inverse ? field.slice(8) : field)
+		);
+		const key = inverse
+			? definition?.presentation?.inverseLabelKey
+			: definition?.presentation?.labelKey;
+		return (
+			resolveMessage(key, {
+				locale: $locale,
+				defaultLocale: schema?.defaultLocale || 'en',
+				messages: schema?.messages,
+				native: nativeMessage
+			}) ||
+			nativeMessage(`wiki_field_${field}`) ||
+			field.replaceAll('_', ' ')
+		);
+	}
+	function factValue(value = '') {
+		try {
+			const parsed = JSON.parse(value);
+			if (Array.isArray(parsed)) return parsed.join(', ');
+		} catch {
+			/* Plain text is already readable. */
+		}
+		return value;
+	}
+
+	function relationURL(source: { id: string; url: string }) {
+		const parts = source.id.split(':');
+		const kind = parts[0] === 'metamodel-link' ? 'glossary_term' : parts[2];
+		const id = parts[0] === 'metamodel-link' ? parts[2] : parts[3];
+		return kind && id
+			? `${resolve('/wiki')}?${new URLSearchParams({ entity_type: kind, entity_id: id })}`
+			: source.url;
 	}
 </script>
 
@@ -204,11 +259,7 @@
 		<section id="wiki-summary" class="scroll-mt-24 pt-9">
 			<h2 class="wiki-section-heading">{m.wiki_description()}</h2>
 			{#if page.description}
-				<p
-					class="mt-4 whitespace-pre-line break-words text-[1.06rem] leading-8 text-gray-700 dark:text-gray-200"
-				>
-					{page.description}
-				</p>
+				<div class="wiki-prose mt-4"><MarkdownRenderer content={page.description} /></div>
 			{:else}
 				<p class="mt-4 text-sm leading-7 text-gray-500">{m.wiki_no_description()}</p>
 			{/if}
@@ -221,6 +272,18 @@
 		{:else if page.mode === 'llm' && page.content && page.freshness === 'fresh'}
 			<section class="wiki-prose mt-10 border-t border-gray-200 pt-8 dark:border-gray-700">
 				<MarkdownRenderer content={page.content} />
+			</section>
+		{/if}
+
+		{#if imported.length}
+			<section class="mt-12 border-t border-gray-200 pt-8 dark:border-gray-700">
+				<h2 class="wiki-section-heading">{m.wiki_group_docs()}</h2>
+				<div class="mt-5 space-y-5">
+					{#each imported as source (source.id)}<div>
+							<h3 class="font-medium">{source.title}</h3>
+							<div class="wiki-prose mt-3"><MarkdownRenderer content={source.content} /></div>
+						</div>{/each}
+				</div>
 			</section>
 		{/if}
 
@@ -262,11 +325,12 @@
 									class="mt-4 block text-xs font-medium text-gray-600"
 									for="wiki-section-content">{m.wiki_section_content()}</label
 								>
-								<textarea
+								<MarkdownEditor
 									id="wiki-section-content"
-									class="wiki-input min-h-56 font-mono text-sm"
 									bind:value={editContent}
-								></textarea>
+									rows={12}
+									disabled={saving}
+								/>
 								<div class="mt-4 flex justify-end gap-3">
 									<button class="wiki-link" onclick={() => (editingId = null)}
 										>{m.common_cancel()}</button
@@ -306,11 +370,12 @@
 						<label class="mt-4 block text-xs font-medium text-gray-600" for="wiki-new-content"
 							>{m.wiki_section_content()}</label
 						>
-						<textarea
+						<MarkdownEditor
 							id="wiki-new-content"
-							class="wiki-input min-h-56 font-mono text-sm"
 							bind:value={editContent}
-						></textarea>
+							rows={12}
+							disabled={saving}
+						/>
 						<div class="mt-4 flex justify-end gap-3">
 							<button class="wiki-link" onclick={() => (editingId = null)}
 								>{m.common_cancel()}</button
@@ -342,20 +407,6 @@
 			</section>
 		{/if}
 
-		{#if imported.length}
-			<section class="mt-12 border-t border-gray-200 pt-8 dark:border-gray-700">
-				<h2 class="wiki-section-heading">{m.wiki_group_docs()}</h2>
-				<div class="mt-5 space-y-5">
-					{#each imported as source (source.id)}<div>
-							<h3 class="font-medium">{source.title}</h3>
-							<p class="mt-1 break-words text-sm leading-6 text-gray-600 dark:text-gray-300">
-								{source.preview}
-							</p>
-						</div>{/each}
-				</div>
-			</section>
-		{/if}
-
 		<details class="mt-12 border-t border-gray-200 pt-6 text-sm dark:border-gray-700">
 			<summary
 				class="cursor-pointer font-medium text-gray-600 hover:text-earthy-terracotta-700 dark:text-gray-300"
@@ -367,7 +418,7 @@
 						<a
 							class="break-words text-earthy-terracotta-700 hover:underline dark:text-earthy-terracotta-400"
 							href={source.url}>{source.title}</a
-						><span class="ml-2 text-xs text-gray-400">{source.field}</span>
+						><span class="ml-2 text-xs text-gray-400">{readable(source.field)}</span>
 					</li>{/each}
 			</ul>
 		</details>
@@ -386,7 +437,7 @@
 			{#if facts.length}<dl class="mt-3 divide-y divide-gray-200 dark:divide-gray-800">
 					{#each facts as fact (fact.id)}<div class="py-2.5">
 							<dt class="text-xs text-gray-500">{readable(fact.field)}</dt>
-							<dd class="mt-0.5 break-words text-sm leading-5">{fact.preview}</dd>
+							<dd class="mt-0.5 break-words text-sm leading-5">{factValue(fact.preview)}</dd>
 						</div>{/each}
 				</dl>{:else}<p class="mt-3 text-sm leading-6 text-gray-500">{m.wiki_no_facts()}</p>{/if}
 		</section>
@@ -396,7 +447,7 @@
 					{#each relations as relation (relation.id)}<li>
 							<span class="block text-xs text-gray-500">{readable(relation.field)}</span><a
 								class="mt-0.5 block break-words text-sm font-medium text-earthy-terracotta-700 hover:underline dark:text-earthy-terracotta-400"
-								href={relation.url}>{relation.title}</a
+								href={relationURL(relation)}>{relation.title}</a
 							>
 						</li>{/each}
 				</ul>{:else}<p class="mt-3 text-sm leading-6 text-gray-500">{m.wiki_no_relations()}</p>{/if}

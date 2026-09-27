@@ -140,6 +140,9 @@ func (s *Service) snapshot(ctx context.Context, tx pgx.Tx, e Entity) (*Page, err
 				rows.Close()
 				return nil, err
 			}
+			if !strings.HasPrefix(id, "doc:") {
+				p.Documents = append(p.Documents, Document{ID: id, Title: title, Content: text})
+			}
 		}
 		err = rows.Err()
 		rows.Close()

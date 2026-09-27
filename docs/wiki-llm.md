@@ -41,3 +41,5 @@ Las migraciones del fork `007`–`009` portan la memoria de #293, y `010` crea l
 ## Comprobación
 
 Ejecute `go test ./internal/core/knowledge ./internal/core/domain ./internal/core/memory ./internal/mcp ./internal/store/postgres/dgumigrations` con `MARMOT_TEST_POSTGRES_DSN` para las pruebas de integración. El frontend usa `pnpm --dir web/marmot build`. El `svelte-check` global conserva errores ajenos a esta funcionalidad; hay que inspeccionar los archivos tocados.
+
+The article editor uses the shared Markdown Write/Preview control and links to GitHub's syntax guide. Descriptions render as Markdown; imported documentation is readable in full. Relations link to other wiki articles and use localized native labels or the metamodel's label keys (including inverse labels). Current catalog sources remain readable while an older generated summary is stale.

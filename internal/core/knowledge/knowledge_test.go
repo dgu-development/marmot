@@ -104,6 +104,7 @@ func TestKnowledgeReviewFreshnessAndCatalogRelations(t *testing.T) {
 		sql  string
 		args []any
 	}{
+		{`UPDATE assets SET description='Imported description', user_description='Curated **description**' WHERE id=$1`, []any{assetID}},
 		{`INSERT INTO data_product_memberships(data_product_id,asset_id,source) VALUES($1,$2,'manual')`, []any{productID, assetID}},
 		{`INSERT INTO asset_terms(asset_id,glossary_term_id) VALUES($1,$2)`, []any{assetID, termID}},
 		{`INSERT INTO doc_pages(entity_type,entity_id,title,content,position) SELECT 'asset',mrn,'Usage','One row per contract and month',0 FROM assets WHERE id=$1`, []any{assetID}},
@@ -127,6 +128,9 @@ func TestKnowledgeReviewFreshnessAndCatalogRelations(t *testing.T) {
 	p, err := svc.Compile(ctx, e)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if p.Description != "Curated **description**" || len(p.Documents) != 2 {
+		t.Fatalf("article must include curated description and complete imported documentation: %+v", p)
 	}
 	if p.Status != "draft" || p.DraftFreshness != "fresh" || p.Content != "" || !strings.Contains(p.DraftContent, "unique customers") {
 		t.Fatalf("invalid draft %+v", p)

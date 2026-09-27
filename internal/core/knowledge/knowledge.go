@@ -32,9 +32,16 @@ type Source struct {
 	Text    string `json:"-"`
 }
 
+type Document struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
 type Page struct {
-	DraftCompilerHash string `json:"-"`
-	Error             string `json:"error,omitempty"`
+	Documents         []Document `json:"documents,omitempty"`
+	DraftCompilerHash string     `json:"-"`
+	Error             string     `json:"error,omitempty"`
 	Entity
 	Title             string     `json:"title"`
 	EntityURL         string     `json:"entity_url"`

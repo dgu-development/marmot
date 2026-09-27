@@ -23,6 +23,8 @@ export type WikiPage = {
 	draft_freshness: string;
 	mode: string;
 	draft_mode: string;
+	sources: WikiSource[];
+	documents: { id: string; title: string; content: string }[];
 	published_sources: WikiSource[];
 	draft_sources: WikiSource[];
 	error?: string;
