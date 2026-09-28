@@ -14,6 +14,7 @@
 	let recovery = $state<string[]>([]);
 	let busy = $state(false);
 	let error = $state('');
+	let copied = $state<'secret' | 'recovery' | null>(null);
 	let action = $state<'setup' | 'disable' | 'recovery' | null>(null);
 
 	onMount(async () => {
@@ -82,29 +83,49 @@
 	function cancel() {
 		action = null;
 		setup = null;
+		copied = null;
 		password = '';
 		code = '';
 		error = '';
+	}
+
+	async function copy(value: string, target: 'secret' | 'recovery') {
+		try {
+			await navigator.clipboard.writeText(value);
+			copied = target;
+			setTimeout(() => {
+				if (copied === target) copied = null;
+			}, 2000);
+		} catch {
+			error = m.totp_copy_error();
+		}
 	}
 </script>
 
 {#if error}<p role="alert" class="mt-5 text-sm text-red-700 dark:text-red-300">{error}</p>{/if}
 {#if status?.local}
 	<section
-		class="mt-8 rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
+		class="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800"
 		aria-labelledby="totp-title"
 	>
 		<h2 id="totp-title" class="text-lg font-semibold">{m.totp_title()}</h2>
 		<p class="mt-2 text-sm text-gray-600 dark:text-gray-300">{m.totp_local_help()}</p>
 		{#if recovery.length}
-			<div class="mt-5 space-y-4">
+			<div class="mx-auto mt-5 max-w-xl space-y-4 text-center">
 				<p class="text-sm font-medium">{m.totp_recovery_help()}</p>
 				<ul
-					class="grid grid-cols-1 gap-2 rounded-md bg-gray-50 p-4 font-mono text-sm dark:bg-gray-900 sm:grid-cols-2"
+					class="grid grid-cols-1 gap-2 rounded-md bg-gray-50 p-4 text-center font-mono text-sm dark:bg-gray-900 sm:grid-cols-2"
 				>
 					{#each recovery as item (item)}<li>{item}</li>{/each}
 				</ul>
-				<Button text={m.totp_saved_codes()} variant="filled" click={() => (recovery = [])} />
+				<div class="flex flex-wrap justify-center gap-3">
+					<Button
+						text={copied === 'recovery' ? m.common_copied() : m.common_copy()}
+						variant="clear"
+						click={() => void copy(recovery.join('\n'), 'recovery')}
+					/>
+					<Button text={m.totp_saved_codes()} variant="filled" click={() => (recovery = [])} />
+				</div>
 			</div>
 		{:else if action}
 			<form
@@ -115,15 +136,25 @@
 				}}
 			>
 				{#if setup}
-					<p class="text-sm">{m.totp_scan_help()}</p>
-					{#if setup.qr}<img
-							src={setup.qr}
-							alt={m.totp_qr_alt()}
-							width="240"
-							height="240"
-							class="rounded border bg-white p-2"
-						/>{/if}
-					<p class="break-all font-mono text-sm select-all">{setup.secret}</p>
+					<div class="mx-auto flex max-w-md flex-col items-center gap-4 text-center">
+						<p class="text-sm">{m.totp_scan_help()}</p>
+						{#if setup.qr}<img
+								src={setup.qr}
+								alt={m.totp_qr_alt()}
+								width="240"
+								height="240"
+								class="rounded border bg-white p-2"
+							/>{/if}
+						<code
+							class="max-w-full break-all rounded-md bg-gray-50 px-4 py-3 text-sm select-all dark:bg-gray-900"
+							>{setup.secret}</code
+						>
+						<Button
+							text={copied === 'secret' ? m.common_copied() : m.common_copy()}
+							variant="clear"
+							click={() => void copy(setup.secret, 'secret')}
+						/>
+					</div>
 				{:else}
 					<label class="block text-sm font-medium" for="totp-password"
 						>{m.login_password_label()}</label

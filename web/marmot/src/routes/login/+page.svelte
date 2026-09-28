@@ -4,6 +4,7 @@
 	import { page } from '$app/stores';
 	import Button from '$components/ui/Button.svelte';
 	import OAuthButtons from '$components/auth/OAuthButtons.svelte';
+	import TOTPChallenge from '$components/auth/TOTPChallenge.svelte';
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import Icon from '@iconify/svelte';
@@ -16,8 +17,6 @@
 	let error = $state('');
 	let loading = $state(false);
 	let showPasswordChangeForm = $state(false);
-	let totpCode = $state('');
-	let totpInput = $state<HTMLInputElement>();
 	interface LoginResponse {
 		access_token?: string;
 		requires_password_change?: boolean;
@@ -167,7 +166,6 @@
 			newPassword = '';
 			confirmPassword = '';
 			showPasswordChangeForm = false;
-			setTimeout(() => totpInput?.focus(), 100);
 			return;
 		}
 
@@ -239,7 +237,7 @@
 		}
 	}
 
-	async function verifyTOTP() {
+	async function verifyTOTP(code: string) {
 		if (loading) return;
 		loading = true;
 		error = '';
@@ -247,7 +245,7 @@
 			const response = await fetch('/api/v1/users/login/totp', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ mfa_token: loginData?.mfa_token, code: totpCode.trim() })
+				body: JSON.stringify({ mfa_token: loginData?.mfa_token, code })
 			});
 			if (!response.ok)
 				throw new Error(response.status === 429 ? m.totp_rate_limited() : m.totp_invalid_code());
@@ -256,14 +254,12 @@
 			error = err instanceof Error ? err.message : m.totp_error();
 		} finally {
 			loading = false;
-			totpCode = '';
 		}
 	}
 
 	function goBackToLogin() {
 		showPasswordChangeForm = false;
 		loginData = null;
-		totpCode = '';
 		password = '';
 		newPassword = '';
 		confirmPassword = '';
@@ -282,9 +278,11 @@
 			<h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">
 				{pendingConsent
 					? m.login_authorize_heading()
-					: showPasswordChangeForm
-						? m.login_change_password_heading()
-						: m.login_signin_heading()}
+					: loginData?.requires_totp
+						? m.totp_title()
+						: showPasswordChangeForm
+							? m.login_change_password_heading()
+							: m.login_signin_heading()}
 			</h1>
 			{#if showPasswordChangeForm && !pendingConsent}
 				<p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
@@ -336,33 +334,11 @@
 					</div>
 				</div>
 			{:else if loginData?.requires_totp}
-				<form
-					class="space-y-5"
-					onsubmit={(event) => {
-						event.preventDefault();
-						void verifyTOTP();
-					}}
-				>
+				<div class="space-y-5">
 					<p class="text-sm text-gray-600 dark:text-gray-300">{m.totp_login_help()}</p>
-					<label class="block text-sm font-medium" for="totp-code">{m.totp_code()}</label>
-					<input
-						id="totp-code"
-						bind:this={totpInput}
-						bind:value={totpCode}
-						autocomplete="one-time-code"
-						required
-						maxlength="128"
-						class="block w-full rounded-lg border border-gray-300 bg-white px-4 py-3 font-mono dark:border-gray-600 dark:bg-gray-700"
-					/>
-					<Button
-						type="submit"
-						{loading}
-						text={m.totp_verify()}
-						variant="filled"
-						class="w-full justify-center"
-					/>
+					<TOTPChallenge verify={verifyTOTP} {loading} />
 					<Button text={m.common_cancel()} variant="clear" click={goBackToLogin} />
-				</form>
+				</div>
 			{:else if !showPasswordChangeForm}
 				<form
 					onsubmit={(e) => {
