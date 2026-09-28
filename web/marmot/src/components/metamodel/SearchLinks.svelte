@@ -9,7 +9,7 @@
 	{#each values as value, i (i)}
 		<a
 			href={resolve(`/discover?q=${encodeURIComponent(value)}`)}
-			class="rounded-full bg-earthy-terracotta-100 px-2 py-0.5 break-all text-earthy-terracotta-700 hover:underline dark:bg-earthy-terracotta-900 dark:text-earthy-terracotta-100 {size ===
+			class="rounded-full bg-earthy-terracotta-100 px-2 py-0.5 break-all text-earthy-terracotta-700 transition-opacity hover:opacity-80 dark:bg-earthy-terracotta-900 dark:text-earthy-terracotta-100 {size ===
 			'sm'
 				? 'text-sm'
 				: 'text-xs'}"
