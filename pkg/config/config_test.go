@@ -8,6 +8,8 @@ func TestLoad_DCRAllowedRedirectHostsFromEnv(t *testing.T) {
 	t.Setenv("MARMOT_METAMODEL_PROFILE", "/etc/marmot/metamodel.yaml")
 	t.Setenv("MARMOT_DOMAINS_ENABLED", "true")
 	t.Setenv("MARMOT_AUTH_TOTP_ENABLED", "true")
+	t.Setenv("MARMOT_AUTH_TOTP_REQUIRED", "true")
+	t.Setenv("MARMOT_SERVER_ENCRYPTION_KEY", "configured")
 	t.Setenv("MARMOT_AUTH_TOTP_ISSUER", "Example")
 	t.Setenv("MARMOT_UI_DOMAIN_LANDING_URL", "/dgu/landing/domains/{id}")
 
@@ -16,7 +18,7 @@ func TestLoad_DCRAllowedRedirectHostsFromEnv(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 
-	if !cfg.Auth.TOTP.Enabled || cfg.Auth.TOTP.Issuer != "Example" {
+	if !cfg.Auth.TOTP.Enabled || !cfg.Auth.TOTP.Required || cfg.Auth.TOTP.Issuer != "Example" {
 		t.Fatal("TOTP configuration not read from environment")
 	}
 	got := cfg.Auth.DCR.AllowedRedirectHosts
@@ -31,6 +33,22 @@ func TestLoad_DCRAllowedRedirectHostsFromEnv(t *testing.T) {
 	}
 	if cfg.UI.DomainLandingURL != "/dgu/landing/domains/{id}" {
 		t.Fatalf("unexpected domain landing url from env: %q", cfg.UI.DomainLandingURL)
+	}
+}
+
+func TestValidate_TOTPRequiredNeedsEnabled(t *testing.T) {
+	cfg := validBaseConfig()
+	cfg.Auth.TOTP.Required = true
+	if err := validate(cfg); err == nil {
+		t.Fatal("required TOTP must not silently disable enforcement")
+	}
+	cfg.Auth.TOTP.Enabled = true
+	if err := validate(cfg); err == nil {
+		t.Fatal("required TOTP must have an encryption key")
+	}
+	cfg.Server.EncryptionKey = "configured"
+	if err := validate(cfg); err != nil {
+		t.Fatalf("enabled required TOTP: %v", err)
 	}
 }
 

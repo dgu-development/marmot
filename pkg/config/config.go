@@ -98,8 +98,9 @@ type Config struct {
 
 	Auth struct {
 		TOTP struct {
-			Enabled bool   `mapstructure:"enabled"`
-			Issuer  string `mapstructure:"issuer"`
+			Enabled  bool   `mapstructure:"enabled"`
+			Required bool   `mapstructure:"required"`
+			Issuer   string `mapstructure:"issuer"`
 		} `mapstructure:"totp"`
 		Google      *OAuthProviderConfig `mapstructure:"google"`
 		GenericOIDC *OAuthProviderConfig `mapstructure:"generic_oidc"`
@@ -258,6 +259,7 @@ func loadConfig(configPath string) error {
 	v.BindEnv("auth.okta.url")
 	v.BindEnv("auth.okta.redirect_url")
 	v.BindEnv("auth.totp.enabled")
+	v.BindEnv("auth.totp.required")
 	v.BindEnv("auth.totp.issuer")
 	v.BindEnv("auth.okta.enabled")
 	v.BindEnv("auth.okta.type")
@@ -453,6 +455,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("database.conn_lifetime", 5) // minutes
 
 	v.SetDefault("auth.totp.enabled", false)
+	v.SetDefault("auth.totp.required", false)
 	v.SetDefault("auth.totp.issuer", "Marmot")
 	v.SetDefault("auth.anonymous.role", "user")
 
@@ -572,6 +575,12 @@ func (c *Config) BuildDSN() string {
 }
 
 func validate(cfg *Config) error {
+	if cfg.Auth.TOTP.Required && !cfg.Auth.TOTP.Enabled {
+		return fmt.Errorf("auth.totp.required requires auth.totp.enabled")
+	}
+	if cfg.Auth.TOTP.Required && cfg.Server.EncryptionKey == "" {
+		return fmt.Errorf("auth.totp.required requires server.encryption_key")
+	}
 	if cfg.Server.Port < 1 || cfg.Server.Port > 65535 {
 		return fmt.Errorf("invalid server port: %d", cfg.Server.Port)
 	}

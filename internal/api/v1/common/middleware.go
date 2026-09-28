@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/marmotdata/marmot/internal/core/auth"
+	"github.com/marmotdata/marmot/internal/core/mfa"
 	"github.com/marmotdata/marmot/internal/core/serviceaccount"
 	"github.com/marmotdata/marmot/internal/core/user"
 	"github.com/marmotdata/marmot/pkg/config"
@@ -33,6 +34,23 @@ func SetOAuthManager(m *auth.OAuthManager) {
 
 var globalServiceAccountService serviceaccount.Service
 
+var globalTOTPService *mfa.Service
+
+func SetTOTPService(svc *mfa.Service) { globalTOTPService = svc }
+
+// TOTPEnrollmentPending checks the current server policy against the stored
+// factor. SSO sessions and API keys use their own authentication contracts.
+func TOTPEnrollmentPending(ctx context.Context, cfg *config.Config, id string, claims *auth.Claims) (bool, error) {
+	if !cfg.Auth.TOTP.Required || claims.AuthMethod == "sso" {
+		return false, nil
+	}
+	if globalTOTPService == nil {
+		return false, mfa.ErrUnavailable
+	}
+	status, err := globalTOTPService.Status(ctx, id)
+	return status.Local && !status.Enabled, err
+}
+
 // SetServiceAccountService registers the SA service so WithAuth can fall through to SA key validation.
 func SetServiceAccountService(svc serviceaccount.Service) {
 	globalServiceAccountService = svc
@@ -41,7 +59,7 @@ func SetServiceAccountService(svc serviceaccount.Service) {
 // OAuthAuthorizeCompleter completes a pending OAuth authorise flow (PKCE) from the login endpoint.
 type OAuthAuthorizeCompleter interface {
 	HasPendingAuthorize(r *http.Request) bool
-	CompleteAuthorize(w http.ResponseWriter, r *http.Request, userID, username string) (string, error)
+	CompleteAuthorize(w http.ResponseWriter, r *http.Request, userID, username string, authMethod ...string) (string, error)
 }
 
 var globalOAuthAuthorizeCompleter OAuthAuthorizeCompleter
@@ -133,6 +151,17 @@ func WithAuth(userService user.Service, authService auth.Service, cfg *config.Co
 							RespondError(w, http.StatusUnauthorized, "Invalid token")
 						}
 						return
+					}
+					if p.AsUser() != nil {
+						pending, gateErr := TOTPEnrollmentPending(r.Context(), cfg, p.ID(), claims)
+						if gateErr != nil {
+							RespondError(w, http.StatusServiceUnavailable, "Two-factor policy unavailable")
+							return
+						}
+						if pending {
+							RespondError(w, http.StatusUnauthorized, "Two-factor enrollment required")
+							return
+						}
 					}
 					ctx := setPrincipalContext(r.Context(), p)
 					next(w, r.WithContext(ctx))

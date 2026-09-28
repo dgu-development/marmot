@@ -33,13 +33,36 @@ func (h *Handler) totpRoutes() []common.Route {
 	return []common.Route{
 		{Path: "/api/v1/users/login/totp", Method: http.MethodPost, Handler: h.verifyTOTPLogin, Middleware: []func(http.HandlerFunc) http.HandlerFunc{limit}},
 		{Path: "/api/v1/users/login/password", Method: http.MethodPost, Handler: h.changeLoginPassword, Middleware: []func(http.HandlerFunc) http.HandlerFunc{limit}},
+		{Path: "/api/v1/users/login/totp/setup", Method: http.MethodPost, Handler: h.setupRequiredTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{limit}},
+		{Path: "/api/v1/users/login/totp/confirm", Method: http.MethodPost, Handler: h.confirmRequiredTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{limit}},
 		{Path: "/api/v1/users/totp", Method: http.MethodGet, Handler: h.totpStatus, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect}},
+		{Path: "/api/v1/users/totp/enrolled", Method: http.MethodGet, Handler: h.listTOTPEnrollment, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, common.RequirePermission(h.userService, "users", "view")}},
 		{Path: "/api/v1/users/totp/setup", Method: http.MethodPost, Handler: h.setupTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, limit}},
 		{Path: "/api/v1/users/totp/confirm", Method: http.MethodPost, Handler: h.confirmTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, limit}},
 		{Path: "/api/v1/users/totp", Method: http.MethodDelete, Handler: h.disableTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, limit}},
 		{Path: "/api/v1/users/totp/recovery", Method: http.MethodPost, Handler: h.regenerateRecovery, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, limit}},
 		{Path: "/api/v1/users/totp/reset/{id}", Method: http.MethodDelete, Handler: h.resetTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, common.RequirePermission(h.userService, "users", "manage"), limit}},
 	}
+}
+
+// @Summary List users with an enrolled second factor
+// @Tags users
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string][]string
+// @ID listTOTPEnrollment
+// @Router /api/v1/users/totp/enrolled [get]
+func (h *Handler) listTOTPEnrollment(w http.ResponseWriter, r *http.Request) {
+	if h.mfa == nil {
+		h.respondMFAError(w, mfa.ErrUnavailable)
+		return
+	}
+	ids, err := h.mfa.EnabledUserIDs(r.Context())
+	if err != nil {
+		h.respondMFAError(w, err)
+		return
+	}
+	common.RespondJSON(w, 200, map[string][]string{"user_ids": ids})
 }
 
 func (h *Handler) respondMFAError(w http.ResponseWriter, err error) {
@@ -49,7 +72,6 @@ func (h *Handler) respondMFAError(w http.ResponseWriter, err error) {
 	case errors.Is(err, mfa.ErrNotLocal):
 		common.RespondError(w, 403, "TOTP requires a local account")
 	case errors.Is(err, mfa.ErrRateLimited):
-		w.Header().Set("Retry-After", "300")
 		common.RespondError(w, 429, "Too many verification attempts")
 	case errors.Is(err, mfa.ErrAlreadyEnabled), errors.Is(err, mfa.ErrNotEnabled):
 		common.RespondError(w, 409, "TOTP state changed")
@@ -212,6 +234,10 @@ func (h *Handler) confirmTOTP(w http.ResponseWriter, r *http.Request) {
 // @ID disableTOTP
 // @Router /api/v1/users/totp [delete]
 func (h *Handler) disableTOTP(w http.ResponseWriter, r *http.Request) {
+	if h.config.Auth.TOTP.Required {
+		common.RespondError(w, 403, "Two-factor authentication is required")
+		return
+	}
 	u, ok := h.totpUser(w, r)
 	if !ok {
 		return
@@ -228,6 +254,65 @@ func (h *Handler) disableTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.respondTOTPRecovery(w, r, u.ID, nil)
+}
+
+// Enrollment endpoints accept only a password-verified, purpose-bound challenge.
+// They never accept a normal session token in place of the challenge.
+// @Summary Prepare required TOTP enrollment after password login
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param request body TOTPRequest true "Enrollment challenge"
+// @Success 200 {object} mfa.SetupResult
+// @Failure 401 {object} common.ErrorResponse
+// @ID setupRequiredTOTP
+// @Router /api/v1/users/login/totp/setup [post]
+func (h *Handler) setupRequiredTOTP(w http.ResponseWriter, r *http.Request) {
+	in, ok := h.totpInput(w, r)
+	if !ok {
+		return
+	}
+	if !h.config.Auth.TOTP.Required {
+		common.RespondError(w, 404, "Not found")
+		return
+	}
+	id, err := h.mfa.EnrollmentUser(r.Context(), in.MFAToken)
+	if err != nil {
+		h.respondMFAError(w, err)
+		return
+	}
+	setup, err := h.mfa.Setup(r.Context(), id)
+	if err != nil {
+		h.respondMFAError(w, err)
+		return
+	}
+	common.RespondJSON(w, 200, setup)
+}
+
+// @Summary Confirm required TOTP enrollment and return recovery codes once
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param request body TOTPRequest true "Enrollment challenge and code"
+// @Success 200 {object} RecoveryResponse
+// @Failure 401 {object} common.ErrorResponse
+// @ID confirmRequiredTOTP
+// @Router /api/v1/users/login/totp/confirm [post]
+func (h *Handler) confirmRequiredTOTP(w http.ResponseWriter, r *http.Request) {
+	in, ok := h.totpInput(w, r)
+	if !ok {
+		return
+	}
+	if !h.config.Auth.TOTP.Required {
+		common.RespondError(w, 404, "Not found")
+		return
+	}
+	id, codes, err := h.mfa.ConfirmEnrollment(r.Context(), in.MFAToken, in.Code)
+	if err != nil {
+		h.respondMFAError(w, err)
+		return
+	}
+	h.respondTOTPRecovery(w, r, id, codes)
 }
 
 // @Summary Replace one-use recovery codes
@@ -366,7 +451,12 @@ func (h *Handler) respondTOTPRecovery(w http.ResponseWriter, r *http.Request, id
 		h.respondMFAError(w, err)
 		return
 	}
-	token, err := h.authService.GenerateToken(r.Context(), u, u.Preferences)
+	claims := map[string]interface{}{}
+	for key, value := range u.Preferences {
+		claims[key] = value
+	}
+	claims["auth_method"] = "local"
+	token, err := h.authService.GenerateToken(r.Context(), u, claims)
 	if err != nil {
 		h.respondMFAError(w, err)
 		return

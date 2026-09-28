@@ -166,6 +166,7 @@ config:
   auth:
     totp:
       enabled: false
+      required: false
       issuer: "Marmot"
 
     anonymous:

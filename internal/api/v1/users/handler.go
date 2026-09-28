@@ -30,6 +30,8 @@ func NewHandler(userService user.Service, authService auth.Service, cfg *config.
 }
 
 func (h *Handler) Routes() []common.Route {
+	passwordCfg := *h.config
+	passwordCfg.RateLimit.Enabled = true
 	routes := []common.Route{
 		{
 			Path:    "/api/v1/users",
@@ -170,6 +172,14 @@ func (h *Handler) Routes() []common.Route {
 				common.WithAuth(h.userService, h.authService, h.config),
 				common.WithRateLimit(h.config, 10, 60),
 			},
+		},
+		{
+			Path: "/api/v1/users/change-password", Method: http.MethodPost, Handler: h.changeOwnPassword,
+			Middleware: []func(http.HandlerFunc) http.HandlerFunc{common.WithAuth(h.userService, h.authService, h.config), common.WithRateLimit(&passwordCfg, 10, 60)},
+		},
+		{
+			Path: "/api/v1/users/password/require-change/{id}", Method: http.MethodPost, Handler: h.requirePasswordChange,
+			Middleware: []func(http.HandlerFunc) http.HandlerFunc{common.WithAuth(h.userService, h.authService, h.config), common.RequirePermission(h.userService, "users", "manage")},
 		},
 	}
 	if h.config.Auth.TOTP.Enabled {

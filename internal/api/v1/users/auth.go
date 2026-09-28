@@ -16,6 +16,11 @@ type UpdatePasswordRequest struct {
 	NewPassword string `json:"new_password" validate:"required,min=8"`
 } // @name UpdatePasswordRequest
 
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
 type LoginRequest struct {
 	Username string `json:"username" validate:"required"`
 	Password string `json:"password" validate:"required"`
@@ -23,6 +28,7 @@ type LoginRequest struct {
 
 type TokenResponse struct {
 	RequiresTOTP           bool   `json:"requires_totp,omitempty"`
+	RequiresTOTPEnrollment bool   `json:"requires_totp_enrollment,omitempty"`
 	MFAToken               string `json:"mfa_token,omitempty"`
 	AccessToken            string `json:"access_token,omitempty"`
 	TokenType              string `json:"token_type,omitempty"`
@@ -83,10 +89,13 @@ func (h *Handler) completeLocalLogin(w http.ResponseWriter, r *http.Request, u *
 			return
 		}
 		purpose := ""
-		if u.MustChangePassword {
+		switch {
+		case u.MustChangePassword:
 			purpose = mfa.PurposePasswordChange
-		} else if status.Enabled {
+		case status.Enabled:
 			purpose = mfa.PurposeTOTP
+		case h.config.Auth.TOTP.Required && status.Local:
+			purpose = mfa.PurposeEnrollment
 		}
 		if purpose != "" {
 			token, err := h.mfa.IssueChallenge(r.Context(), u.ID, purpose)
@@ -95,7 +104,7 @@ func (h *Handler) completeLocalLogin(w http.ResponseWriter, r *http.Request, u *
 				return
 			}
 			w.Header().Set("Cache-Control", "no-store")
-			common.RespondJSON(w, http.StatusOK, TokenResponse{MFAToken: token, RequiresTOTP: purpose == mfa.PurposeTOTP, RequiresPasswordChange: u.MustChangePassword})
+			common.RespondJSON(w, http.StatusOK, TokenResponse{MFAToken: token, RequiresTOTP: purpose == mfa.PurposeTOTP, RequiresTOTPEnrollment: purpose == mfa.PurposeEnrollment, RequiresPasswordChange: u.MustChangePassword})
 			return
 		}
 	}
@@ -111,7 +120,8 @@ func (h *Handler) issueSession(w http.ResponseWriter, r *http.Request, authentic
 	}
 
 	extraClaims := map[string]interface{}{
-		"theme": theme,
+		"theme":       theme,
+		"auth_method": "local",
 	}
 
 	token, err := h.authService.GenerateToken(r.Context(), authenticatedUser, extraClaims)
@@ -255,6 +265,10 @@ func (h *Handler) updatePassword(w http.ResponseWriter, r *http.Request) {
 		common.RespondError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
+	if !usr.MustChangePassword {
+		common.RespondError(w, http.StatusForbidden, "Password change is not pending")
+		return
+	}
 
 	updatedUser, err := h.userService.UpdatePassword(r.Context(), usr.ID, input.NewPassword)
 	if err != nil {
@@ -274,7 +288,8 @@ func (h *Handler) updatePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	extraClaims := map[string]interface{}{
-		"theme": theme,
+		"theme":       theme,
+		"auth_method": "local",
 	}
 
 	token, err := h.authService.GenerateToken(r.Context(), updatedUser, extraClaims)
@@ -290,4 +305,75 @@ func (h *Handler) updatePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	common.RespondJSON(w, http.StatusOK, response)
+}
+
+// @Summary Change the current local user's password
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param request body ChangePasswordRequest true "Current and new password"
+// @Security BearerAuth
+// @Success 200 {object} TokenResponse
+// @Failure 401 {object} common.ErrorResponse
+// @ID changeOwnPassword
+// @Router /api/v1/users/change-password [post]
+func (h *Handler) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
+	var input ChangePasswordRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&input); err != nil || len(input.CurrentPassword) > 72 || len(input.NewPassword) > 72 {
+		common.RespondError(w, 400, "Invalid request body")
+		return
+	}
+	u, ok := common.GetAuthenticatedUser(r.Context())
+	if !ok || common.IsSyntheticUser(u) {
+		common.RespondError(w, 403, "Local account required")
+		return
+	}
+	if !h.reauthenticate(w, r, u, input.CurrentPassword) {
+		return
+	}
+	updated, err := h.userService.UpdatePassword(r.Context(), u.ID, input.NewPassword)
+	if err != nil {
+		if !respondUserError(w, err) {
+			common.RespondError(w, 500, "Could not change password")
+		}
+		return
+	}
+	h.issueSession(w, r, updated)
+}
+
+// @Summary Require a local user to change their password at next login
+// @Tags users
+// @Produce json
+// @Param id path string true "User ID"
+// @Security BearerAuth
+// @Success 204
+// @Failure 403 {object} common.ErrorResponse
+// @ID requirePasswordChange
+// @Router /api/v1/users/password/require-change/{id} [post]
+func (h *Handler) requirePasswordChange(w http.ResponseWriter, r *http.Request) {
+	actor, ok := common.GetAuthenticatedUser(r.Context())
+	id := r.PathValue("id")
+	if !ok || actor.ID == id || h.mfa == nil {
+		common.RespondError(w, 403, "Cannot require password change")
+		return
+	}
+	target, err := h.userService.Get(r.Context(), id)
+	if err != nil {
+		common.RespondError(w, 404, "User not found")
+		return
+	}
+	status, err := h.mfa.Status(r.Context(), id)
+	if err != nil {
+		h.respondMFAError(w, err)
+		return
+	}
+	if !status.Local || len(target.Identities) > 0 {
+		common.RespondError(w, 409, "Local password account required")
+		return
+	}
+	if err := h.userService.RequirePasswordChange(r.Context(), id); err != nil {
+		common.RespondError(w, 500, "Could not require password change")
+		return
+	}
+	w.WriteHeader(204)
 }

@@ -148,9 +148,13 @@ func TestLimitsPendingAndChallengeAuthority(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidChallenge)
 	setup, err := s.Setup(ctx, id)
 	require.NoError(t, err)
-	for range 5 {
+	for attempt := range 5 {
 		_, err = s.Confirm(ctx, id, "wrong")
-		require.ErrorIs(t, err, ErrInvalidCode)
+		if attempt == 4 {
+			require.ErrorIs(t, err, ErrRateLimited)
+		} else {
+			require.ErrorIs(t, err, ErrInvalidCode)
+		}
 	}
 	setup, err = s.Setup(ctx, id)
 	require.NoError(t, err) // setup cannot clear persisted lockout
@@ -165,16 +169,36 @@ func TestLimitsPendingAndChallengeAuthority(t *testing.T) {
 	require.NoError(t, err)
 	_, err = db.Exec(ctx, `UPDATE users SET must_change_password=false WHERE id=$1`, id)
 	require.NoError(t, err)
-	for range 5 {
+	for attempt := range 5 {
 		token, err = s.IssueChallenge(ctx, id, PurposeTOTP)
 		require.NoError(t, err)
 		_, err = s.VerifyLogin(ctx, token, "wrong")
-		require.ErrorIs(t, err, ErrInvalidCode)
+		if attempt == 4 {
+			require.ErrorIs(t, err, ErrRateLimited)
+		} else {
+			require.ErrorIs(t, err, ErrInvalidCode)
+		}
 	}
 	token, err = s.IssueChallenge(ctx, id, PurposeTOTP)
 	require.NoError(t, err)
 	_, err = s.VerifyLogin(ctx, token, code)
 	require.ErrorIs(t, err, ErrRateLimited)
+	now = now.Add(5 * time.Minute)
+	for attempt := range 5 {
+		token, err = s.IssueChallenge(ctx, id, PurposeTOTP)
+		require.NoError(t, err)
+		_, err = s.VerifyLogin(ctx, token, "wrong")
+		if attempt == 4 {
+			require.ErrorIs(t, err, ErrRateLimited)
+		} else {
+			require.ErrorIs(t, err, ErrInvalidCode)
+		}
+	}
+	var level int
+	var lockedUntil time.Time
+	require.NoError(t, db.QueryRow(ctx, `SELECT lockout_level,locked_until FROM user_totp WHERE user_id=$1`, id).Scan(&level, &lockedUntil))
+	require.Equal(t, 2, level)
+	require.WithinDuration(t, now.Add(15*time.Minute), lockedUntil, time.Second)
 	require.NoError(t, s.Reset(ctx, id))
 	_, err = s.VerifyLogin(ctx, token, code)
 	require.ErrorIs(t, err, ErrInvalidChallenge)

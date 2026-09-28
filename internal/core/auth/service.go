@@ -21,6 +21,7 @@ const TokenTTL = 24 * time.Hour
 
 type Claims struct {
 	SessionEpoch string                 `json:"session_epoch,omitempty"`
+	AuthMethod   string                 `json:"auth_method,omitempty"`
 	Roles        []string               `json:"roles"`
 	Permissions  []string               `json:"permissions"`
 	Preferences  map[string]interface{} `json:"preferences,omitempty"`
@@ -98,7 +99,16 @@ func (s *service) GenerateTokenForPrincipal(ctx context.Context, p Principal, pr
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
 		},
-		Preferences: preferencesClaims,
+	}
+	for key, value := range preferencesClaims {
+		if key == "auth_method" {
+			claims.AuthMethod, _ = value.(string)
+		} else {
+			if claims.Preferences == nil {
+				claims.Preferences = make(map[string]interface{}, len(preferencesClaims))
+			}
+			claims.Preferences[key] = value
+		}
 	}
 
 	if u := p.AsUser(); u != nil {

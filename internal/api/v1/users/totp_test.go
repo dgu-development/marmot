@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/marmotdata/marmot/internal/api/v1/common"
 	"github.com/marmotdata/marmot/internal/core/auth"
 	"github.com/marmotdata/marmot/internal/core/mfa"
 	"github.com/marmotdata/marmot/internal/core/user"
@@ -34,6 +35,8 @@ func TestTOTPHTTPAuthenticationBoundary(t *testing.T) {
 	encryptor, err := crypto.NewEncryptor(key)
 	require.NoError(t, err)
 	factors := mfa.NewService(pool, encryptor, "Marmot test")
+	common.SetTOTPService(factors)
+	t.Cleanup(func() { common.SetTOTPService(nil) })
 	cfg := &config.Config{}
 	cfg.Auth.TOTP.Enabled = true
 	handler := NewHandler(users, tokens, cfg, factors)
@@ -141,8 +144,34 @@ func TestTOTPHTTPAuthenticationBoundary(t *testing.T) {
 	call("DELETE", "/api/v1/users/totp/reset/"+account.ID, adminToken, nil, 204)
 	call("GET", "/api/v1/users/me", token, nil, 401)
 	require.NotEmpty(t, text(login("changed-password"), "access_token"))
+	// Turning on mandatory enrollment blocks existing local sessions and
+	// returns a restricted challenge, while explicit SSO sessions remain valid.
+	cfg.Auth.TOTP.Required = true
+	account, err = users.Get(ctx, account.ID)
+	require.NoError(t, err)
+	legacy, err := tokens.GenerateToken(ctx, account, nil)
+	require.NoError(t, err)
+	call("GET", "/api/v1/users/me", legacy, nil, 401)
+	sso, err = tokens.GenerateToken(ctx, account, map[string]interface{}{"auth_method": "sso"})
+	require.NoError(t, err)
+	call("GET", "/api/v1/users/me", sso, nil, 200)
+	enroll := login("changed-password")
+	require.Equal(t, "true", string(enroll["requires_totp_enrollment"]))
+	require.Empty(t, text(enroll, "access_token"))
+	pending = text(enroll, "mfa_token")
+	call("GET", "/api/v1/users/me", pending, nil, 401)
+	call("POST", "/api/v1/users/login/totp/setup", "", map[string]string{"mfa_token": "wrong"}, 401)
+	setup = call("POST", "/api/v1/users/login/totp/setup", "", map[string]string{"mfa_token": pending}, 200)
+	code, err = totp.GenerateCode(text(setup, "secret"), time.Now())
+	require.NoError(t, err)
+	call("POST", "/api/v1/users/login/totp/confirm", "", map[string]string{"mfa_token": pending, "code": "bad"}, 401)
+	confirmed = call("POST", "/api/v1/users/login/totp/confirm", "", map[string]string{"mfa_token": pending, "code": code}, 200)
+	require.NotEmpty(t, text(confirmed, "access_token"))
+	call("POST", "/api/v1/users/login/totp/confirm", "", map[string]string{"mfa_token": pending, "code": code}, 401)
+	call("DELETE", "/api/v1/users/totp", text(confirmed, "access_token"), map[string]string{"password": "changed-password", "code": code}, 403)
 	// With the feature disabled no second-factor routes exist and legacy login is preserved.
 	cfg.Auth.TOTP.Enabled = false
+	cfg.Auth.TOTP.Required = false
 	off := NewHandler(users, tokens, cfg)
 	for _, route := range off.Routes() {
 		require.NotContains(t, route.Path, "totp")
@@ -154,4 +183,17 @@ func TestTOTPHTTPAuthenticationBoundary(t *testing.T) {
 	var response TokenResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 	require.NotEmpty(t, response.AccessToken)
+	call("POST", "/api/v1/users/update-password", response.AccessToken, map[string]string{"new_password": "bypass-password"}, 403)
+	call("POST", "/api/v1/users/change-password", response.AccessToken, map[string]string{"current_password": "wrong", "new_password": "next-password"}, 401)
+	changedPassword := call("POST", "/api/v1/users/change-password", response.AccessToken, map[string]string{"current_password": "changed-password", "new_password": "next-password"}, 200)
+	newToken := text(changedPassword, "access_token")
+	require.NotEmpty(t, newToken)
+	call("GET", "/api/v1/users/me", response.AccessToken, nil, 401)
+	call("GET", "/api/v1/users/me", newToken, nil, 200)
+	call("POST", "/api/v1/users/password/require-change/"+account.ID, newToken, nil, 403)
+	call("POST", "/api/v1/users/password/require-change/"+account.ID, adminToken, nil, 204)
+	call("GET", "/api/v1/users/me", newToken, nil, 401)
+	resetLogin := login("next-password")
+	require.Equal(t, "true", string(resetLogin["requires_password_change"]))
+	call("GET", "/api/v1/users/me", text(resetLogin, "access_token"), nil, 403)
 }

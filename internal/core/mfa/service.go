@@ -34,6 +34,7 @@ var (
 const (
 	PurposeTOTP           = "totp"
 	PurposePasswordChange = "password_change"
+	PurposeEnrollment     = "enrollment"
 )
 
 type Status struct {
@@ -63,6 +64,23 @@ func (s *Service) Status(ctx context.Context, id string) (Status, error) {
 	var out Status
 	err := s.db.QueryRow(ctx, `SELECT active AND COALESCE(password_hash,'') <> '', COALESCE(t.confirmed_at IS NOT NULL,false), (SELECT count(*) FROM user_totp_recovery WHERE user_id=u.id AND used_at IS NULL) FROM users u LEFT JOIN user_totp t ON t.user_id=u.id WHERE u.id=$1`, id).Scan(&out.Local, &out.Enabled, &out.RecoveryRemaining)
 	return out, err
+}
+
+func (s *Service) EnabledUserIDs(ctx context.Context) ([]string, error) {
+	rows, err := s.db.Query(ctx, `SELECT user_id FROM user_totp WHERE confirmed_at IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 type account struct {
@@ -143,8 +161,12 @@ func (s *Service) Setup(ctx context.Context, id string) (SetupResult, error) {
 func (s *Service) checkLimit(ctx context.Context, tx pgx.Tx, id string) error {
 	var n int
 	var start *time.Time
-	if err := tx.QueryRow(ctx, `SELECT failed_attempts,failure_window FROM user_totp WHERE user_id=$1`, id).Scan(&n, &start); err != nil {
+	var lockedUntil *time.Time
+	if err := tx.QueryRow(ctx, `SELECT failed_attempts,failure_window,locked_until FROM user_totp WHERE user_id=$1`, id).Scan(&n, &start, &lockedUntil); err != nil {
 		return err
+	}
+	if lockedUntil != nil && s.now().Before(*lockedUntil) {
+		return ErrRateLimited
 	}
 	if start != nil && s.now().Before(start.Add(5*time.Minute)) && n >= 5 {
 		return ErrRateLimited
@@ -152,9 +174,39 @@ func (s *Service) checkLimit(ctx context.Context, tx pgx.Tx, id string) error {
 	return nil
 }
 func (s *Service) failed(ctx context.Context, tx pgx.Tx, id string) error {
-	_, err := tx.Exec(ctx, `UPDATE user_totp SET failed_attempts=CASE WHEN failure_window IS NULL OR failure_window <= $2 THEN 1 ELSE failed_attempts+1 END, failure_window=CASE WHEN failure_window IS NULL OR failure_window <= $2 THEN $3 ELSE failure_window END WHERE user_id=$1`, id, s.now().Add(-5*time.Minute), s.now())
+	var attempts, level int
+	var window *time.Time
+	if err := tx.QueryRow(ctx, `SELECT failed_attempts,failure_window,lockout_level FROM user_totp WHERE user_id=$1`, id).Scan(&attempts, &window, &level); err != nil {
+		return err
+	}
+	if window == nil || !s.now().Before(window.Add(5*time.Minute)) {
+		attempts = 0
+		window = nil
+	}
+	windowStart := s.now()
+	if window != nil {
+		windowStart = *window
+	}
+	attempts++
+	var lockedUntil *time.Time
+	if attempts >= 5 {
+		durations := []time.Duration{5 * time.Minute, 15 * time.Minute, time.Hour, 24 * time.Hour}
+		index := level
+		if index >= len(durations) {
+			index = len(durations) - 1
+		}
+		if level < len(durations) {
+			level++
+		}
+		until := s.now().Add(durations[index])
+		lockedUntil = &until
+	}
+	_, err := tx.Exec(ctx, `UPDATE user_totp SET failed_attempts=$2,failure_window=$3,lockout_level=$4,locked_until=$5 WHERE user_id=$1`, id, attempts, windowStart, level, lockedUntil)
 	if err != nil {
 		return err
+	}
+	if lockedUntil != nil {
+		return ErrRateLimited
 	}
 	return ErrInvalidCode
 }
@@ -197,7 +249,7 @@ func (s *Service) verify(ctx context.Context, tx pgx.Tx, id, code string, pendin
 				return err
 			}
 			if subtle.ConstantTimeCompare([]byte(expected), []byte(code)) == 1 {
-				_, err = tx.Exec(ctx, `UPDATE user_totp SET last_step=$2,failed_attempts=0,failure_window=NULL WHERE user_id=$1`, id, candidate)
+				_, err = tx.Exec(ctx, `UPDATE user_totp SET last_step=$2,failed_attempts=0,failure_window=NULL,lockout_level=0,locked_until=NULL WHERE user_id=$1`, id, candidate)
 				return err
 			}
 		}
@@ -228,7 +280,7 @@ func (s *Service) verify(ctx context.Context, tx pgx.Tx, id, code string, pendin
 			if _, err = tx.Exec(ctx, `UPDATE user_totp_recovery SET used_at=$2 WHERE id=$1`, match, s.now()); err != nil {
 				return err
 			}
-			_, err = tx.Exec(ctx, `UPDATE user_totp SET failed_attempts=0,failure_window=NULL WHERE user_id=$1`, id)
+			_, err = tx.Exec(ctx, `UPDATE user_totp SET failed_attempts=0,failure_window=NULL,lockout_level=0,locked_until=NULL WHERE user_id=$1`, id)
 			return err
 		}
 	}
@@ -268,8 +320,26 @@ func invalidate(ctx context.Context, tx pgx.Tx, id string, now time.Time) error 
 	return err
 }
 func (s *Service) Confirm(ctx context.Context, id, code string) ([]string, error) {
+	return s.confirm(ctx, id, code, "")
+}
+
+func (s *Service) ConfirmEnrollment(ctx context.Context, token, code string) (string, []string, error) {
+	id, err := s.enrollmentUser(ctx, token)
+	if err != nil {
+		return "", nil, err
+	}
+	codes, err := s.confirm(ctx, id, code, token)
+	return id, codes, err
+}
+
+func (s *Service) confirm(ctx context.Context, id, code, token string) ([]string, error) {
 	var codes []string
-	err := s.transaction(ctx, id, func(tx pgx.Tx, _ account) error {
+	err := s.transaction(ctx, id, func(tx pgx.Tx, a account) error {
+		if token != "" {
+			if err := s.checkChallenge(ctx, tx, a, token, PurposeEnrollment); err != nil {
+				return err
+			}
+		}
 		if err := s.verify(ctx, tx, id, code, true); err != nil {
 			return err
 		}
@@ -300,7 +370,7 @@ func (s *Service) Reset(ctx context.Context, id string) error {
 	return s.transaction(ctx, id, func(tx pgx.Tx, _ account) error { return s.clear(ctx, tx, id) })
 }
 func (s *Service) clear(ctx context.Context, tx pgx.Tx, id string) error {
-	if _, err := tx.Exec(ctx, `UPDATE user_totp SET secret_ciphertext=NULL,pending_ciphertext=NULL,pending_until=NULL,confirmed_at=NULL,last_step=-1 WHERE user_id=$1`, id); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE user_totp SET secret_ciphertext=NULL,pending_ciphertext=NULL,pending_until=NULL,confirmed_at=NULL,last_step=-1,failed_attempts=0,failure_window=NULL,lockout_level=0,locked_until=NULL WHERE user_id=$1`, id); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM user_totp_recovery WHERE user_id=$1`, id); err != nil {
@@ -324,7 +394,7 @@ func (s *Service) RegenerateRecovery(ctx context.Context, id, code string) ([]st
 	return codes, nil
 }
 func (s *Service) IssueChallenge(ctx context.Context, id, purpose string) (string, error) {
-	if purpose != PurposeTOTP && purpose != PurposePasswordChange {
+	if purpose != PurposeTOTP && purpose != PurposePasswordChange && purpose != PurposeEnrollment {
 		return "", ErrInvalidChallenge
 	}
 	token, err := randomToken(32)
@@ -345,17 +415,74 @@ func (s *Service) IssueChallenge(ctx context.Context, id, purpose string) (strin
 				return ErrInvalidChallenge
 			}
 		}
+		if purpose == PurposeEnrollment {
+			var enabled bool
+			if err := tx.QueryRow(ctx, `SELECT confirmed_at IS NOT NULL FROM user_totp WHERE user_id=$1`, id).Scan(&enabled); err != nil {
+				return err
+			}
+			if enabled || a.mustChange {
+				return ErrInvalidChallenge
+			}
+		}
 		fingerprint := sha256.Sum256([]byte(a.password))
 		if _, err := tx.Exec(ctx, `DELETE FROM user_auth_challenges WHERE user_id=$1`, id); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO user_auth_challenges(token_hash,user_id,purpose,password_fingerprint,issued_at,expires_at,session_epoch) VALUES($1,$2,$3,$4,$5,$6,$7)`, hash[:], id, purpose, fingerprint[:], s.now(), s.now().Add(5*time.Minute), a.invalidated)
+		ttl := 5 * time.Minute
+		if purpose == PurposeEnrollment {
+			ttl = 10 * time.Minute
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO user_auth_challenges(token_hash,user_id,purpose,password_fingerprint,issued_at,expires_at,session_epoch) VALUES($1,$2,$3,$4,$5,$6,$7)`, hash[:], id, purpose, fingerprint[:], s.now(), s.now().Add(ttl), a.invalidated)
 		return err
 	})
 	if err != nil {
 		return "", err
 	}
 	return token, nil
+}
+
+func (s *Service) enrollmentUser(ctx context.Context, token string) (string, error) {
+	if len(token) != 64 {
+		return "", ErrInvalidChallenge
+	}
+	hash := sha256.Sum256([]byte(token))
+	var id string
+	if err := s.db.QueryRow(ctx, `SELECT user_id FROM user_auth_challenges WHERE token_hash=$1`, hash[:]).Scan(&id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrInvalidChallenge
+		}
+		return "", err
+	}
+	err := s.transaction(ctx, id, func(tx pgx.Tx, a account) error {
+		return s.checkChallenge(ctx, tx, a, token, PurposeEnrollment)
+	})
+	return id, err
+}
+
+func (s *Service) EnrollmentUser(ctx context.Context, token string) (string, error) {
+	return s.enrollmentUser(ctx, token)
+}
+
+func (s *Service) checkChallenge(ctx context.Context, tx pgx.Tx, a account, token, purpose string) error {
+	hash := sha256.Sum256([]byte(token))
+	var storedPurpose string
+	var expires time.Time
+	var epoch *time.Time
+	var fingerprint []byte
+	if err := tx.QueryRow(ctx, `SELECT purpose,expires_at,session_epoch,password_fingerprint FROM user_auth_challenges WHERE token_hash=$1 FOR UPDATE`, hash[:]).Scan(&storedPurpose, &expires, &epoch, &fingerprint); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrInvalidChallenge
+		}
+		return err
+	}
+	current := sha256.Sum256([]byte(a.password))
+	if storedPurpose != purpose || !s.now().Before(expires) || ((a.invalidated == nil) != (epoch == nil)) || (epoch != nil && a.invalidated != nil && !epoch.Equal(*a.invalidated)) || subtle.ConstantTimeCompare(current[:], fingerprint) != 1 {
+		return ErrInvalidChallenge
+	}
+	if purpose == PurposeEnrollment && a.mustChange {
+		return ErrInvalidChallenge
+	}
+	return nil
 }
 func (s *Service) consume(ctx context.Context, token, purpose, code string) (string, error) {
 	if len(token) != 64 {
@@ -371,20 +498,8 @@ func (s *Service) consume(ctx context.Context, token, purpose, code string) (str
 		return "", err
 	}
 	err = s.transaction(ctx, id, func(tx pgx.Tx, a account) error {
-		var storedPurpose string
-		var expires time.Time
-		var epoch *time.Time
-		var fingerprint []byte
-		err := tx.QueryRow(ctx, `SELECT purpose,expires_at,session_epoch,password_fingerprint FROM user_auth_challenges WHERE token_hash=$1 FOR UPDATE`, hash[:]).Scan(&storedPurpose, &expires, &epoch, &fingerprint)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrInvalidChallenge
-		}
-		if err != nil {
+		if err := s.checkChallenge(ctx, tx, a, token, purpose); err != nil {
 			return err
-		}
-		current := sha256.Sum256([]byte(a.password))
-		if storedPurpose != purpose || !s.now().Before(expires) || ((a.invalidated == nil) != (epoch == nil)) || (epoch != nil && a.invalidated != nil && !epoch.Equal(*a.invalidated)) || subtle.ConstantTimeCompare(current[:], fingerprint) != 1 {
-			return ErrInvalidChallenge
 		}
 		if purpose == PurposeTOTP {
 			if a.mustChange {
