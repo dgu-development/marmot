@@ -7,7 +7,7 @@
 	import { m } from '$lib/paraglide/messages';
 	import EditUserForm from './EditUserForm.svelte';
 	import DeleteModal from '$components/ui/DeleteModal.svelte';
-	import { Lock, Mail } from 'lucide-svelte';
+	import { KeyRound, Lock, Mail, Pencil, RotateCcw, Trash2 } from 'lucide-svelte';
 
 	export let users = [];
 	export let editingUserId = null;
@@ -15,7 +15,7 @@
 	export let onUpdate;
 	export let onDelete;
 
-	let totpEnabled = false;
+	let totpStatus: 'loading' | 'disabled' | 'ready' | 'error' = 'loading';
 	let totpUsers = new Set<string>();
 	let resetUser: { id: string; username: string } | null = null;
 	let passwordResetUser: { id: string; username: string } | null = null;
@@ -23,15 +23,17 @@
 	onMount(async () => {
 		try {
 			const response = await fetch('/auth-providers');
-			if (response.ok) {
-				totpEnabled = !!(await response.json()).totp_enabled;
-				if (totpEnabled) {
-					const enrolled = await fetchApi('/users/totp/enrolled');
-					if (enrolled.ok) totpUsers = new Set((await enrolled.json()).user_ids);
-				}
+			if (!response.ok) throw new Error('Auth configuration unavailable');
+			if (!(await response.json()).totp_enabled) {
+				totpStatus = 'disabled';
+				return;
 			}
+			const enrolled = await fetchApi('/users/totp/enrolled');
+			if (!enrolled.ok) throw new Error('TOTP enrollment unavailable');
+			totpUsers = new Set((await enrolled.json()).user_ids);
+			totpStatus = 'ready';
 		} catch {
-			/* Keep actions hidden when configuration is unavailable. */
+			totpStatus = 'error';
 		}
 	});
 	async function resetTOTP() {
@@ -178,10 +180,16 @@
 									{m.users_auth_password_badge()}
 								</span>
 							{/if}
-							{#if totpUsers.has(user.id)}
+							{#if !user.identities?.length}
 								<span
-									class="ml-1 inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200"
-									>{m.totp_badge()}</span
+									class={`ml-1 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${totpStatus === 'ready' && totpUsers.has(user.id) ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}
+									>{totpStatus === 'ready'
+										? totpUsers.has(user.id)
+											? m.totp_badge()
+											: m.totp_not_enabled()
+										: totpStatus === 'disabled'
+											? m.totp_server_disabled()
+											: m.totp_status_unavailable()}</span
 								>
 							{/if}
 						</td>
@@ -207,42 +215,52 @@
 								>{/if}
 						</td>
 						<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-							{#if totpEnabled && totpUsers.has(user.id) && currentUserId !== user.id && (auth.hasRole('admin') || auth.hasPermission('users', 'manage'))}
-								<button
-									type="button"
-									class="mr-3 text-earthy-terracotta-700 hover:underline dark:text-earthy-terracotta-400"
-									on:click={() => (resetUser = user)}>{m.totp_reset()}</button
-								>
-							{/if}
-							{#if currentUserId !== user.id}
-								{#if !user.identities?.length && (auth.hasRole('admin') || auth.hasPermission('users', 'manage'))}
+							<div class="flex items-center justify-end gap-1">
+								{#if totpStatus === 'ready' && totpUsers.has(user.id) && currentUserId !== user.id && (auth.hasRole('admin') || auth.hasPermission('users', 'manage'))}
 									<button
 										type="button"
-										class="mr-3 text-earthy-terracotta-700 hover:underline dark:text-earthy-terracotta-400"
-										on:click={() => (passwordResetUser = user)}
-										>{m.users_require_password_change()}</button
+										class="rounded-md p-2 text-earthy-terracotta-700 hover:bg-earthy-terracotta-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-earthy-terracotta-600 dark:text-earthy-terracotta-300 dark:hover:bg-gray-700"
+										aria-label={`${m.totp_reset()}: ${user.username}`}
+										title={m.totp_reset()}
+										on:click={() => (resetUser = user)}><RotateCcw class="h-4 w-4" /></button
 									>
 								{/if}
-								<button
-									type="button"
-									class="text-earthy-terracotta-700 hover:text-earthy-terracotta-800 dark:text-earthy-terracotta-500 dark:hover:text-earthy-terracotta-400 mr-3"
-									on:click={() => onEdit(user.id)}
-								>
-									{m.common_edit()}
-								</button>
-							{/if}
-							{#if currentUserId !== user.id && user.username !== 'admin'}
-								<button
-									type="button"
-									class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-									on:click={() => {
-										userToDelete = user;
-										showDeleteModal = true;
-									}}
-								>
-									{m.common_delete()}
-								</button>
-							{/if}
+								{#if currentUserId !== user.id}
+									{#if !user.identities?.length && (auth.hasRole('admin') || auth.hasPermission('users', 'manage'))}
+										<button
+											type="button"
+											class="rounded-md p-2 text-earthy-terracotta-700 hover:bg-earthy-terracotta-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-earthy-terracotta-600 dark:text-earthy-terracotta-300 dark:hover:bg-gray-700"
+											aria-label={`${m.users_require_password_change()}: ${user.username}`}
+											title={m.users_require_password_change()}
+											on:click={() => (passwordResetUser = user)}
+											><KeyRound class="h-4 w-4" /></button
+										>
+									{/if}
+									<button
+										type="button"
+										class="rounded-md p-2 text-earthy-terracotta-700 hover:bg-earthy-terracotta-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-earthy-terracotta-600 dark:text-earthy-terracotta-300 dark:hover:bg-gray-700"
+										aria-label={`${m.common_edit()}: ${user.username}`}
+										title={m.common_edit()}
+										on:click={() => onEdit(user.id)}
+									>
+										<Pencil class="h-4 w-4" />
+									</button>
+								{/if}
+								{#if currentUserId !== user.id && user.username !== 'admin'}
+									<button
+										type="button"
+										class="rounded-md p-2 text-red-600 hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-600 dark:text-red-400 dark:hover:bg-red-950"
+										aria-label={`${m.common_delete()}: ${user.username}`}
+										title={m.common_delete()}
+										on:click={() => {
+											userToDelete = user;
+											showDeleteModal = true;
+										}}
+									>
+										<Trash2 class="h-4 w-4" />
+									</button>
+								{/if}
+							</div>
 						</td>
 					{/if}
 				</tr>
