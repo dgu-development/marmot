@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import ConfirmModal from '$components/ui/ConfirmModal.svelte';
 	import { fetchApi } from '$lib/api';
 	import { auth } from '$lib/stores/auth';
 	import { toasts, handleApiError } from '$lib/stores/toast';
@@ -12,6 +14,34 @@
 	export let onEdit;
 	export let onUpdate;
 	export let onDelete;
+
+	let totpEnabled = false;
+	let resetUser: { id: string; username: string } | null = null;
+	let resetting = false;
+	onMount(async () => {
+		try {
+			const response = await fetch('/auth-providers');
+			if (response.ok) totpEnabled = !!(await response.json()).totp_enabled;
+		} catch {
+			/* Keep actions hidden when configuration is unavailable. */
+		}
+	});
+	async function resetTOTP() {
+		if (!resetUser || resetting) return;
+		resetting = true;
+		try {
+			const response = await fetchApi(`/users/totp/reset/${encodeURIComponent(resetUser.id)}`, {
+				method: 'DELETE'
+			});
+			if (!response.ok) throw new Error(m.totp_error());
+			toasts.success(m.totp_reset_done());
+			resetUser = null;
+		} catch {
+			toasts.error(m.totp_error());
+		} finally {
+			resetting = false;
+		}
+	}
 
 	let showDeleteModal = false;
 	let userToDelete = null;
@@ -140,6 +170,13 @@
 							</span>
 						</td>
 						<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+							{#if totpEnabled && currentUserId !== user.id && (auth.hasRole('admin') || auth.hasPermission('users', 'manage'))}
+								<button
+									type="button"
+									class="mr-3 text-earthy-terracotta-700 hover:underline dark:text-earthy-terracotta-400"
+									on:click={() => (resetUser = user)}>{m.totp_reset()}</button
+								>
+							{/if}
 							{#if currentUserId !== user.id}
 								<button
 									type="button"
@@ -180,5 +217,16 @@
 	onCancel={() => {
 		showDeleteModal = false;
 		userToDelete = null;
+	}}
+/>
+
+<ConfirmModal
+	show={!!resetUser}
+	title={m.totp_reset()}
+	message={m.totp_reset_help({ name: resetUser?.username || '' })}
+	confirmText={m.totp_reset()}
+	onConfirm={resetTOTP}
+	onCancel={() => {
+		if (!resetting) resetUser = null;
 	}}
 />

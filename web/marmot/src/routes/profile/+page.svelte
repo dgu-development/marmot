@@ -1,4 +1,5 @@
 <script lang="ts">
+	import TOTPSettings from '$components/auth/TOTPSettings.svelte';
 	import Profile from '$components/auth/Profile.svelte';
 	import ApiKeys from '$components/auth/ApiKeys.svelte';
 	import Subscriptions from '$components/auth/Subscriptions.svelte';
@@ -31,6 +32,7 @@
 		<div class="flex-1">
 			{#if activeTab === 'profile'}
 				<Profile />
+				<TOTPSettings />
 			{:else if activeTab === 'subscriptions'}
 				<Subscriptions />
 			{:else if activeTab === 'api-keys'}
