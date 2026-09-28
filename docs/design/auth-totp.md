@@ -5,8 +5,10 @@ Feature branch from `dgu`; disabled by default. The distribution receives it onl
 | Password change required | Enrolled | Authentication path | Result |
 | --- | --- | --- | --- |
 | No | No | Local password, flag on | Session |
+| No | No | Local password, `required` on | Enrollment challenge; session only after confirmation |
 | No | Yes | Local password, flag on | TOTP/recovery challenge; session only after verification |
 | Yes | No | Local password, flag on | Password-change challenge, then session |
+| Yes | No | Local password, `required` on | Password-change challenge, then enrollment challenge |
 | Yes | Yes | Local password, flag on | Password-change challenge, then TOTP/recovery challenge, then session |
 | Any | Any | Local password, flag off | Existing login behavior |
 | Any | Any | SSO callback | Existing IdP session flow; no native TOTP step-up |

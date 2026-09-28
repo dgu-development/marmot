@@ -372,6 +372,8 @@ definitions:
         type: array
       totp_enabled:
         type: boolean
+      totp_required:
+        type: boolean
     type: object
   AvailableFilters:
     properties:
@@ -2209,6 +2211,8 @@ definitions:
         type: boolean
       requires_totp:
         type: boolean
+      requires_totp_enrollment:
+        type: boolean
       token_type:
         type: string
     type: object
@@ -3310,6 +3314,13 @@ definitions:
       description:
         type: string
       name:
+        type: string
+    type: object
+  v1_users.ChangePasswordRequest:
+    properties:
+      current_password:
+        type: string
+      new_password:
         type: string
     type: object
   v1_users.RecoveryResponse:
@@ -9205,6 +9216,34 @@ paths:
       summary: Delete API key
       tags:
       - users
+  /api/v1/users/change-password:
+    post:
+      consumes:
+      - application/json
+      operationId: changeOwnPassword
+      parameters:
+      - description: Current and new password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1_users.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/TokenResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Change the current local user's password
+      tags:
+      - users
   /api/v1/users/login:
     post:
       consumes:
@@ -9320,6 +9359,58 @@ paths:
       summary: Complete local login using a second factor
       tags:
       - users
+  /api/v1/users/login/totp/confirm:
+    post:
+      consumes:
+      - application/json
+      operationId: confirmRequiredTOTP
+      parameters:
+      - description: Enrollment challenge and code
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1_users.TOTPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1_users.RecoveryResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Confirm required TOTP enrollment and return recovery codes once
+      tags:
+      - users
+  /api/v1/users/login/totp/setup:
+    post:
+      consumes:
+      - application/json
+      operationId: setupRequiredTOTP
+      parameters:
+      - description: Enrollment challenge
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v1_users.TOTPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/mfa.SetupResult'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      summary: Prepare required TOTP enrollment after password login
+      tags:
+      - users
   /api/v1/users/me:
     get:
       consumes:
@@ -9401,6 +9492,29 @@ paths:
       - ApiKeyAuth: []
       - BearerAuth: []
       summary: Unlink OAuth account
+      tags:
+      - users
+  /api/v1/users/password/require-change/{id}:
+    post:
+      operationId: requirePasswordChange
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Require a local user to change their password at next login
       tags:
       - users
   /api/v1/users/preferences:
@@ -9584,6 +9698,25 @@ paths:
       - BearerAuth: []
       - ApiKeyAuth: []
       summary: Confirm TOTP and return recovery codes once
+      tags:
+      - users
+  /api/v1/users/totp/enrolled:
+    get:
+      operationId: listTOTPEnrollment
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                type: string
+              type: array
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List users with an enrolled second factor
       tags:
       - users
   /api/v1/users/totp/recovery:
