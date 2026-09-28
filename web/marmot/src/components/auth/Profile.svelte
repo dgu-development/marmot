@@ -10,8 +10,6 @@
 	interface Permission {
 		name: string;
 		description: string;
-		action: string;
-		resource_type: string;
 	}
 
 	interface Role {
@@ -20,6 +18,10 @@
 	}
 
 	interface User {
+		username: string;
+		active: boolean;
+		created_at: string;
+		updated_at: string;
 		name: string;
 		email: string;
 		roles: Role[];
@@ -28,11 +30,42 @@
 	let loading = true;
 	let error: string | null = null;
 	let user: User = {
+		username: '',
+		active: false,
+		created_at: '',
+		updated_at: '',
 		name: '',
 		email: '',
 		roles: []
 	};
+	$: permissions = [
+		...new Map(user.roles.flatMap((role) => role.permissions).map((p) => [p.name, p])).values()
+	];
 
+	function permissionLabel(permission: Permission): string {
+		const labels: Record<string, () => string> = {
+			view_users: m.profile_permission_view_users,
+			manage_users: m.profile_permission_manage_users,
+			view_assets: m.profile_permission_view_assets,
+			manage_assets: m.profile_permission_manage_assets,
+			manage_roles: m.profile_permission_manage_roles,
+			view_metrics: m.profile_permission_view_metrics,
+			view_glossary: m.profile_permission_view_glossary,
+			manage_glossary: m.profile_permission_manage_glossary,
+			view_teams: m.profile_permission_view_teams,
+			manage_teams: m.profile_permission_manage_teams,
+			manage_sso_mappings: m.profile_permission_manage_sso_mappings,
+			view_ingestion: m.profile_permission_view_ingestion,
+			manage_ingestion: m.profile_permission_manage_ingestion,
+			preview_assets: m.profile_permission_preview_assets,
+			emit_agent_runs: m.profile_permission_emit_agent_runs,
+			service_accounts_view: m.profile_permission_service_accounts_view,
+			service_accounts_manage: m.profile_permission_service_accounts_manage,
+			dgu_view_domains: m.profile_permission_dgu_view_domains,
+			dgu_manage_domains: m.profile_permission_dgu_manage_domains
+		};
+		return labels[permission.name]?.() || permission.description || permission.name;
+	}
 	onMount(fetchProfile);
 
 	async function fetchProfile() {
@@ -146,27 +179,34 @@
 				</div>
 			</div>
 
-			<!-- Permissions -->
-			<div>
-				<h4 class="text-sm font-medium text-gray-500 dark:text-gray-500 mb-2">
-					{m.profile_permissions_heading()}
-				</h4>
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-					{#each user.roles as role (role.name)}
-						{#each role.permissions as permission (permission.name)}
-							<div class="bg-earthy-brown-100 dark:bg-gray-800 rounded-md p-3">
-								<div class="font-medium text-gray-900 dark:text-gray-100">{permission.name}</div>
-								<div class="text-sm text-gray-600 dark:text-gray-400">{permission.description}</div>
-								<div class="mt-1 text-xs text-gray-500 dark:text-gray-500">
-									{m.profile_permission_scope({
-										action: permission.action,
-										resource: permission.resource_type
-									})}
-								</div>
-							</div>
-						{/each}
-					{/each}
+			<div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+				<div
+					class="flex items-center justify-between gap-3 border-b border-gray-200 bg-earthy-brown-100 px-4 py-3 dark:border-gray-700 dark:bg-gray-800"
+				>
+					<h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+						{m.profile_permissions_heading()}
+					</h4>
+					<span
+						class="rounded-full bg-white px-2.5 py-0.5 text-xs font-semibold tabular-nums text-gray-600 dark:bg-gray-700 dark:text-gray-200"
+						aria-label={m.profile_permissions_count({ count: String(permissions.length) })}
+						>{permissions.length}</span
+					>
 				</div>
+				<ul
+					class="max-h-80 divide-y divide-gray-200 overflow-y-auto dark:divide-gray-700"
+					aria-label={m.profile_permissions_heading()}
+				>
+					{#each permissions as permission (permission.name)}
+						<li
+							class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-2.5 text-sm"
+						>
+							<span class="font-medium text-gray-900 dark:text-gray-100"
+								>{permissionLabel(permission)}</span
+							>
+							<code class="text-xs text-gray-500 dark:text-gray-400">{permission.name}</code>
+						</li>
+					{/each}
+				</ul>
 			</div>
 		</div>
 	</div>
