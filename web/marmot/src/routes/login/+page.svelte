@@ -8,6 +8,7 @@
 	import TOTPSettings from '$components/auth/TOTPSettings.svelte';
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
+	import { loginRedirect } from '$lib/auth/loginRedirect';
 	import Icon from '@iconify/svelte';
 	import { m } from '$lib/paraglide/messages';
 
@@ -17,6 +18,7 @@
 	let confirmPassword = $state('');
 	let error = $state('');
 	let loading = $state(false);
+	let redirecting = $state(false);
 	let showPasswordChangeForm = $state(false);
 	interface LoginResponse {
 		access_token?: string;
@@ -162,8 +164,8 @@
 	}
 
 	async function finishLogin(data: LoginResponse) {
-		loginData = data;
 		if (data.requires_totp) {
+			loginData = data;
 			password = '';
 			newPassword = '';
 			confirmPassword = '';
@@ -171,12 +173,14 @@
 			return;
 		}
 		if (data.requires_totp_enrollment) {
+			loginData = data;
 			password = '';
 			showPasswordChangeForm = false;
 			return;
 		}
 
 		if (data.requires_password_change) {
+			loginData = data;
 			showPasswordChangeForm = true;
 			setTimeout(() => newPasswordInput?.focus(), 100);
 			return;
@@ -190,11 +194,12 @@
 					return;
 				}
 			}
-			// Constrain redirect targets to in-app paths to keep open-redirect
-			// vectors closed and to satisfy resolve()'s internal-route contract.
-			// Full document navigation so the account language preference in the token applies from the first render
-			const redirectParam = $page.url.searchParams.get('redirect');
-			const redirectTo = redirectParam && redirectParam.startsWith('/') ? redirectParam : '/';
+			const redirectTo = loginRedirect(
+				$page.url.searchParams.get('redirect'),
+				window.location.origin
+			);
+			// Full navigation applies the account language preference from the new token.
+			redirecting = true;
 			window.location.assign(resolve(redirectTo));
 		} else {
 			throw new Error(m.login_error_no_token());
@@ -283,15 +288,17 @@
 				<img src="/images/marmot.svg" alt="Marmot" class="h-20 w-20" />
 			</div>
 			<h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100">
-				{pendingConsent
-					? m.login_authorize_heading()
-					: loginData?.requires_totp
-						? m.totp_title()
-						: loginData?.requires_totp_enrollment
-							? m.totp_enrollment_title()
-							: showPasswordChangeForm
-								? m.login_change_password_heading()
-								: m.login_signin_heading()}
+				{redirecting
+					? m.login_finishing_heading()
+					: pendingConsent
+						? m.login_authorize_heading()
+						: loginData?.requires_totp
+							? m.totp_title()
+							: loginData?.requires_totp_enrollment
+								? m.totp_enrollment_title()
+								: showPasswordChangeForm
+									? m.login_change_password_heading()
+									: m.login_signin_heading()}
 			</h1>
 			{#if showPasswordChangeForm && !pendingConsent}
 				<p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
@@ -313,7 +320,15 @@
 				</div>
 			{/if}
 
-			{#if pendingConsent}
+			{#if redirecting}
+				<div role="status" class="flex flex-col items-center gap-4 py-8 text-center">
+					<div
+						class="h-9 w-9 animate-spin rounded-full border-2 border-earthy-terracotta-200 border-t-earthy-terracotta-700"
+						aria-hidden="true"
+					/>
+					<p class="text-sm text-gray-600 dark:text-gray-300">{m.login_finishing_help()}</p>
+				</div>
+			{:else if pendingConsent}
 				<div class="space-y-5">
 					<p class="text-sm text-gray-700 dark:text-gray-300">
 						{m.login_consent_intro()}

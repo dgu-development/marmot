@@ -913,6 +913,8 @@
 	"login_password_placeholder": "Introduce tu contraseña",
 	"login_signin_button": "Entrar",
 	"login_signin_heading": "Iniciar sesión",
+	"login_finishing_heading": "Entrando en tu cuenta",
+	"login_finishing_help": "Preparando tu espacio de trabajo…",
 	"login_username_label": "Usuario",
 	"login_username_placeholder": "Introduce tu usuario",
 	"metamodel_additional_metadata": "Metadatos adicionales",
