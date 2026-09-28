@@ -20,9 +20,10 @@ const JWTSigningKeyID = "jwt_signing_key"
 const TokenTTL = 24 * time.Hour
 
 type Claims struct {
-	Roles       []string               `json:"roles"`
-	Permissions []string               `json:"permissions"`
-	Preferences map[string]interface{} `json:"preferences,omitempty"`
+	SessionEpoch string                 `json:"session_epoch,omitempty"`
+	Roles        []string               `json:"roles"`
+	Permissions  []string               `json:"permissions"`
+	Preferences  map[string]interface{} `json:"preferences,omitempty"`
 	// Omitted for user principals; consumers must treat "" as PrincipalTypeUser.
 	PrincipalType string `json:"principal_type,omitempty"`
 	jwt.RegisteredClaims
@@ -98,6 +99,10 @@ func (s *service) GenerateTokenForPrincipal(ctx context.Context, p Principal, pr
 			NotBefore: jwt.NewNumericDate(time.Now()),
 		},
 		Preferences: preferencesClaims,
+	}
+
+	if u := p.AsUser(); u != nil {
+		claims.SessionEpoch = sessionEpoch(u)
 	}
 
 	if p.Type() != PrincipalTypeUser {

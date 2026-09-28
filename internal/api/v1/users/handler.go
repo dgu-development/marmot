@@ -5,26 +5,32 @@ import (
 
 	"github.com/marmotdata/marmot/internal/api/v1/common"
 	"github.com/marmotdata/marmot/internal/core/auth"
+	"github.com/marmotdata/marmot/internal/core/mfa"
 	"github.com/marmotdata/marmot/internal/core/user"
 	"github.com/marmotdata/marmot/pkg/config"
 )
 
 type Handler struct {
+	mfa         *mfa.Service
 	userService user.Service
 	authService auth.Service
 	config      *config.Config
 }
 
-func NewHandler(userService user.Service, authService auth.Service, cfg *config.Config) *Handler {
-	return &Handler{
+func NewHandler(userService user.Service, authService auth.Service, cfg *config.Config, factors ...*mfa.Service) *Handler {
+	h := &Handler{
 		userService: userService,
 		authService: authService,
 		config:      cfg,
 	}
+	if len(factors) > 0 {
+		h.mfa = factors[0]
+	}
+	return h
 }
 
 func (h *Handler) Routes() []common.Route {
-	return []common.Route{
+	routes := []common.Route{
 		{
 			Path:    "/api/v1/users",
 			Method:  http.MethodGet,
@@ -166,4 +172,8 @@ func (h *Handler) Routes() []common.Route {
 			},
 		},
 	}
+	if h.config.Auth.TOTP.Enabled {
+		routes = append(routes, h.totpRoutes()...)
+	}
+	return routes
 }

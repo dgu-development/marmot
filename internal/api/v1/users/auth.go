@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/marmotdata/marmot/internal/api/v1/common"
+	"github.com/marmotdata/marmot/internal/core/mfa"
 	"github.com/marmotdata/marmot/internal/core/user"
 	"github.com/rs/zerolog/log"
 )
@@ -21,9 +22,11 @@ type LoginRequest struct {
 } // @name LoginRequest
 
 type TokenResponse struct {
-	AccessToken            string `json:"access_token"`
-	TokenType              string `json:"token_type"`
-	ExpiresIn              int64  `json:"expires_in"`
+	RequiresTOTP           bool   `json:"requires_totp,omitempty"`
+	MFAToken               string `json:"mfa_token,omitempty"`
+	AccessToken            string `json:"access_token,omitempty"`
+	TokenType              string `json:"token_type,omitempty"`
+	ExpiresIn              int64  `json:"expires_in,omitempty"`
 	RequiresPasswordChange bool   `json:"requires_password_change"`
 } // @name TokenResponse
 
@@ -65,6 +68,41 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.completeLocalLogin(w, r, authenticatedUser)
+}
+
+func (h *Handler) completeLocalLogin(w http.ResponseWriter, r *http.Request, u *user.User) {
+	if h.config.Auth.TOTP.Enabled {
+		if h.mfa == nil {
+			h.respondMFAError(w, mfa.ErrUnavailable)
+			return
+		}
+		status, err := h.mfa.Status(r.Context(), u.ID)
+		if err != nil {
+			h.respondMFAError(w, err)
+			return
+		}
+		purpose := ""
+		if u.MustChangePassword {
+			purpose = mfa.PurposePasswordChange
+		} else if status.Enabled {
+			purpose = mfa.PurposeTOTP
+		}
+		if purpose != "" {
+			token, err := h.mfa.IssueChallenge(r.Context(), u.ID, purpose)
+			if err != nil {
+				h.respondMFAError(w, err)
+				return
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			common.RespondJSON(w, http.StatusOK, TokenResponse{MFAToken: token, RequiresTOTP: purpose == mfa.PurposeTOTP, RequiresPasswordChange: u.MustChangePassword})
+			return
+		}
+	}
+	h.issueSession(w, r, u)
+}
+
+func (h *Handler) issueSession(w http.ResponseWriter, r *http.Request, authenticatedUser *user.User) {
 	theme := ""
 	if authenticatedUser.Preferences != nil {
 		if themeVal, ok := authenticatedUser.Preferences["theme"].(string); ok {
