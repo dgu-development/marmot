@@ -9151,7 +9151,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.ChangePasswordRequest"
+                            "$ref": "#/definitions/users.ChangePasswordRequest"
                         }
                     }
                 ],
@@ -9238,7 +9238,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9302,7 +9302,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9366,7 +9366,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9374,7 +9374,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v1_users.RecoveryResponse"
+                            "$ref": "#/definitions/users.RecoveryResponse"
                         }
                     },
                     "401": {
@@ -9406,7 +9406,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9750,9 +9750,6 @@ const docTemplate = `{
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "ApiKeyAuth": []
                     }
                 ],
                 "consumes": [
@@ -9773,7 +9770,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9781,7 +9778,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v1_users.RecoveryResponse"
+                            "$ref": "#/definitions/users.RecoveryResponse"
                         }
                     },
                     "400": {
@@ -9822,9 +9819,6 @@ const docTemplate = `{
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "ApiKeyAuth": []
                     }
                 ],
                 "consumes": [
@@ -9845,7 +9839,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9853,7 +9847,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v1_users.RecoveryResponse"
+                            "$ref": "#/definitions/users.RecoveryResponse"
                         }
                     },
                     "400": {
@@ -9925,9 +9919,6 @@ const docTemplate = `{
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "ApiKeyAuth": []
                     }
                 ],
                 "consumes": [
@@ -9948,7 +9939,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9956,7 +9947,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v1_users.RecoveryResponse"
+                            "$ref": "#/definitions/users.RecoveryResponse"
                         }
                     },
                     "400": {
@@ -9997,9 +9988,6 @@ const docTemplate = `{
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "ApiKeyAuth": []
                     }
                 ],
                 "consumes": [
@@ -10064,9 +10052,6 @@ const docTemplate = `{
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "ApiKeyAuth": []
                     }
                 ],
                 "consumes": [
@@ -10087,7 +10072,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -10134,9 +10119,6 @@ const docTemplate = `{
         "/api/v1/users/update-password": {
             "post": {
                 "security": [
-                    {
-                        "ApiKeyAuth": []
-                    },
                     {
                         "BearerAuth": []
                     }
@@ -15519,6 +15501,48 @@ const docTemplate = `{
                 }
             }
         },
+        "users.ChangePasswordRequest": {
+            "type": "object",
+            "properties": {
+                "current_password": {
+                    "type": "string"
+                },
+                "new_password": {
+                    "type": "string"
+                }
+            }
+        },
+        "users.RecoveryResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "recovery_codes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "users.TOTPRequest": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "mfa_token": {
+                    "type": "string"
+                },
+                "new_password": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
         "v1_assets.patchFieldsRequest": {
             "type": "object",
             "properties": {
@@ -15691,48 +15715,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1_users.ChangePasswordRequest": {
-            "type": "object",
-            "properties": {
-                "current_password": {
-                    "type": "string"
-                },
-                "new_password": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1_users.RecoveryResponse": {
-            "type": "object",
-            "properties": {
-                "access_token": {
-                    "type": "string"
-                },
-                "recovery_codes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "v1_users.TOTPRequest": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string"
-                },
-                "mfa_token": {
-                    "type": "string"
-                },
-                "new_password": {
-                    "type": "string"
-                },
-                "password": {
                     "type": "string"
                 }
             }

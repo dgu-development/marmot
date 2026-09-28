@@ -37,11 +37,11 @@ func (h *Handler) totpRoutes() []common.Route {
 		{Path: "/api/v1/users/login/totp/confirm", Method: http.MethodPost, Handler: h.confirmRequiredTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{limit}},
 		{Path: "/api/v1/users/totp", Method: http.MethodGet, Handler: h.totpStatus, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect}},
 		{Path: "/api/v1/users/totp/enrolled", Method: http.MethodGet, Handler: h.listTOTPEnrollment, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, common.RequirePermission(h.userService, "users", "view")}},
-		{Path: "/api/v1/users/totp/setup", Method: http.MethodPost, Handler: h.setupTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, limit}},
-		{Path: "/api/v1/users/totp/confirm", Method: http.MethodPost, Handler: h.confirmTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, limit}},
-		{Path: "/api/v1/users/totp", Method: http.MethodDelete, Handler: h.disableTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, limit}},
-		{Path: "/api/v1/users/totp/recovery", Method: http.MethodPost, Handler: h.regenerateRecovery, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, limit}},
-		{Path: "/api/v1/users/totp/reset/{id}", Method: http.MethodDelete, Handler: h.resetTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, common.RequirePermission(h.userService, "users", "manage"), limit}},
+		{Path: "/api/v1/users/totp/setup", Method: http.MethodPost, Handler: h.setupTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, common.RequireJWTSession("local"), limit}},
+		{Path: "/api/v1/users/totp/confirm", Method: http.MethodPost, Handler: h.confirmTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, common.RequireJWTSession("local"), limit}},
+		{Path: "/api/v1/users/totp", Method: http.MethodDelete, Handler: h.disableTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, common.RequireJWTSession("local"), limit}},
+		{Path: "/api/v1/users/totp/recovery", Method: http.MethodPost, Handler: h.regenerateRecovery, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, common.RequireJWTSession("local"), limit}},
+		{Path: "/api/v1/users/totp/reset/{id}", Method: http.MethodDelete, Handler: h.resetTOTP, Middleware: []func(http.HandlerFunc) http.HandlerFunc{protect, common.RequireJWTSession(""), common.RequirePermission(h.userService, "users", "manage"), limit}},
 	}
 }
 
@@ -157,7 +157,6 @@ func (h *Handler) totpStatus(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param request body TOTPRequest true "Verification request"
 // @Security BearerAuth
-// @Security ApiKeyAuth
 // @Success 200 {object} mfa.SetupResult
 // @Failure 400 {object} common.ErrorResponse
 // @Failure 401 {object} common.ErrorResponse
@@ -192,7 +191,6 @@ func (h *Handler) setupTOTP(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param request body TOTPRequest true "Verification request"
 // @Security BearerAuth
-// @Security ApiKeyAuth
 // @Success 200 {object} RecoveryResponse
 // @Failure 400 {object} common.ErrorResponse
 // @Failure 401 {object} common.ErrorResponse
@@ -224,7 +222,6 @@ func (h *Handler) confirmTOTP(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param request body TOTPRequest true "Verification request"
 // @Security BearerAuth
-// @Security ApiKeyAuth
 // @Success 200 {object} RecoveryResponse
 // @Failure 400 {object} common.ErrorResponse
 // @Failure 401 {object} common.ErrorResponse
@@ -321,7 +318,6 @@ func (h *Handler) confirmRequiredTOTP(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param request body TOTPRequest true "Verification request"
 // @Security BearerAuth
-// @Security ApiKeyAuth
 // @Success 200 {object} RecoveryResponse
 // @Failure 400 {object} common.ErrorResponse
 // @Failure 401 {object} common.ErrorResponse
@@ -356,7 +352,6 @@ func (h *Handler) regenerateRecovery(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path string true "User ID"
 // @Security BearerAuth
-// @Security ApiKeyAuth
 // @Success 204
 // @Failure 400 {object} common.ErrorResponse
 // @Failure 401 {object} common.ErrorResponse
@@ -368,6 +363,11 @@ func (h *Handler) regenerateRecovery(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) resetTOTP(w http.ResponseWriter, r *http.Request) {
 	if h.mfa == nil {
 		h.respondMFAError(w, mfa.ErrUnavailable)
+		return
+	}
+	actor, ok := common.GetAuthenticatedUser(r.Context())
+	if !ok || actor.ID == r.PathValue("id") {
+		common.RespondError(w, 403, "Cannot reset own two-factor authentication")
 		return
 	}
 	if err := h.mfa.Reset(r.Context(), r.PathValue("id")); err != nil {

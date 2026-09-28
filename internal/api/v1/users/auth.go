@@ -246,7 +246,6 @@ func (h *Handler) signOutAllSessions(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body UpdatePasswordRequest true "Password update request"
-// @Security ApiKeyAuth
 // @Security BearerAuth
 // @Success 200 {object} TokenResponse
 // @Failure 400 {object} common.ErrorResponse
@@ -254,6 +253,10 @@ func (h *Handler) signOutAllSessions(w http.ResponseWriter, r *http.Request) {
 // @ID postUsersUpdatePassword
 // @Router /api/v1/users/update-password [post]
 func (h *Handler) updatePassword(w http.ResponseWriter, r *http.Request) {
+	if h.config.Auth.TOTP.Enabled {
+		common.RespondError(w, http.StatusForbidden, "Use the password login challenge")
+		return
+	}
 	var input UpdatePasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		common.RespondError(w, http.StatusBadRequest, "Invalid request body")

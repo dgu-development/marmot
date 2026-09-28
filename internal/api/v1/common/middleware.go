@@ -77,6 +77,23 @@ func GetOAuthAuthorizeCompleter() OAuthAuthorizeCompleter {
 // user with a pending change out of the only endpoint that can clear it.
 const UpdatePasswordPath = "/api/v1/users/update-password" //nolint:gosec // G101: a route path, not a credential
 
+type jwtSessionKey struct{}
+
+// RequireJWTSession keeps API keys and exchanged IdP tokens out of interactive account changes.
+// An empty method accepts any signed Marmot JWT; "local" requires a local login session.
+func RequireJWTSession(method string) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			actual, ok := r.Context().Value(jwtSessionKey{}).(string)
+			if !ok || (method != "" && actual != method) {
+				RespondError(w, http.StatusForbidden, "Interactive session required")
+				return
+			}
+			next(w, r)
+		}
+	}
+}
+
 // passwordChangeGate blocks every request from a user whose
 // must_change_password is still set, except the password change itself.
 // Without it the forced change would only exist in the login UI: a token
@@ -164,6 +181,7 @@ func WithAuth(userService user.Service, authService auth.Service, cfg *config.Co
 						}
 					}
 					ctx := setPrincipalContext(r.Context(), p)
+					ctx = context.WithValue(ctx, jwtSessionKey{}, claims.AuthMethod)
 					next(w, r.WithContext(ctx))
 					return
 				}

@@ -5,7 +5,7 @@ description: Optional or required TOTP for local username and password accounts
 
 # Local two-factor authentication
 
-TOTP protects **local password login** with a code from an authenticator app or a one-use recovery code. It is off by default. SSO continues to follow the identity provider's MFA policy, including accounts with both a password and a linked provider. API keys, service accounts, MCP and CLI OAuth keep their existing authentication contracts; this is not an instance-wide MFA enforcement policy.
+TOTP protects **local password login** with a code from an authenticator app or a one-use recovery code. It is off by default. SSO continues to follow the identity provider's MFA policy, including accounts with both a password and a linked provider. API keys, service accounts, MCP and CLI OAuth keep their existing API authentication contracts; this is not an instance-wide MFA enforcement policy. API keys cannot change passwords, mutate factors, or reset another user's factor.
 
 ```yaml
 auth:
@@ -26,11 +26,13 @@ Environment equivalents are `MARMOT_AUTH_TOTP_ENABLED` and `MARMOT_AUTH_TOTP_ISS
 3. Confirm a six-digit code. Save the ten recovery codes immediately: the server stores only bcrypt hashes and never shows them again.
 4. Future password logins request a new authenticator code or an unused recovery code. A code already used for confirmation cannot be reused for login in the same time window.
 
-Disabling the factor requires the password and a valid second factor. Replacing recovery codes also requires both and immediately invalidates all previous recovery codes. Administrators with `users:manage` can reset a lost factor from **Users**. Confirming, disabling or administratively resetting a factor invalidates existing sessions. Confirmation and self-service disabling return a replacement session to the current browser so recovery codes remain visible.
+Disabling the factor requires the password and a valid second factor. Replacing recovery codes also requires both and immediately invalidates all previous recovery codes. Administrators with `users:manage` can reset another user's lost factor from **Users**, using a signed session rather than an API key; they cannot reset their own factor this way. Confirming, disabling or administratively resetting a factor invalidates existing sessions. Confirmation and self-service disabling return a replacement session to the current browser so recovery codes remain visible.
 
 SSO-only accounts cannot enroll. Secrets, verification codes and recovery codes must not be included in logs or support requests. Keep server and authenticator clocks synchronized.
 
 Local users can change their password in **Profile** by providing the current password. Administrators can require a local-only user to change it at their next sign-in from **Users**. This invalidates current sessions and sets the existing password-change gate; it does not send email or choose a new password for the user.
+
+Profile password and factor management require a local signed session. When TOTP is enabled, a forced password change must use the password-login challenge endpoint; the legacy authenticated `/api/v1/users/update-password` route is unavailable. A user API key cannot be converted into a browser session through either password-change route.
 
 ## API and session contract
 

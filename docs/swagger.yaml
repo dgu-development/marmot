@@ -3194,6 +3194,33 @@ definitions:
       pattern:
         type: string
     type: object
+  users.ChangePasswordRequest:
+    properties:
+      current_password:
+        type: string
+      new_password:
+        type: string
+    type: object
+  users.RecoveryResponse:
+    properties:
+      access_token:
+        type: string
+      recovery_codes:
+        items:
+          type: string
+        type: array
+    type: object
+  users.TOTPRequest:
+    properties:
+      code:
+        type: string
+      mfa_token:
+        type: string
+      new_password:
+        type: string
+      password:
+        type: string
+    type: object
   v1_assets.patchFieldsRequest:
     properties:
       fields:
@@ -3314,33 +3341,6 @@ definitions:
       description:
         type: string
       name:
-        type: string
-    type: object
-  v1_users.ChangePasswordRequest:
-    properties:
-      current_password:
-        type: string
-      new_password:
-        type: string
-    type: object
-  v1_users.RecoveryResponse:
-    properties:
-      access_token:
-        type: string
-      recovery_codes:
-        items:
-          type: string
-        type: array
-    type: object
-  v1_users.TOTPRequest:
-    properties:
-      code:
-        type: string
-      mfa_token:
-        type: string
-      new_password:
-        type: string
-      password:
         type: string
     type: object
 info:
@@ -9227,7 +9227,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/v1_users.ChangePasswordRequest'
+          $ref: '#/definitions/users.ChangePasswordRequest'
       produces:
       - application/json
       responses:
@@ -9286,7 +9286,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/v1_users.TOTPRequest'
+          $ref: '#/definitions/users.TOTPRequest'
       produces:
       - application/json
       responses:
@@ -9328,7 +9328,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/v1_users.TOTPRequest'
+          $ref: '#/definitions/users.TOTPRequest'
       produces:
       - application/json
       responses:
@@ -9370,14 +9370,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/v1_users.TOTPRequest'
+          $ref: '#/definitions/users.TOTPRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/v1_users.RecoveryResponse'
+            $ref: '#/definitions/users.RecoveryResponse'
         "401":
           description: Unauthorized
           schema:
@@ -9396,7 +9396,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/v1_users.TOTPRequest'
+          $ref: '#/definitions/users.TOTPRequest'
       produces:
       - application/json
       responses:
@@ -9584,14 +9584,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/v1_users.TOTPRequest'
+          $ref: '#/definitions/users.TOTPRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/v1_users.RecoveryResponse'
+            $ref: '#/definitions/users.RecoveryResponse'
         "400":
           description: Bad Request
           schema:
@@ -9614,7 +9614,6 @@ paths:
             $ref: '#/definitions/ErrorResponse'
       security:
       - BearerAuth: []
-      - ApiKeyAuth: []
       summary: Disable TOTP with password and second factor
       tags:
       - users
@@ -9666,14 +9665,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/v1_users.TOTPRequest'
+          $ref: '#/definitions/users.TOTPRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/v1_users.RecoveryResponse'
+            $ref: '#/definitions/users.RecoveryResponse'
         "400":
           description: Bad Request
           schema:
@@ -9696,7 +9695,6 @@ paths:
             $ref: '#/definitions/ErrorResponse'
       security:
       - BearerAuth: []
-      - ApiKeyAuth: []
       summary: Confirm TOTP and return recovery codes once
       tags:
       - users
@@ -9730,14 +9728,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/v1_users.TOTPRequest'
+          $ref: '#/definitions/users.TOTPRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/v1_users.RecoveryResponse'
+            $ref: '#/definitions/users.RecoveryResponse'
         "400":
           description: Bad Request
           schema:
@@ -9760,7 +9758,6 @@ paths:
             $ref: '#/definitions/ErrorResponse'
       security:
       - BearerAuth: []
-      - ApiKeyAuth: []
       summary: Replace one-use recovery codes
       tags:
       - users
@@ -9802,7 +9799,6 @@ paths:
             $ref: '#/definitions/ErrorResponse'
       security:
       - BearerAuth: []
-      - ApiKeyAuth: []
       summary: Administratively reset a local second factor
       tags:
       - users
@@ -9817,7 +9813,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/v1_users.TOTPRequest'
+          $ref: '#/definitions/users.TOTPRequest'
       produces:
       - application/json
       responses:
@@ -9847,7 +9843,6 @@ paths:
             $ref: '#/definitions/ErrorResponse'
       security:
       - BearerAuth: []
-      - ApiKeyAuth: []
       summary: Prepare an encrypted TOTP enrollment
       tags:
       - users
@@ -9880,7 +9875,6 @@ paths:
           schema:
             $ref: '#/definitions/ErrorResponse'
       security:
-      - ApiKeyAuth: []
       - BearerAuth: []
       summary: Update user password
       tags:

@@ -170,12 +170,13 @@ func (h *Handler) Routes() []common.Route {
 			Handler: h.updatePassword,
 			Middleware: []func(http.HandlerFunc) http.HandlerFunc{
 				common.WithAuth(h.userService, h.authService, h.config),
+				common.RequireJWTSession("local"),
 				common.WithRateLimit(h.config, 10, 60),
 			},
 		},
 		{
 			Path: "/api/v1/users/change-password", Method: http.MethodPost, Handler: h.changeOwnPassword,
-			Middleware: []func(http.HandlerFunc) http.HandlerFunc{common.WithAuth(h.userService, h.authService, h.config), common.WithRateLimit(&passwordCfg, 10, 60)},
+			Middleware: []func(http.HandlerFunc) http.HandlerFunc{common.WithAuth(h.userService, h.authService, h.config), common.RequireJWTSession("local"), common.WithRateLimit(&passwordCfg, 10, 60)},
 		},
 		{
 			Path: "/api/v1/users/password/require-change/{id}", Method: http.MethodPost, Handler: h.requirePasswordChange,

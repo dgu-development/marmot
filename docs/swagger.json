@@ -9143,7 +9143,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.ChangePasswordRequest"
+                            "$ref": "#/definitions/users.ChangePasswordRequest"
                         }
                     }
                 ],
@@ -9230,7 +9230,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9294,7 +9294,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9358,7 +9358,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9366,7 +9366,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v1_users.RecoveryResponse"
+                            "$ref": "#/definitions/users.RecoveryResponse"
                         }
                     },
                     "401": {
@@ -9398,7 +9398,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9742,9 +9742,6 @@
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "ApiKeyAuth": []
                     }
                 ],
                 "consumes": [
@@ -9765,7 +9762,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9773,7 +9770,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v1_users.RecoveryResponse"
+                            "$ref": "#/definitions/users.RecoveryResponse"
                         }
                     },
                     "400": {
@@ -9814,9 +9811,6 @@
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "ApiKeyAuth": []
                     }
                 ],
                 "consumes": [
@@ -9837,7 +9831,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9845,7 +9839,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v1_users.RecoveryResponse"
+                            "$ref": "#/definitions/users.RecoveryResponse"
                         }
                     },
                     "400": {
@@ -9917,9 +9911,6 @@
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "ApiKeyAuth": []
                     }
                 ],
                 "consumes": [
@@ -9940,7 +9931,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -9948,7 +9939,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v1_users.RecoveryResponse"
+                            "$ref": "#/definitions/users.RecoveryResponse"
                         }
                     },
                     "400": {
@@ -9989,9 +9980,6 @@
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "ApiKeyAuth": []
                     }
                 ],
                 "consumes": [
@@ -10056,9 +10044,6 @@
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "ApiKeyAuth": []
                     }
                 ],
                 "consumes": [
@@ -10079,7 +10064,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v1_users.TOTPRequest"
+                            "$ref": "#/definitions/users.TOTPRequest"
                         }
                     }
                 ],
@@ -10126,9 +10111,6 @@
         "/api/v1/users/update-password": {
             "post": {
                 "security": [
-                    {
-                        "ApiKeyAuth": []
-                    },
                     {
                         "BearerAuth": []
                     }
@@ -15511,6 +15493,48 @@
                 }
             }
         },
+        "users.ChangePasswordRequest": {
+            "type": "object",
+            "properties": {
+                "current_password": {
+                    "type": "string"
+                },
+                "new_password": {
+                    "type": "string"
+                }
+            }
+        },
+        "users.RecoveryResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "recovery_codes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "users.TOTPRequest": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "mfa_token": {
+                    "type": "string"
+                },
+                "new_password": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
         "v1_assets.patchFieldsRequest": {
             "type": "object",
             "properties": {
@@ -15683,48 +15707,6 @@
                     "type": "string"
                 },
                 "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1_users.ChangePasswordRequest": {
-            "type": "object",
-            "properties": {
-                "current_password": {
-                    "type": "string"
-                },
-                "new_password": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1_users.RecoveryResponse": {
-            "type": "object",
-            "properties": {
-                "access_token": {
-                    "type": "string"
-                },
-                "recovery_codes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "v1_users.TOTPRequest": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string"
-                },
-                "mfa_token": {
-                    "type": "string"
-                },
-                "new_password": {
-                    "type": "string"
-                },
-                "password": {
                     "type": "string"
                 }
             }
