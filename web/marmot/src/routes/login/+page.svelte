@@ -5,6 +5,7 @@
 	import Button from '$components/ui/Button.svelte';
 	import OAuthButtons from '$components/auth/OAuthButtons.svelte';
 	import TOTPChallenge from '$components/auth/TOTPChallenge.svelte';
+	import TOTPSettings from '$components/auth/TOTPSettings.svelte';
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import Icon from '@iconify/svelte';
@@ -21,6 +22,7 @@
 		access_token?: string;
 		requires_password_change?: boolean;
 		requires_totp?: boolean;
+		requires_totp_enrollment?: boolean;
 		mfa_token?: string;
 	}
 	let loginData: LoginResponse | null = $state(null);
@@ -168,6 +170,11 @@
 			showPasswordChangeForm = false;
 			return;
 		}
+		if (data.requires_totp_enrollment) {
+			password = '';
+			showPasswordChangeForm = false;
+			return;
+		}
 
 		if (data.requires_password_change) {
 			showPasswordChangeForm = true;
@@ -280,9 +287,11 @@
 					? m.login_authorize_heading()
 					: loginData?.requires_totp
 						? m.totp_title()
-						: showPasswordChangeForm
-							? m.login_change_password_heading()
-							: m.login_signin_heading()}
+						: loginData?.requires_totp_enrollment
+							? m.totp_enrollment_title()
+							: showPasswordChangeForm
+								? m.login_change_password_heading()
+								: m.login_signin_heading()}
 			</h1>
 			{#if showPasswordChangeForm && !pendingConsent}
 				<p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
@@ -337,6 +346,15 @@
 				<div class="space-y-5">
 					<p class="text-sm text-gray-600 dark:text-gray-300">{m.totp_login_help()}</p>
 					<TOTPChallenge verify={verifyTOTP} {loading} />
+					<Button text={m.common_cancel()} variant="clear" click={goBackToLogin} />
+				</div>
+			{:else if loginData?.requires_totp_enrollment}
+				<div class="space-y-5">
+					<p class="text-sm text-gray-600 dark:text-gray-300">{m.totp_enrollment_help()}</p>
+					<TOTPSettings
+						enrollmentToken={loginData.mfa_token}
+						onEnrolled={() => void finishLogin({ access_token: auth.getToken() || '' })}
+					/>
 					<Button text={m.common_cancel()} variant="clear" click={goBackToLogin} />
 				</div>
 			{:else if !showPasswordChangeForm}

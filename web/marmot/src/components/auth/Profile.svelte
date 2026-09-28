@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fetchApi } from '$lib/api';
+	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages';
 	import { formatDate } from '$lib/utils';
 	import ThemeToggle from '$components/ui/ThemeToggle.svelte';
@@ -20,6 +21,11 @@
 	}
 
 	interface User {
+		username: string;
+		active: boolean;
+		created_at: string;
+		updated_at: string;
+		identities?: { provider: string }[];
 		name: string;
 		email: string;
 		roles: Role[];
@@ -28,10 +34,59 @@
 	let loading = true;
 	let error: string | null = null;
 	let user: User = {
+		username: '',
+		active: false,
+		created_at: '',
+		updated_at: '',
 		name: '',
 		email: '',
 		roles: []
 	};
+	let currentPassword = '';
+	let newPassword = '';
+	let confirmPassword = '';
+	let passwordBusy = false;
+	let passwordError = '';
+	let passwordSaved = false;
+
+	async function changePassword() {
+		if (passwordBusy) return;
+		passwordError = '';
+		passwordSaved = false;
+		if (newPassword !== confirmPassword) {
+			passwordError = m.login_error_password_mismatch();
+			return;
+		}
+		if (newPassword.length < 8 || newPassword.length > 72) {
+			passwordError = m.profile_password_length();
+			return;
+		}
+		passwordBusy = true;
+		try {
+			const response = await fetch('/api/v1/users/change-password', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${auth.getToken() || ''}`
+				},
+				body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+			});
+			if (!response.ok)
+				throw new Error(
+					response.status === 401 ? m.profile_password_wrong_current() : m.profile_password_error()
+				);
+			const result = await response.json();
+			auth.setToken(result.access_token);
+			currentPassword = '';
+			newPassword = '';
+			confirmPassword = '';
+			passwordSaved = true;
+		} catch (err) {
+			passwordError = err instanceof Error ? err.message : m.profile_password_error();
+		} finally {
+			passwordBusy = false;
+		}
+	}
 
 	onMount(fetchProfile);
 
@@ -96,6 +151,79 @@
 			</dl>
 		{/if}
 	</div>
+
+	<!-- User Preferences -->
+	{#if !loading && !error && !user.identities?.length}
+		<div class="p-6">
+			<h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+				{m.profile_change_password()}
+			</h3>
+			<p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+				{m.profile_change_password_help()}
+			</p>
+			<form
+				class="mt-5 max-w-md space-y-4"
+				onsubmit={(event) => {
+					event.preventDefault();
+					void changePassword();
+				}}
+			>
+				<div>
+					<label for="profile-current-password" class="mb-1 block text-sm font-medium"
+						>{m.profile_current_password()}</label
+					><input
+						id="profile-current-password"
+						type="password"
+						autocomplete="current-password"
+						bind:value={currentPassword}
+						required
+						maxlength="72"
+						class="w-full rounded-md border border-gray-300 bg-white p-2.5 dark:border-gray-600 dark:bg-gray-800"
+					/>
+				</div>
+				<div>
+					<label for="profile-new-password" class="mb-1 block text-sm font-medium"
+						>{m.profile_new_password()}</label
+					><input
+						id="profile-new-password"
+						type="password"
+						autocomplete="new-password"
+						bind:value={newPassword}
+						required
+						minlength="8"
+						maxlength="72"
+						class="w-full rounded-md border border-gray-300 bg-white p-2.5 dark:border-gray-600 dark:bg-gray-800"
+					/>
+				</div>
+				<div>
+					<label for="profile-confirm-password" class="mb-1 block text-sm font-medium"
+						>{m.profile_confirm_password()}</label
+					><input
+						id="profile-confirm-password"
+						type="password"
+						autocomplete="new-password"
+						bind:value={confirmPassword}
+						required
+						minlength="8"
+						maxlength="72"
+						class="w-full rounded-md border border-gray-300 bg-white p-2.5 dark:border-gray-600 dark:bg-gray-800"
+					/>
+				</div>
+				{#if passwordError}<p role="alert" class="text-sm text-red-700 dark:text-red-300">
+						{passwordError}
+					</p>{/if}
+				{#if passwordSaved}<p role="status" class="text-sm text-green-700 dark:text-green-300">
+						{m.profile_password_saved()}
+					</p>{/if}
+				<button
+					type="submit"
+					disabled={passwordBusy}
+					class="rounded-md bg-earthy-terracotta-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+					>{m.profile_change_password()}</button
+				>
+			</form>
+		</div>
+	{/if}
 
 	<!-- User Preferences -->
 	<div class="p-6">

@@ -4,6 +4,10 @@
 	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages';
 	import Button from '$components/ui/Button.svelte';
+	let {
+		enrollmentToken = null,
+		onEnrolled
+	}: { enrollmentToken?: string | null; onEnrolled?: () => void } = $props();
 
 	let status = $state<{ local: boolean; enabled: boolean; recovery_remaining: number } | null>(
 		null
@@ -12,15 +16,25 @@
 	let password = $state('');
 	let code = $state('');
 	let recovery = $state<string[]>([]);
+	let enrollmentAccessToken = $state('');
 	let busy = $state(false);
+	let required = $state(false);
 	let error = $state('');
 	let copied = $state<'secret' | 'recovery' | null>(null);
 	let action = $state<'setup' | 'disable' | 'recovery' | null>(null);
 
 	onMount(async () => {
+		if (enrollmentToken) {
+			status = { local: true, enabled: false, recovery_remaining: 0 };
+			action = 'setup';
+			return;
+		}
 		try {
 			const config = await fetch('/auth-providers');
-			if (!config.ok || !(await config.json()).totp_enabled) return;
+			if (!config.ok) return;
+			const flags = await config.json();
+			if (!flags.totp_enabled) return;
+			required = !!flags.totp_required;
 			const response = await fetchApi('/users/totp');
 			if (!response.ok) throw new Error(m.totp_error());
 			status = await response.json();
@@ -33,20 +47,24 @@
 		if (!action || busy) return;
 		busy = true;
 		error = '';
-		const path = setup
-			? '/users/totp/confirm'
-			: action === 'disable'
-				? '/users/totp'
-				: `/users/totp/${action}`;
+		const path = enrollmentToken
+			? setup
+				? '/users/login/totp/confirm'
+				: '/users/login/totp/setup'
+			: setup
+				? '/users/totp/confirm'
+				: action === 'disable'
+					? '/users/totp'
+					: `/users/totp/${action}`;
 		try {
 			const response = await fetch(`/api/v1${path}`, {
 				method: action === 'disable' ? 'DELETE' : 'POST',
 				headers: {
 					'Content-Type': 'application/json',
 					'X-Marmot-Client': 'web',
-					Authorization: `Bearer ${auth.getToken() || ''}`
+					...(enrollmentToken ? {} : { Authorization: `Bearer ${auth.getToken() || ''}` })
 				},
-				body: JSON.stringify({ password, code: code.trim() })
+				body: JSON.stringify({ password, code: code.trim(), mfa_token: enrollmentToken })
 			});
 			if (!response.ok)
 				throw new Error(
@@ -60,7 +78,10 @@
 			if (result.secret) {
 				setup = result;
 			} else {
-				if (result.access_token) auth.setToken(result.access_token);
+				if (result.access_token) {
+					if (enrollmentToken) enrollmentAccessToken = result.access_token;
+					else auth.setToken(result.access_token);
+				}
 				recovery = result.recovery_codes || [];
 				if (status)
 					status = {
@@ -124,7 +145,15 @@
 						variant="clear"
 						click={() => void copy(recovery.join('\n'), 'recovery')}
 					/>
-					<Button text={m.totp_saved_codes()} variant="filled" click={() => (recovery = [])} />
+					<Button
+						text={m.totp_saved_codes()}
+						variant="filled"
+						click={() => {
+							recovery = [];
+							if (enrollmentAccessToken) auth.setToken(enrollmentAccessToken);
+							onEnrolled?.();
+						}}
+					/>
 				</div>
 			</div>
 		{:else if action}
@@ -155,8 +184,7 @@
 							click={() => void copy(setup.secret, 'secret')}
 						/>
 					</div>
-				{:else}
-					<label class="block text-sm font-medium" for="totp-password"
+				{:else if !enrollmentToken}<label class="block text-sm font-medium" for="totp-password"
 						>{m.login_password_label()}</label
 					>
 					<input
@@ -193,14 +221,23 @@
 									: m.totp_setup()}
 						variant="filled"
 					/>
-					<Button text={m.common_cancel()} click={cancel} disabled={busy} variant="clear" />
+					{#if !enrollmentToken}<Button
+							text={m.common_cancel()}
+							click={cancel}
+							disabled={busy}
+							variant="clear"
+						/>{/if}
 				</div>
 			</form>
 		{:else if status.enabled}
 			<p class="mt-4 text-sm">{m.totp_enabled({ count: String(status.recovery_remaining) })}</p>
 			<div class="mt-4 flex flex-wrap gap-3">
 				<Button text={m.totp_regenerate()} click={() => (action = 'recovery')} variant="clear" />
-				<Button text={m.totp_disable()} click={() => (action = 'disable')} variant="clear" />
+				{#if !required}<Button
+						text={m.totp_disable()}
+						click={() => (action = 'disable')}
+						variant="clear"
+					/>{/if}
 			</div>
 		{:else}
 			<div class="mt-4">

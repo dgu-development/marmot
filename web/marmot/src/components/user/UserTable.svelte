@@ -16,12 +16,20 @@
 	export let onDelete;
 
 	let totpEnabled = false;
+	let totpUsers = new Set<string>();
 	let resetUser: { id: string; username: string } | null = null;
+	let passwordResetUser: { id: string; username: string } | null = null;
 	let resetting = false;
 	onMount(async () => {
 		try {
 			const response = await fetch('/auth-providers');
-			if (response.ok) totpEnabled = !!(await response.json()).totp_enabled;
+			if (response.ok) {
+				totpEnabled = !!(await response.json()).totp_enabled;
+				if (totpEnabled) {
+					const enrolled = await fetchApi('/users/totp/enrolled');
+					if (enrolled.ok) totpUsers = new Set((await enrolled.json()).user_ids);
+				}
+			}
 		} catch {
 			/* Keep actions hidden when configuration is unavailable. */
 		}
@@ -35,11 +43,30 @@
 			});
 			if (!response.ok) throw new Error(m.totp_error());
 			toasts.success(m.totp_reset_done());
+			totpUsers = new Set([...totpUsers].filter((id) => id !== resetUser?.id));
 			resetUser = null;
 		} catch {
 			toasts.error(m.totp_error());
 		} finally {
 			resetting = false;
+		}
+	}
+
+	async function requirePasswordChange() {
+		if (!passwordResetUser) return;
+		const target = passwordResetUser;
+		try {
+			const response = await fetchApi(
+				`/users/password/require-change/${encodeURIComponent(target.id)}`,
+				{ method: 'POST' }
+			);
+			if (!response.ok) throw new Error(m.users_password_reset_error());
+			const updated = users.find((item) => item.id === target.id);
+			if (updated) onUpdate({ ...updated, must_change_password: true });
+			toasts.success(m.users_password_reset_done());
+			passwordResetUser = null;
+		} catch {
+			toasts.error(m.users_password_reset_error());
 		}
 	}
 
@@ -151,6 +178,12 @@
 									{m.users_auth_password_badge()}
 								</span>
 							{/if}
+							{#if totpUsers.has(user.id)}
+								<span
+									class="ml-1 inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-200"
+									>{m.totp_badge()}</span
+								>
+							{/if}
 						</td>
 						<td class="px-6 py-4 whitespace-nowrap">
 							<div class="flex flex-wrap gap-1">
@@ -168,9 +201,13 @@
 							>
 								{user.active ? m.common_active() : m.common_inactive()}
 							</span>
+							{#if user.must_change_password}<span
+									class="ml-2 text-xs text-amber-700 dark:text-amber-300"
+									>{m.users_password_reset_pending()}</span
+								>{/if}
 						</td>
 						<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-							{#if totpEnabled && currentUserId !== user.id && (auth.hasRole('admin') || auth.hasPermission('users', 'manage'))}
+							{#if totpEnabled && totpUsers.has(user.id) && currentUserId !== user.id && (auth.hasRole('admin') || auth.hasPermission('users', 'manage'))}
 								<button
 									type="button"
 									class="mr-3 text-earthy-terracotta-700 hover:underline dark:text-earthy-terracotta-400"
@@ -178,6 +215,14 @@
 								>
 							{/if}
 							{#if currentUserId !== user.id}
+								{#if !user.identities?.length && (auth.hasRole('admin') || auth.hasPermission('users', 'manage'))}
+									<button
+										type="button"
+										class="mr-3 text-earthy-terracotta-700 hover:underline dark:text-earthy-terracotta-400"
+										on:click={() => (passwordResetUser = user)}
+										>{m.users_require_password_change()}</button
+									>
+								{/if}
 								<button
 									type="button"
 									class="text-earthy-terracotta-700 hover:text-earthy-terracotta-800 dark:text-earthy-terracotta-500 dark:hover:text-earthy-terracotta-400 mr-3"
@@ -229,4 +274,13 @@
 	onCancel={() => {
 		if (!resetting) resetUser = null;
 	}}
+/>
+
+<ConfirmModal
+	show={!!passwordResetUser}
+	title={m.users_require_password_change()}
+	message={m.users_password_reset_confirm({ name: passwordResetUser?.username || '' })}
+	confirmText={m.users_require_password_change()}
+	onConfirm={requirePasswordChange}
+	onCancel={() => (passwordResetUser = null)}
 />
