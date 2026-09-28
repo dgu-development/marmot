@@ -7,6 +7,8 @@ func TestLoad_DCRAllowedRedirectHostsFromEnv(t *testing.T) {
 	t.Setenv("MARMOT_AUTH_DCR_ALLOWED_REDIRECT_HOSTS", "claude.ai,example.com:8443")
 	t.Setenv("MARMOT_METAMODEL_PROFILE", "/etc/marmot/metamodel.yaml")
 	t.Setenv("MARMOT_DOMAINS_ENABLED", "true")
+	t.Setenv("MARMOT_AUTH_TOTP_ENABLED", "true")
+	t.Setenv("MARMOT_AUTH_TOTP_ISSUER", "Example")
 	t.Setenv("MARMOT_UI_DOMAIN_LANDING_URL", "/dgu/landing/domains/{id}")
 
 	cfg, err := Load("")
@@ -14,6 +16,9 @@ func TestLoad_DCRAllowedRedirectHostsFromEnv(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 
+	if !cfg.Auth.TOTP.Enabled || cfg.Auth.TOTP.Issuer != "Example" {
+		t.Fatal("TOTP configuration not read from environment")
+	}
 	got := cfg.Auth.DCR.AllowedRedirectHosts
 	if len(got) != 2 || got[0] != "claude.ai" || got[1] != "example.com:8443" {
 		t.Fatalf("unexpected allowlist from env: %v", got)

@@ -97,6 +97,10 @@ type Config struct {
 	} `mapstructure:"logging"`
 
 	Auth struct {
+		TOTP struct {
+			Enabled bool   `mapstructure:"enabled"`
+			Issuer  string `mapstructure:"issuer"`
+		} `mapstructure:"totp"`
 		Google      *OAuthProviderConfig `mapstructure:"google"`
 		GenericOIDC *OAuthProviderConfig `mapstructure:"generic_oidc"`
 		GitHub      *OAuthProviderConfig `mapstructure:"github"`
@@ -253,6 +257,8 @@ func loadConfig(configPath string) error {
 	v.BindEnv("auth.okta.client_secret")
 	v.BindEnv("auth.okta.url")
 	v.BindEnv("auth.okta.redirect_url")
+	v.BindEnv("auth.totp.enabled")
+	v.BindEnv("auth.totp.issuer")
 	v.BindEnv("auth.okta.enabled")
 	v.BindEnv("auth.okta.type")
 	v.BindEnv("auth.okta.name")
@@ -446,6 +452,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("database.idle_conns", 25)
 	v.SetDefault("database.conn_lifetime", 5) // minutes
 
+	v.SetDefault("auth.totp.enabled", false)
+	v.SetDefault("auth.totp.issuer", "Marmot")
 	v.SetDefault("auth.anonymous.role", "user")
 
 	// OpenLineage defaults
