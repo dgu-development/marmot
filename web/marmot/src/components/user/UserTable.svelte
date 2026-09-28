@@ -161,8 +161,8 @@
 							>{user.name}</td
 						>
 						<td class="px-6 py-4 whitespace-nowrap">
-							{#if user.identities && user.identities.length > 0}
-								<div class="flex flex-wrap gap-1">
+							<div class="flex flex-wrap items-center gap-1">
+								{#if user.identities && user.identities.length > 0}
 									{#each user.identities as identity (identity.provider)}
 										<span
 											class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
@@ -171,27 +171,27 @@
 											{getProviderDisplay(identity.provider)}
 										</span>
 									{/each}
-								</div>
-							{:else}
-								<span
-									class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-								>
-									<Mail class="h-3 w-3 mr-1" />
-									{m.users_auth_password_badge()}
-								</span>
-							{/if}
-							{#if !user.identities?.length}
-								<span
-									class={`ml-1 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${totpStatus === 'ready' && totpUsers.has(user.id) ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}
-									>{totpStatus === 'ready'
-										? totpUsers.has(user.id)
-											? m.totp_badge()
-											: m.totp_not_enabled()
-										: totpStatus === 'disabled'
-											? m.totp_server_disabled()
-											: m.totp_status_unavailable()}</span
-								>
-							{/if}
+								{:else}
+									<span
+										class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+									>
+										<Mail class="h-3 w-3 mr-1" />
+										{m.users_auth_password_badge()}
+									</span>
+								{/if}
+								{#if !user.identities?.length}
+									<span
+										class={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${totpStatus === 'ready' && totpUsers.has(user.id) ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}
+										>{totpStatus === 'ready'
+											? totpUsers.has(user.id)
+												? m.totp_badge()
+												: m.totp_not_enabled()
+											: totpStatus === 'disabled'
+												? m.totp_server_disabled()
+												: m.totp_status_unavailable()}</span
+									>
+								{/if}
+							</div>
 						</td>
 						<td class="px-6 py-4 whitespace-nowrap">
 							<div class="flex flex-wrap gap-1">
