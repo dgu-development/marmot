@@ -89,6 +89,7 @@ func TestParseRejectsWhatWouldNotRun(t *testing.T) {
 		"bad group":         {`<bpmn:startEvent id="s"/><bpmn:userTask id="u" camunda:candidateGroups="role:king"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="u"/><bpmn:sequenceFlow id="b" sourceRef="u" targetRef="e"/>`, "invalid_candidate_group"},
 		"no action":         {`<bpmn:startEvent id="s"/><bpmn:serviceTask id="x"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="x"/><bpmn:sequenceFlow id="b" sourceRef="x" targetRef="e"/>`, "service_needs_action"},
 		"code action":       {`<bpmn:startEvent id="s"/><bpmn:serviceTask id="x" dgu:action="exec"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="x"/><bpmn:sequenceFlow id="b" sourceRef="x" targetRef="e"/>`, "unknown_action"},
+		"bad form field":    {`<bpmn:startEvent id="s"/><bpmn:userTask id="u" camunda:assignee="bob" dgu:formFields="bad-id!"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="u"/><bpmn:sequenceFlow id="b" sourceRef="u" targetRef="e"/>`, "invalid_form_field"},
 		"no end":            {`<bpmn:startEvent id="s"/>`, "no_end"},
 		"two starts":        {`<bpmn:startEvent id="s"/><bpmn:startEvent id="t"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="e"/><bpmn:sequenceFlow id="b" sourceRef="t" targetRef="e"/>`, "several_starts"},
 		"dangling":          {`<bpmn:startEvent id="s"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="nowhere"/>`, "flow_dangling"},
@@ -126,6 +127,26 @@ func TestParseRejectsDocumentsThatAreNotOneBPMNProcess(t *testing.T) {
 	}
 	if _, err := Parse([]byte(strings.Repeat(" ", MaxDiagramBytes+1))); !errors.Is(err, ErrInvalidDiagram) {
 		t.Errorf("oversized diagram accepted: %v", err)
+	}
+}
+
+func TestParseAcceptsFormFieldsAndNewActions(t *testing.T) {
+	body := `
+<bpmn:startEvent id="start"/>
+<bpmn:userTask id="review" camunda:assignee="bob" dgu:formFields="classification,lifecycle"/>
+<bpmn:serviceTask id="untag" dgu:action="remove_tag" dgu:tag="draft"/>
+<bpmn:serviceTask id="clear" dgu:action="clear_field" dgu:field="next_review"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+<bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="untag"/>
+<bpmn:sequenceFlow id="f3" sourceRef="untag" targetRef="clear"/>
+<bpmn:sequenceFlow id="f4" sourceRef="clear" targetRef="ok"/>`
+	p := mustParse(t, body)
+	if got := strings.Join(p.Nodes["review"].FormFields, ","); got != "classification,lifecycle" {
+		t.Fatalf("form fields = %v", p.Nodes["review"].FormFields)
+	}
+	if p.Nodes["untag"].Action != ActionRemoveTag || p.Nodes["clear"].Action != ActionClearField {
+		t.Fatalf("actions = %s / %s", p.Nodes["untag"].Action, p.Nodes["clear"].Action)
 	}
 }
 
