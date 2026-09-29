@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -182,6 +183,14 @@ type Config struct {
 	Domains struct {
 		Enabled bool `mapstructure:"enabled"`
 	} `mapstructure:"domains"`
+
+	// Workflows is fork-only: BPMN governance workflows. Role groups in a
+	// workflow resolve through domains, so they name nobody without them.
+	Workflows struct {
+		Enabled bool `mapstructure:"enabled"`
+		// TimerInterval is how often due task timers are checked.
+		TimerInterval time.Duration `mapstructure:"timer_interval"`
+	} `mapstructure:"workflows"`
 }
 
 type BannerConfig struct {
@@ -417,6 +426,8 @@ func loadConfig(configPath string) error {
 
 	v.BindEnv("metamodel.profile")
 	v.BindEnv("domains.enabled")
+	v.BindEnv("workflows.enabled")
+	v.BindEnv("workflows.timer_interval")
 
 	// Set defaults
 	setDefaults(v)
@@ -559,6 +570,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("metamodel.profile", "")
 
 	v.SetDefault("domains.enabled", false)
+
+	v.SetDefault("workflows.enabled", false)
+	v.SetDefault("workflows.timer_interval", time.Minute)
 }
 
 // BuildDSN builds a PostgreSQL connection string from config

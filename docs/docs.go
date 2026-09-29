@@ -10341,6 +10341,530 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/workflows/definitions": {
+            "get": {
+                "description": "Managers see every version; everybody else only published ones.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "List workflow definitions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/workflow.Definition"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Stores the BPMN as the next version of its process id. A draft may have issues; they come back and block publishing.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "Create a workflow draft",
+                "parameters": [
+                    {
+                        "description": "BPMN document",
+                        "name": "definition",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.DefinitionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/workflow.Definition"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workflows/definitions/validate": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "Validate a BPMN document",
+                "parameters": [
+                    {
+                        "description": "BPMN document",
+                        "name": "definition",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.DefinitionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.ValidateResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workflows/definitions/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "Get a workflow definition",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Definition ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/workflow.Definition"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "Replace a workflow draft",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Definition ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "BPMN document",
+                        "name": "definition",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.DefinitionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/workflow.Definition"
+                        }
+                    },
+                    "409": {
+                        "description": "Not a draft",
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "Delete a workflow draft",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Definition ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "409": {
+                        "description": "Not a draft",
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workflows/definitions/{id}/bpmn": {
+            "get": {
+                "produces": [
+                    "text/xml"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "Export a workflow definition as BPMN",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Definition ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "BPMN 2.0 XML",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workflows/definitions/{id}/publish": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "Publish a workflow draft",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Definition ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/workflow.Definition"
+                        }
+                    },
+                    "400": {
+                        "description": "The diagram cannot run",
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workflows/definitions/{id}/retire": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "Retire a published workflow version",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Definition ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/workflow.Definition"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workflows/instances": {
+            "get": {
+                "description": "Runs the caller started or has a task in; all=true lists every run and needs workflows/manage.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "List workflow runs",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Every run",
+                        "name": "all",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "running, completed, failed or cancelled",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Target kind",
+                        "name": "target_kind",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Target ID",
+                        "name": "target_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "At most 200",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/workflow.Instance"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "Start a workflow run",
+                "parameters": [
+                    {
+                        "description": "Definition and optional target asset",
+                        "name": "run",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.StartRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/workflow.Instance"
+                        }
+                    },
+                    "409": {
+                        "description": "Not published",
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workflows/instances/{id}": {
+            "get": {
+                "description": "With its tasks, audit events and diagram. Only for managers, its initiator and its participants.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "Get a workflow run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Run ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/workflow.InstanceDetail"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workflows/instances/{id}/cancel": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "Cancel a workflow run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Run ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/workflow.Instance"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workflows/tasks": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "List my open workflow tasks",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/workflow.Task"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/workflows/tasks/{id}/complete": {
+            "post": {
+                "description": "The caller must be a candidate for the task now, not only when it was created.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workflows"
+                ],
+                "summary": "Complete a workflow task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Decision and comment",
+                        "name": "decision",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.CompleteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/workflow.Instance"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Already decided or the run ended",
+                        "schema": {
+                            "$ref": "#/definitions/v1_workflows.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/auth-providers": {
             "get": {
                 "description": "Returns the enabled auth providers without sensitive data",
@@ -15715,6 +16239,337 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "v1_workflows.CompleteRequest": {
+            "type": "object",
+            "properties": {
+                "comment": {
+                    "type": "string"
+                },
+                "decision": {
+                    "type": "string"
+                }
+            }
+        },
+        "v1_workflows.DefinitionRequest": {
+            "type": "object",
+            "properties": {
+                "bpmn": {
+                    "type": "string"
+                }
+            }
+        },
+        "v1_workflows.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/workflow.Issue"
+                    }
+                }
+            }
+        },
+        "v1_workflows.StartRequest": {
+            "type": "object",
+            "properties": {
+                "definition_id": {
+                    "type": "string"
+                },
+                "target": {
+                    "$ref": "#/definitions/workflow.Target"
+                }
+            }
+        },
+        "v1_workflows.ValidateResponse": {
+            "type": "object",
+            "properties": {
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/workflow.Issue"
+                    }
+                },
+                "valid": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "workflow.Definition": {
+            "type": "object",
+            "properties": {
+                "bpmn": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "issues": {
+                    "description": "Issues is filled on read: what keeps a draft from being published.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/workflow.Issue"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "process_key": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "workflow.Event": {
+            "type": "object",
+            "properties": {
+                "actor_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "detail": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "element": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "workflow.Instance": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "definition_id": {
+                    "type": "string"
+                },
+                "definition_name": {
+                    "type": "string"
+                },
+                "ended_at": {
+                    "type": "string"
+                },
+                "failure_code": {
+                    "type": "string"
+                },
+                "failure_detail": {
+                    "type": "string"
+                },
+                "failure_element": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "initiator_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "target_id": {
+                    "type": "string"
+                },
+                "target_kind": {
+                    "type": "string"
+                },
+                "target_name": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "workflow.InstanceDetail": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "description": "Active lists the nodes that hold a token, to highlight in the diagram.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "bpmn": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "definition_id": {
+                    "type": "string"
+                },
+                "definition_name": {
+                    "type": "string"
+                },
+                "ended_at": {
+                    "type": "string"
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/workflow.Event"
+                    }
+                },
+                "failure_code": {
+                    "type": "string"
+                },
+                "failure_detail": {
+                    "type": "string"
+                },
+                "failure_element": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "initiator_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "target_id": {
+                    "type": "string"
+                },
+                "target_kind": {
+                    "type": "string"
+                },
+                "target_name": {
+                    "type": "string"
+                },
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/workflow.Task"
+                    }
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "workflow.Issue": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "detail": {
+                    "type": "string"
+                },
+                "element": {
+                    "type": "string"
+                }
+            }
+        },
+        "workflow.Target": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                }
+            }
+        },
+        "workflow.Task": {
+            "type": "object",
+            "properties": {
+                "candidates": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "comment": {
+                    "type": "string"
+                },
+                "completed_at": {
+                    "type": "string"
+                },
+                "completed_by": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "decision": {
+                    "type": "string"
+                },
+                "definition_name": {
+                    "description": "Filled when listed as an inbox, from the instance.",
+                    "type": "string"
+                },
+                "due_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "instance_id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "node_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "target_id": {
+                    "type": "string"
+                },
+                "target_kind": {
+                    "type": "string"
+                },
+                "target_name": {
                     "type": "string"
                 }
             }
