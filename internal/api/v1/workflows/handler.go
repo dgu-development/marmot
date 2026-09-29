@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/marmotdata/marmot/internal/api/v1/common"
 	"github.com/marmotdata/marmot/internal/core/auth"
@@ -288,22 +289,39 @@ func (h *Handler) retire(w http.ResponseWriter, r *http.Request) {
 }
 
 // StartRequest starts a run of a published definition.
+// Supply either target (one asset) or query_expression (batch, same language as asset rules).
 type StartRequest struct {
-	DefinitionID string           `json:"definition_id"`
-	Target       *workflow.Target `json:"target,omitempty"`
+	DefinitionID    string           `json:"definition_id"`
+	Target          *workflow.Target `json:"target,omitempty"`
+	QueryExpression string           `json:"query_expression,omitempty"`
+	Limit           int              `json:"limit,omitempty"`
 }
 
 // @Summary Start a workflow run
 // @Tags workflows
 // @Accept json
 // @Produce json
-// @Param run body StartRequest true "Definition and optional target asset"
+// @Param run body StartRequest true "Definition and optional target asset or query_expression batch"
 // @Success 201 {object} workflow.Instance
+// @Success 201 {object} workflow.StartBatchResult "When query_expression is set"
 // @Failure 409 {object} ErrorResponse "Not published"
 // @Router /api/v1/workflows/instances [post]
 func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 	var req StartRequest
 	if !decode(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.QueryExpression) != "" {
+		if req.Target != nil && req.Target.ID != "" {
+			respondCode(w, http.StatusBadRequest, "invalid_input", "Use either target or query_expression, not both")
+			return
+		}
+		batch, err := h.service.StartQuery(r.Context(), principal(r), req.DefinitionID, req.QueryExpression, req.Limit)
+		if err != nil {
+			respondErr(w, err)
+			return
+		}
+		common.RespondJSON(w, http.StatusCreated, batch)
 		return
 	}
 	in, err := h.service.Start(r.Context(), principal(r), req.DefinitionID, req.Target)
@@ -384,10 +402,12 @@ func (h *Handler) myTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 // CompleteRequest decides a task. Decision becomes the `decision` variable
-// the gateways read.
+// the gateways read. Fields supplies governed values when the user task
+// declares dgu:formFields.
 type CompleteRequest struct {
-	Decision string `json:"decision"`
-	Comment  string `json:"comment"`
+	Decision string         `json:"decision"`
+	Comment  string         `json:"comment"`
+	Fields   map[string]any `json:"fields,omitempty"`
 }
 
 // @Summary Complete a workflow task
@@ -396,7 +416,7 @@ type CompleteRequest struct {
 // @Accept json
 // @Produce json
 // @Param id path string true "Task ID"
-// @Param decision body CompleteRequest true "Decision and comment"
+// @Param decision body CompleteRequest true "Decision, comment and optional form fields"
 // @Success 200 {object} workflow.Instance
 // @Failure 403 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse "Already decided or the run ended"
@@ -406,7 +426,7 @@ func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	in, err := h.service.CompleteTask(r.Context(), principal(r), r.PathValue("id"), req.Decision, req.Comment)
+	in, err := h.service.CompleteTask(r.Context(), principal(r), r.PathValue("id"), req.Decision, req.Comment, req.Fields)
 	if err != nil {
 		respondErr(w, err)
 		return
