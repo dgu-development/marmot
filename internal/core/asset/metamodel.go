@@ -85,6 +85,13 @@ func applyFields(registry *metamodel.Registry, asset *Asset, fields map[string]a
 		if field.Derive != nil {
 			return &metamodel.ValidationError{Fields: []metamodel.Violation{{Field: id, Code: "derived"}}}
 		}
+		if value != nil {
+			coerced, ok := metamodel.Coerce(field, value)
+			if !ok {
+				return fieldTypeError(id)
+			}
+			value = coerced
+		}
 		if value == nil && (!field.Nullable || field.Required) {
 			return &metamodel.ValidationError{Fields: []metamodel.Violation{{Field: id, Code: "not_nullable"}}}
 		}

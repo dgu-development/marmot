@@ -160,7 +160,7 @@ const (
 	// to "initiator" (default) or "participants".
 	ActionNotify = "notify"
 	// ActionSetField writes a governed field of the target asset through the
-	// metamodel: dgu:field and dgu:value (a JSON literal or plain text).
+	// metamodel: dgu:field and dgu:value (raw text; PatchFields coerces by type).
 	ActionSetField = "set_field"
 	// ActionAddTag adds dgu:tag to the target asset.
 	ActionAddTag = "add_tag"
@@ -202,8 +202,8 @@ func validateAction(n *Node) string {
 	return ""
 }
 
-// FieldValue turns dgu:value into what the metamodel expects: a JSON literal
-// (number, boolean, null, array) when it parses as one, else the text itself.
+// FieldValue turns a BPMN dgu:value into a JSON literal when it parses as one.
+// Prefer metamodel.Coerce when the field type is known (PatchFields does).
 func FieldValue(raw string) any {
 	trimmed := strings.TrimSpace(raw)
 	var v any

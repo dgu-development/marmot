@@ -579,10 +579,6 @@ func (s *Service) writeFormFields(ctx context.Context, p auth.Principal, in *Ins
 		if !ok {
 			return fmt.Errorf("%w: missing form field %q", ErrInvalidInput, id)
 		}
-		// HTML forms send strings; coerce JSON literals like set_field (true, 3, null).
-		if s, ok := v.(string); ok {
-			v = FieldValue(s)
-		}
 		patch[id] = v
 	}
 	for id := range fields {
@@ -995,7 +991,8 @@ func (e *executor) Execute(ctx context.Context, n *Node, vars map[string]string)
 		if n.Action == ActionClearField {
 			patch = map[string]any{n.Args["field"]: nil}
 		} else {
-			patch = map[string]any{n.Args["field"]: FieldValue(n.Args["value"])}
+			// Raw text: PatchFields coerces by the field's declared type.
+			patch = map[string]any{n.Args["field"]: n.Args["value"]}
 		}
 		_, err = e.svc.assets.PatchFields(ctx, id, a.Version, patch)
 		return err
