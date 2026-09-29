@@ -579,6 +579,10 @@ func (s *Service) writeFormFields(ctx context.Context, p auth.Principal, in *Ins
 		if !ok {
 			return fmt.Errorf("%w: missing form field %q", ErrInvalidInput, id)
 		}
+		// HTML forms send strings; coerce JSON literals like set_field (true, 3, null).
+		if s, ok := v.(string); ok {
+			v = FieldValue(s)
+		}
 		patch[id] = v
 	}
 	for id := range fields {
