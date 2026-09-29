@@ -15,7 +15,8 @@
 		notificationTypeOptions,
 		providerOptions,
 		providerLabels,
-		type CreateWebhookInput
+		type CreateWebhookInput,
+		type WebhookProvider
 	} from '$lib/teams/webhooks';
 
 	interface Owner {
@@ -30,7 +31,7 @@
 	interface PendingWebhook {
 		key: string;
 		name: string;
-		provider: 'slack' | 'discord' | 'generic';
+		provider: WebhookProvider;
 		webhook_url: string;
 		notification_types: string[];
 		enabled: boolean;

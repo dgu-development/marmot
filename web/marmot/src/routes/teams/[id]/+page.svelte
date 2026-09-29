@@ -891,7 +891,7 @@
 							<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
 								{m.teams_webhook_provider_label()}
 							</label>
-							<div class="grid grid-cols-3 gap-2">
+							<div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
 								{#each providerOptions() as provider (provider.value)}
 									<button
 										type="button"
