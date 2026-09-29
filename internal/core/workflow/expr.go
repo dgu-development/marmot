@@ -164,6 +164,10 @@ const (
 	ActionSetField = "set_field"
 	// ActionAddTag adds dgu:tag to the target asset.
 	ActionAddTag = "add_tag"
+	// ActionRemoveTag removes dgu:tag from the target asset.
+	ActionRemoveTag = "remove_tag"
+	// ActionClearField clears a governed field (PatchFields with null).
+	ActionClearField = "clear_field"
 )
 
 func validateAction(n *Node) string {
@@ -184,7 +188,11 @@ func validateAction(n *Node) string {
 		if _, ok := n.Args["value"]; !ok {
 			return "action_needs_value"
 		}
-	case ActionAddTag:
+	case ActionClearField:
+		if !identRE.MatchString(n.Args["field"]) {
+			return "action_needs_field"
+		}
+	case ActionAddTag, ActionRemoveTag:
 		if strings.TrimSpace(n.Args["tag"]) == "" {
 			return "action_needs_tag"
 		}
