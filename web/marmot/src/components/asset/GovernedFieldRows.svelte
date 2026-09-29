@@ -370,7 +370,7 @@
 		{#if href}
 			<a
 				href={resolve(href as `/${string}`)}
-				class="rounded-full px-2 py-1 text-sm transition hover:underline hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 {valueClass(
+				class="rounded-full px-2 py-1 text-sm transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 {valueClass(
 					value
 				)}"
 				title={m.metamodel_filter_by({ value: shown(field, value) })}>{shown(field, value)}</a
@@ -385,7 +385,7 @@
 		{#if href}
 			<a
 				href={resolve(href as `/${string}`)}
-				class="rounded-full px-2 py-1 text-sm transition hover:underline hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 {valueClass(
+				class="rounded-full px-2 py-1 text-sm transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 {valueClass(
 					value
 				)}"
 				title={m.metamodel_filter_by({ value: shown(field, value) })}>{shown(field, value)}</a

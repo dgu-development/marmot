@@ -75,7 +75,7 @@
 				<!-- Inside a Discover card the chip filters instead of opening the card. -->
 				<a
 					href={resolve(part.href as `/${string}`)}
-					class="{segment} transition hover:brightness-110 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-earthy-terracotta-500"
+					class="{segment} transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-earthy-terracotta-500"
 					title={`${part.field}: ${part.text}`}
 					data-field-badge={part.id}
 					onclick={(event) => event.stopPropagation()}
