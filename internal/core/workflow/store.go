@@ -96,6 +96,8 @@ type Task struct {
 	TargetKind     *string `json:"target_kind,omitempty"`
 	TargetID       *string `json:"target_id,omitempty"`
 	TargetName     *string `json:"target_name,omitempty"`
+	// FormFields are governed field ids the task expects when completing.
+	FormFields []string `json:"form_fields,omitempty"`
 }
 
 type Event struct {
