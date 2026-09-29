@@ -16,7 +16,6 @@
 	export let onDelete;
 
 	let totpStatus: 'loading' | 'disabled' | 'ready' | 'error' = 'loading';
-	let totpPolicy: 'loading' | 'off' | 'optional' | 'required' | 'error' = 'loading';
 	let totpUsers = new Set<string>();
 	let resetUser: { id: string; username: string } | null = null;
 	let passwordResetUser: { id: string; username: string } | null = null;
@@ -25,9 +24,7 @@
 		try {
 			const response = await fetch('/auth-providers');
 			if (!response.ok) throw new Error('Auth configuration unavailable');
-			const config = await response.json();
-			totpPolicy = !config.totp_enabled ? 'off' : config.totp_required ? 'required' : 'optional';
-			if (totpPolicy === 'off') {
+			if (!(await response.json()).totp_enabled) {
 				totpStatus = 'disabled';
 				return;
 			}
@@ -36,7 +33,6 @@
 			totpUsers = new Set((await enrolled.json()).user_ids);
 			totpStatus = 'ready';
 		} catch {
-			if (totpPolicy === 'loading') totpPolicy = 'error';
 			totpStatus = 'error';
 		}
 	});
@@ -114,23 +110,6 @@
 		return providerMap[provider] || provider.charAt(0).toUpperCase() + provider.slice(1);
 	}
 </script>
-
-<div class="mb-4 flex items-center justify-end gap-2 text-xs" aria-live="polite">
-	<span class="text-gray-500 dark:text-gray-400">{m.users_totp_policy_label()}</span>
-	<span
-		class={`inline-flex items-center rounded-full border px-2.5 py-1 font-medium ${totpPolicy === 'required' ? 'border-green-200 bg-green-100 text-green-800 dark:border-green-800 dark:bg-green-900 dark:text-green-200' : totpPolicy === 'optional' ? 'border-blue-200 bg-blue-100 text-blue-800 dark:border-blue-800 dark:bg-blue-900 dark:text-blue-200' : 'border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}
-	>
-		{totpPolicy === 'required'
-			? m.users_totp_policy_required()
-			: totpPolicy === 'optional'
-				? m.users_totp_policy_optional()
-				: totpPolicy === 'off'
-					? m.users_totp_policy_off()
-					: totpPolicy === 'loading'
-						? m.common_loading()
-						: m.totp_status_unavailable()}
-	</span>
-</div>
 
 <div class="overflow-x-auto">
 	<table class="min-w-full">
