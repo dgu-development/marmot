@@ -26,7 +26,7 @@
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import { nativeMessage } from '$lib/metamodel/i18n';
 	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
-	import { facetableFields } from '$lib/metamodel/values';
+	import { orderFacetFields } from '$lib/metamodel/values';
 	import { catalogLabels } from '$lib/catalog/labels';
 	import type { MetamodelField, MetamodelSchema } from '$lib/metamodel/types';
 	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
@@ -111,7 +111,7 @@
 	let metamodelFields = $state<MetamodelField[]>([]);
 	let schemaMessages = $state<Record<string, Record<string, string>> | undefined>();
 	let schemaDefaultLocale = $state('en');
-	let facetFields = $derived(facetableFields(metamodelFields));
+	let facetOrder = $derived(orderFacetFields(metamodelFields));
 	let messageContext = $derived({
 		locale: $locale,
 		defaultLocale: schemaDefaultLocale,
@@ -493,6 +493,51 @@
 	<title>{m.discover_page_title()}</title>
 </svelte:head>
 
+{#snippet governedFacet(field: MetamodelField)}
+	{@const values = $facets.metadata[field.storage] || []}
+	{#if values.length > 0}
+		<FacetGroup
+			title={governedFieldLabel(field)}
+			items={values.map(({ value, count }) => ({
+				value,
+				count,
+				label: governedValueLabel(field, value)
+			}))}
+			selected={selectedGoverned[field.id] || []}
+			ontoggle={(value, checked) => {
+				const current = selectedGoverned[field.id] || [];
+				selectedGoverned = {
+					...selectedGoverned,
+					[field.id]: checked ? [...current, value] : current.filter((v) => v !== value)
+				};
+				if (checked) selectedKinds = ['asset'];
+				handleFilterChange();
+			}}
+		/>
+	{/if}
+{/snippet}
+
+{#snippet typeFacet()}
+	{#if $facets.asset_types.length > 0}
+		<FacetGroup
+			title={facetOrder.technicalType ? m.discover_technical_type() : m.common_type()}
+			items={$facets.asset_types.map(({ value, count }) => ({
+				value,
+				count,
+				label: $catalogLabels.type(value)
+			}))}
+			selected={selectedTypes}
+			ontoggle={(value, checked) => {
+				selectedTypes = checked
+					? [...selectedTypes, value]
+					: selectedTypes.filter((t) => t !== value);
+				if (checked) selectedKinds = ['asset'];
+				handleFilterChange();
+			}}
+		/>
+	{/if}
+{/snippet}
+
 <div class="h-full flex flex-col">
 	<!-- Main Content -->
 	<div class="flex-1 overflow-hidden">
@@ -569,23 +614,11 @@
 
 							<!-- Asset-specific filters (only show when Asset is selected) -->
 							{#if showAssetFilters}
-								{#if $facets.asset_types.length > 0}
-									<FacetGroup
-										title={m.common_type()}
-										items={$facets.asset_types.map(({ value, count }) => ({
-											value,
-											count,
-											label: $catalogLabels.type(value)
-										}))}
-										selected={selectedTypes}
-										ontoggle={(value, checked) => {
-											selectedTypes = checked
-												? [...selectedTypes, value]
-												: selectedTypes.filter((t) => t !== value);
-											if (checked) selectedKinds = ['asset'];
-											handleFilterChange();
-										}}
-									/>
+								{#each facetOrder.lead as field (field.id)}
+									{@render governedFacet(field)}
+								{/each}
+								{#if !facetOrder.technicalType}
+									{@render typeFacet()}
 								{/if}
 								{#if $facets.providers.length > 0}
 									<FacetGroup
@@ -623,31 +656,12 @@
 										}}
 									/>
 								{/if}
-								{#each facetFields as field (field.id)}
-									{@const values = $facets.metadata[field.storage] || []}
-									{#if values.length > 0}
-										<FacetGroup
-											title={governedFieldLabel(field)}
-											items={values.map(({ value, count }) => ({
-												value,
-												count,
-												label: governedValueLabel(field, value)
-											}))}
-											selected={selectedGoverned[field.id] || []}
-											ontoggle={(value, checked) => {
-												const current = selectedGoverned[field.id] || [];
-												selectedGoverned = {
-													...selectedGoverned,
-													[field.id]: checked
-														? [...current, value]
-														: current.filter((v) => v !== value)
-												};
-												if (checked) selectedKinds = ['asset'];
-												handleFilterChange();
-											}}
-										/>
-									{/if}
+								{#each facetOrder.rest as field (field.id)}
+									{@render governedFacet(field)}
 								{/each}
+								{#if facetOrder.technicalType}
+									{@render typeFacet()}
+								{/if}
 							{/if}
 						</div>
 					{/if}
@@ -710,7 +724,9 @@
 										class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-white dark:bg-earthy-terracotta-900/40 text-earthy-terracotta-700 dark:text-earthy-terracotta-100 border border-earthy-terracotta-300 dark:border-earthy-terracotta-800"
 									>
 										<span class="text-earthy-terracotta-700 dark:text-earthy-terracotta-700"
-											>{m.discover_filter_type_label()}</span
+											>{facetOrder.technicalType
+												? m.discover_technical_type_label()
+												: m.discover_filter_type_label()}</span
 										>
 										{$catalogLabels.type(type)}
 										<button
