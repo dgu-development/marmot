@@ -136,6 +136,7 @@ type Service struct {
 	teamProvider      TeamMembershipProvider
 	userPrefsProvider UserPreferencesProvider
 	externalNotifier  ExternalNotifier
+	channels          []Channel
 	config            *ServiceConfig
 	db                *pgxpool.Pool
 
@@ -399,6 +400,14 @@ func (s *Service) doFanout(ctx context.Context, input CreateNotificationInput) (
 
 	if len(userRecipients) == 0 {
 		return 0, nil
+	}
+
+	if len(s.channels) > 0 {
+		userIDs := make([]string, 0, len(userRecipients))
+		for userID := range userRecipients {
+			userIDs = append(userIDs, userID)
+		}
+		s.dispatchToChannels(ctx, input, userIDs)
 	}
 
 	userRecipients = s.filterByPreferences(ctx, userRecipients, input.Type)
