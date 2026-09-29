@@ -38,6 +38,8 @@ import (
 	"github.com/marmotdata/marmot/internal/api/v1/ui"
 	"github.com/marmotdata/marmot/internal/api/v1/users"
 	webhooksAPI "github.com/marmotdata/marmot/internal/api/v1/webhooks"
+	workflowsAPI "github.com/marmotdata/marmot/internal/api/v1/workflows"
+	"github.com/marmotdata/marmot/internal/background"
 	agentService "github.com/marmotdata/marmot/internal/core/agent"
 	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/assetdocs"
@@ -61,6 +63,7 @@ import (
 	teamService "github.com/marmotdata/marmot/internal/core/team"
 	userService "github.com/marmotdata/marmot/internal/core/user"
 	webhookService "github.com/marmotdata/marmot/internal/core/webhook"
+	workflowService "github.com/marmotdata/marmot/internal/core/workflow"
 	"github.com/marmotdata/marmot/internal/metrics"
 	marmotOAuth2 "github.com/marmotdata/marmot/internal/oauth2"
 	operatorSync "github.com/marmotdata/marmot/internal/operator/sync"
@@ -114,6 +117,9 @@ type Server struct {
 
 	// Operator Run CRD syncer
 	operatorSyncer *operatorSync.Syncer
+
+	// Workflow task timers (fork-only)
+	workflowTimers *background.SingletonTask
 
 	handlers []interface{ Routes() []common.Route }
 }
@@ -634,6 +640,22 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 		server.handlers = append(server.handlers, domainsAPI.NewHandler(domainSvc, domainGuard, userSvc, authSvc, config))
 	}
 
+	if config.Workflows.Enabled {
+		var workflowDomains workflowService.Domains
+		if domainSvc != nil {
+			workflowDomains = domainSvc
+		}
+		workflowSvc := workflowService.NewService(workflowService.NewPostgresRepository(db), userSvc, teamSvc, workflowDomains, assetSvc, notificationSvc)
+		server.workflowTimers = background.NewSingletonTask(background.SingletonConfig{
+			Name:     "workflow-timers",
+			DB:       db,
+			Interval: config.Workflows.TimerInterval,
+			TaskFn:   workflowSvc.RunTimers,
+		})
+		server.workflowTimers.Start(context.Background())
+		server.handlers = append(server.handlers, workflowsAPI.NewHandler(workflowSvc, userSvc, authSvc, config))
+	}
+
 	// Set up K8s SA token auth and operator syncer if enabled
 	if config.Operator.Enabled {
 		k8sValidator, err := common.NewK8sTokenValidator()
@@ -665,6 +687,9 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 }
 
 func (s *Server) Stop() {
+	if s.workflowTimers != nil {
+		s.workflowTimers.Stop()
+	}
 	if s.operatorSyncer != nil {
 		s.operatorSyncer.Stop()
 	}

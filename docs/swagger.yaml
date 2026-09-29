@@ -3194,33 +3194,6 @@ definitions:
       pattern:
         type: string
     type: object
-  users.ChangePasswordRequest:
-    properties:
-      current_password:
-        type: string
-      new_password:
-        type: string
-    type: object
-  users.RecoveryResponse:
-    properties:
-      access_token:
-        type: string
-      recovery_codes:
-        items:
-          type: string
-        type: array
-    type: object
-  users.TOTPRequest:
-    properties:
-      code:
-        type: string
-      mfa_token:
-        type: string
-      new_password:
-        type: string
-      password:
-        type: string
-    type: object
   v1_assets.patchFieldsRequest:
     properties:
       fields:
@@ -3341,6 +3314,252 @@ definitions:
       description:
         type: string
       name:
+        type: string
+    type: object
+  v1_users.ChangePasswordRequest:
+    properties:
+      current_password:
+        type: string
+      new_password:
+        type: string
+    type: object
+  v1_users.RecoveryResponse:
+    properties:
+      access_token:
+        type: string
+      recovery_codes:
+        items:
+          type: string
+        type: array
+    type: object
+  v1_users.TOTPRequest:
+    properties:
+      code:
+        type: string
+      mfa_token:
+        type: string
+      new_password:
+        type: string
+      password:
+        type: string
+    type: object
+  v1_workflows.CompleteRequest:
+    properties:
+      comment:
+        type: string
+      decision:
+        type: string
+    type: object
+  v1_workflows.DefinitionRequest:
+    properties:
+      bpmn:
+        type: string
+    type: object
+  v1_workflows.ErrorResponse:
+    properties:
+      code:
+        type: string
+      error:
+        type: string
+      issues:
+        items:
+          $ref: '#/definitions/workflow.Issue'
+        type: array
+    type: object
+  v1_workflows.StartRequest:
+    properties:
+      definition_id:
+        type: string
+      target:
+        $ref: '#/definitions/workflow.Target'
+    type: object
+  v1_workflows.ValidateResponse:
+    properties:
+      issues:
+        items:
+          $ref: '#/definitions/workflow.Issue'
+        type: array
+      valid:
+        type: boolean
+    type: object
+  workflow.Definition:
+    properties:
+      bpmn:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: string
+      id:
+        type: string
+      issues:
+        description: 'Issues is filled on read: what keeps a draft from being published.'
+        items:
+          $ref: '#/definitions/workflow.Issue'
+        type: array
+      name:
+        type: string
+      process_key:
+        type: string
+      published_at:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
+    type: object
+  workflow.Event:
+    properties:
+      actor_id:
+        type: string
+      created_at:
+        type: string
+      detail:
+        additionalProperties: {}
+        type: object
+      element:
+        type: string
+      id:
+        type: integer
+      type:
+        type: string
+    type: object
+  workflow.Instance:
+    properties:
+      created_at:
+        type: string
+      definition_id:
+        type: string
+      definition_name:
+        type: string
+      ended_at:
+        type: string
+      failure_code:
+        type: string
+      failure_detail:
+        type: string
+      failure_element:
+        type: string
+      id:
+        type: string
+      initiator_id:
+        type: string
+      status:
+        type: string
+      target_id:
+        type: string
+      target_kind:
+        type: string
+      target_name:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
+    type: object
+  workflow.InstanceDetail:
+    properties:
+      active:
+        description: Active lists the nodes that hold a token, to highlight in the
+          diagram.
+        items:
+          type: string
+        type: array
+      bpmn:
+        type: string
+      created_at:
+        type: string
+      definition_id:
+        type: string
+      definition_name:
+        type: string
+      ended_at:
+        type: string
+      events:
+        items:
+          $ref: '#/definitions/workflow.Event'
+        type: array
+      failure_code:
+        type: string
+      failure_detail:
+        type: string
+      failure_element:
+        type: string
+      id:
+        type: string
+      initiator_id:
+        type: string
+      status:
+        type: string
+      target_id:
+        type: string
+      target_kind:
+        type: string
+      target_name:
+        type: string
+      tasks:
+        items:
+          $ref: '#/definitions/workflow.Task'
+        type: array
+      updated_at:
+        type: string
+      version:
+        type: integer
+    type: object
+  workflow.Issue:
+    properties:
+      code:
+        type: string
+      detail:
+        type: string
+      element:
+        type: string
+    type: object
+  workflow.Target:
+    properties:
+      id:
+        type: string
+      kind:
+        type: string
+    type: object
+  workflow.Task:
+    properties:
+      candidates:
+        items:
+          type: string
+        type: array
+      comment:
+        type: string
+      completed_at:
+        type: string
+      completed_by:
+        type: string
+      created_at:
+        type: string
+      decision:
+        type: string
+      definition_name:
+        description: Filled when listed as an inbox, from the instance.
+        type: string
+      due_at:
+        type: string
+      id:
+        type: string
+      instance_id:
+        type: string
+      name:
+        type: string
+      node_id:
+        type: string
+      status:
+        type: string
+      target_id:
+        type: string
+      target_kind:
+        type: string
+      target_name:
         type: string
     type: object
 info:
@@ -9227,7 +9446,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/users.ChangePasswordRequest'
+          $ref: '#/definitions/v1_users.ChangePasswordRequest'
       produces:
       - application/json
       responses:
@@ -9286,7 +9505,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/users.TOTPRequest'
+          $ref: '#/definitions/v1_users.TOTPRequest'
       produces:
       - application/json
       responses:
@@ -9328,7 +9547,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/users.TOTPRequest'
+          $ref: '#/definitions/v1_users.TOTPRequest'
       produces:
       - application/json
       responses:
@@ -9370,14 +9589,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/users.TOTPRequest'
+          $ref: '#/definitions/v1_users.TOTPRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/users.RecoveryResponse'
+            $ref: '#/definitions/v1_users.RecoveryResponse'
         "401":
           description: Unauthorized
           schema:
@@ -9396,7 +9615,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/users.TOTPRequest'
+          $ref: '#/definitions/v1_users.TOTPRequest'
       produces:
       - application/json
       responses:
@@ -9584,14 +9803,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/users.TOTPRequest'
+          $ref: '#/definitions/v1_users.TOTPRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/users.RecoveryResponse'
+            $ref: '#/definitions/v1_users.RecoveryResponse'
         "400":
           description: Bad Request
           schema:
@@ -9665,14 +9884,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/users.TOTPRequest'
+          $ref: '#/definitions/v1_users.TOTPRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/users.RecoveryResponse'
+            $ref: '#/definitions/v1_users.RecoveryResponse'
         "400":
           description: Bad Request
           schema:
@@ -9728,14 +9947,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/users.TOTPRequest'
+          $ref: '#/definitions/v1_users.TOTPRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/users.RecoveryResponse'
+            $ref: '#/definitions/v1_users.RecoveryResponse'
         "400":
           description: Bad Request
           schema:
@@ -9813,7 +10032,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/users.TOTPRequest'
+          $ref: '#/definitions/v1_users.TOTPRequest'
       produces:
       - application/json
       responses:
@@ -9879,6 +10098,351 @@ paths:
       summary: Update user password
       tags:
       - users
+  /api/v1/workflows/definitions:
+    get:
+      description: Managers see every version; everybody else only published ones.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/workflow.Definition'
+            type: array
+      summary: List workflow definitions
+      tags:
+      - workflows
+    post:
+      consumes:
+      - application/json
+      description: Stores the BPMN as the next version of its process id. A draft
+        may have issues; they come back and block publishing.
+      parameters:
+      - description: BPMN document
+        in: body
+        name: definition
+        required: true
+        schema:
+          $ref: '#/definitions/v1_workflows.DefinitionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/workflow.Definition'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1_workflows.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1_workflows.ErrorResponse'
+      summary: Create a workflow draft
+      tags:
+      - workflows
+  /api/v1/workflows/definitions/{id}:
+    delete:
+      parameters:
+      - description: Definition ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "409":
+          description: Not a draft
+          schema:
+            $ref: '#/definitions/v1_workflows.ErrorResponse'
+      summary: Delete a workflow draft
+      tags:
+      - workflows
+    get:
+      parameters:
+      - description: Definition ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/workflow.Definition'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1_workflows.ErrorResponse'
+      summary: Get a workflow definition
+      tags:
+      - workflows
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Definition ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: BPMN document
+        in: body
+        name: definition
+        required: true
+        schema:
+          $ref: '#/definitions/v1_workflows.DefinitionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/workflow.Definition'
+        "409":
+          description: Not a draft
+          schema:
+            $ref: '#/definitions/v1_workflows.ErrorResponse'
+      summary: Replace a workflow draft
+      tags:
+      - workflows
+  /api/v1/workflows/definitions/{id}/bpmn:
+    get:
+      parameters:
+      - description: Definition ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - text/xml
+      responses:
+        "200":
+          description: BPMN 2.0 XML
+          schema:
+            type: string
+      summary: Export a workflow definition as BPMN
+      tags:
+      - workflows
+  /api/v1/workflows/definitions/{id}/publish:
+    post:
+      parameters:
+      - description: Definition ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/workflow.Definition'
+        "400":
+          description: The diagram cannot run
+          schema:
+            $ref: '#/definitions/v1_workflows.ErrorResponse'
+      summary: Publish a workflow draft
+      tags:
+      - workflows
+  /api/v1/workflows/definitions/{id}/retire:
+    post:
+      parameters:
+      - description: Definition ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/workflow.Definition'
+      summary: Retire a published workflow version
+      tags:
+      - workflows
+  /api/v1/workflows/definitions/validate:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: BPMN document
+        in: body
+        name: definition
+        required: true
+        schema:
+          $ref: '#/definitions/v1_workflows.DefinitionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1_workflows.ValidateResponse'
+      summary: Validate a BPMN document
+      tags:
+      - workflows
+  /api/v1/workflows/instances:
+    get:
+      description: Runs the caller started or has a task in; all=true lists every
+        run and needs workflows/manage.
+      parameters:
+      - description: Every run
+        in: query
+        name: all
+        type: boolean
+      - description: running, completed, failed or cancelled
+        in: query
+        name: status
+        type: string
+      - description: Target kind
+        in: query
+        name: target_kind
+        type: string
+      - description: Target ID
+        in: query
+        name: target_id
+        type: string
+      - description: At most 200
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/workflow.Instance'
+            type: array
+      summary: List workflow runs
+      tags:
+      - workflows
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Definition and optional target asset
+        in: body
+        name: run
+        required: true
+        schema:
+          $ref: '#/definitions/v1_workflows.StartRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/workflow.Instance'
+        "409":
+          description: Not published
+          schema:
+            $ref: '#/definitions/v1_workflows.ErrorResponse'
+      summary: Start a workflow run
+      tags:
+      - workflows
+  /api/v1/workflows/instances/{id}:
+    get:
+      description: With its tasks, audit events and diagram. Only for managers, its
+        initiator and its participants.
+      parameters:
+      - description: Run ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/workflow.InstanceDetail'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1_workflows.ErrorResponse'
+      summary: Get a workflow run
+      tags:
+      - workflows
+  /api/v1/workflows/instances/{id}/cancel:
+    post:
+      parameters:
+      - description: Run ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/workflow.Instance'
+      summary: Cancel a workflow run
+      tags:
+      - workflows
+  /api/v1/workflows/tasks:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/workflow.Task'
+            type: array
+      summary: List my open workflow tasks
+      tags:
+      - workflows
+  /api/v1/workflows/tasks/{id}/complete:
+    post:
+      consumes:
+      - application/json
+      description: The caller must be a candidate for the task now, not only when
+        it was created.
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Decision and comment
+        in: body
+        name: decision
+        required: true
+        schema:
+          $ref: '#/definitions/v1_workflows.CompleteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/workflow.Instance'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1_workflows.ErrorResponse'
+        "409":
+          description: Already decided or the run ended
+          schema:
+            $ref: '#/definitions/v1_workflows.ErrorResponse'
+      summary: Complete a workflow task
+      tags:
+      - workflows
   /auth-providers:
     get:
       description: Returns the enabled auth providers without sensitive data
