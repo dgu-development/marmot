@@ -94,8 +94,9 @@ func (f *fakeDomains) set(roles ...domain.RoleAssignment) {
 }
 
 type fakeAssets struct {
-	patched map[string]any
-	fail    error
+	patched    map[string]any
+	removedTag string
+	fail       error
 }
 
 func (f *fakeAssets) Get(_ context.Context, id string) (*asset.Asset, error) {
@@ -113,11 +114,21 @@ func (f *fakeAssets) PatchFields(_ context.Context, _ string, version int64, fie
 	if version != 3 {
 		return nil, errors.New("stale version")
 	}
-	f.patched = fields
+	if f.patched == nil {
+		f.patched = map[string]any{}
+	}
+	for k, v := range fields {
+		f.patched[k] = v
+	}
 	return &asset.Asset{}, nil
 }
 
 func (f *fakeAssets) AddTag(context.Context, string, string) (*asset.Asset, error) {
+	return &asset.Asset{}, nil
+}
+
+func (f *fakeAssets) RemoveTag(_ context.Context, _ string, tag string) (*asset.Asset, error) {
+	f.removedTag = tag
 	return &asset.Asset{}, nil
 }
 
@@ -233,10 +244,10 @@ func TestApprovalRunsToTheEndAndWritesTheAsset(t *testing.T) {
 		t.Fatalf("carol sees %+v", tasks)
 	}
 
-	if _, err := f.svc.CompleteTask(ctx, f.carol, task.ID, "approved", ""); !errors.Is(err, workflow.ErrForbidden) {
+	if _, err := f.svc.CompleteTask(ctx, f.carol, task.ID, "approved", "", nil); !errors.Is(err, workflow.ErrForbidden) {
 		t.Fatalf("carol decided: %v", err)
 	}
-	done, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", "Looks right")
+	done, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", "Looks right", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +278,7 @@ func TestApprovalRunsToTheEndAndWritesTheAsset(t *testing.T) {
 	if strings.Join(types, ",") != "started,task_created,task_completed,branch_taken,action_done,action_done,ended,completed" {
 		t.Fatalf("events = %v", types)
 	}
-	if _, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", ""); !errors.Is(err, workflow.ErrNotRunning) {
+	if _, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", "", nil); !errors.Is(err, workflow.ErrNotRunning) {
 		t.Fatalf("second decision: %v", err)
 	}
 }
@@ -283,10 +294,10 @@ func TestARevokedRoleCannotDecide(t *testing.T) {
 
 	f.domains.set()
 
-	if _, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", ""); !errors.Is(err, workflow.ErrForbidden) {
+	if _, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", "", nil); !errors.Is(err, workflow.ErrForbidden) {
 		t.Fatalf("err = %v", err)
 	}
-	if _, err := f.svc.CompleteTask(ctx, f.admin, task.ID, "rejected", ""); err != nil {
+	if _, err := f.svc.CompleteTask(ctx, f.admin, task.ID, "rejected", "", nil); err != nil {
 		t.Fatalf("a native admin could not decide: %v", err)
 	}
 }
@@ -344,7 +355,7 @@ func TestAFailingActionFailsTheInstance(t *testing.T) {
 	task := openTask(t, f, f.bob)
 	f.assets.fail = errors.New("412 precondition failed")
 
-	done, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", "")
+	done, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -447,6 +458,93 @@ func TestStartRejectsAMissingTarget(t *testing.T) {
 	f := setup(t)
 	def := f.published(t, doc)
 	_, err := f.svc.Start(context.Background(), f.alice, def.ID, &workflow.Target{Kind: "asset", ID: "33333333-3333-4333-8333-333333333333"})
+	if !errors.Is(err, workflow.ErrInvalidInput) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+const formDoc = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dgu="https://dgu-development.github.io/schema/workflows" id="d">
+<bpmn:process id="fill_fields" name="Fill">
+<bpmn:startEvent id="start"/>
+<bpmn:userTask id="review" name="Review" camunda:candidateGroups="role:steward" dgu:formFields="classification,lifecycle"/>
+<bpmn:serviceTask id="untag" dgu:action="remove_tag" dgu:tag="draft"/>
+<bpmn:serviceTask id="clear" dgu:action="clear_field" dgu:field="next_review"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+<bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="untag"/>
+<bpmn:sequenceFlow id="f3" sourceRef="untag" targetRef="clear"/>
+<bpmn:sequenceFlow id="f4" sourceRef="clear" targetRef="ok"/>
+</bpmn:process></bpmn:definitions>`
+
+func TestFormFieldsAndNewActions(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, formDoc)
+	if _, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := f.svc.MyTasks(ctx, f.bob)
+	if err != nil || len(tasks) != 1 {
+		t.Fatalf("tasks = %+v, %v", tasks, err)
+	}
+	if got := strings.Join(tasks[0].FormFields, ","); got != "classification,lifecycle" {
+		t.Fatalf("form fields = %v", tasks[0].FormFields)
+	}
+	if _, err := f.svc.CompleteTask(ctx, f.bob, tasks[0].ID, "", "", nil); !errors.Is(err, workflow.ErrInvalidInput) {
+		t.Fatalf("missing fields: %v", err)
+	}
+	done, err := f.svc.CompleteTask(ctx, f.bob, tasks[0].ID, "", "", map[string]any{
+		"classification": "public",
+		"lifecycle":      "active",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Status != workflow.InstanceCompleted {
+		t.Fatalf("status = %s detail=%v", done.Status, done.FailureDetail)
+	}
+	if f.assets.patched["classification"] != "public" || f.assets.patched["lifecycle"] != "active" {
+		t.Fatalf("patched = %+v", f.assets.patched)
+	}
+	if f.assets.removedTag != "draft" {
+		t.Fatalf("removed tag = %q", f.assets.removedTag)
+	}
+	if v, ok := f.assets.patched["next_review"]; !ok || v != nil {
+		t.Fatalf("clear_field next_review = %v ok=%v", v, ok)
+	}
+}
+
+type fakeQuery struct {
+	ids   []string
+	total int
+	err   error
+}
+
+func (f *fakeQuery) Match(context.Context, string, int) ([]string, int, error) {
+	return f.ids, f.total, f.err
+}
+
+func TestStartQueryStartsOneRunPerMatch(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{assetID}, total: 3})
+	def := f.published(t, doc)
+	batch, err := f.svc.StartQuery(context.Background(), f.alice, def.ID, `tag = "pii"`, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if batch.Started != 1 || batch.Total != 3 || len(batch.Instances) != 1 {
+		t.Fatalf("batch = %+v", batch)
+	}
+	if batch.Instances[0].TargetID == nil || *batch.Instances[0].TargetID != assetID {
+		t.Fatalf("target = %+v", batch.Instances[0].TargetID)
+	}
+}
+
+func TestStartQueryRequiresMatcher(t *testing.T) {
+	f := setup(t)
+	def := f.published(t, doc)
+	_, err := f.svc.StartQuery(context.Background(), f.alice, def.ID, `tag = "pii"`, 10)
 	if !errors.Is(err, workflow.ErrInvalidInput) {
 		t.Fatalf("err = %v", err)
 	}

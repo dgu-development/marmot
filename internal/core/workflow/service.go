@@ -34,6 +34,7 @@ const (
 
 	maxCommentLength = 2000
 	timerBatch       = 50
+	maxStartBatch    = 50
 )
 
 var (
@@ -70,6 +71,13 @@ type Assets interface {
 	Get(ctx context.Context, id string) (*asset.Asset, error)
 	PatchFields(ctx context.Context, id string, version int64, fields map[string]any) (*asset.Asset, error)
 	AddTag(ctx context.Context, id string, tag string) (*asset.Asset, error)
+	RemoveTag(ctx context.Context, id string, tag string) (*asset.Asset, error)
+}
+
+// QueryMatcher resolves a Discover/asset-rule query_expression to asset ids.
+// Nil disables batch start by query.
+type QueryMatcher interface {
+	Match(ctx context.Context, queryExpression string, limit int) (ids []string, total int, err error)
 }
 
 type Notifier interface {
@@ -82,12 +90,19 @@ type Service struct {
 	teams    Teams
 	domains  Domains
 	assets   Assets
+	queries  QueryMatcher
 	notifier Notifier
 	now      func() time.Time
 }
 
 func NewService(repo *PostgresRepository, users Users, teams Teams, domains Domains, assets Assets, notifier Notifier) *Service {
 	return &Service{repo: repo, users: users, teams: teams, domains: domains, assets: assets, notifier: notifier, now: time.Now}
+}
+
+// WithQueries enables starting runs for every asset matching a query_expression.
+func (s *Service) WithQueries(q QueryMatcher) *Service {
+	s.queries = q
+	return s
 }
 
 func principalUserID(p auth.Principal) (string, bool) {
@@ -325,6 +340,43 @@ func (s *Service) Start(ctx context.Context, p auth.Principal, definitionID stri
 	return in, nil
 }
 
+// StartBatchResult is what StartQuery returns after starting one run per match.
+type StartBatchResult struct {
+	Instances []*Instance `json:"instances"`
+	Total     int         `json:"total"`
+	Started   int         `json:"started"`
+	Limit     int         `json:"limit"`
+}
+
+// StartQuery starts one run per asset matching query_expression (same language
+// as asset rules / Discover), capped at limit (default and max 50).
+func (s *Service) StartQuery(ctx context.Context, p auth.Principal, definitionID, queryExpression string, limit int) (*StartBatchResult, error) {
+	if s.queries == nil {
+		return nil, fmt.Errorf("%w: query starts are not available", ErrInvalidInput)
+	}
+	q := strings.TrimSpace(queryExpression)
+	if q == "" {
+		return nil, fmt.Errorf("%w: query_expression is required", ErrInvalidInput)
+	}
+	if limit <= 0 || limit > maxStartBatch {
+		limit = maxStartBatch
+	}
+	ids, total, err := s.queries.Match(ctx, q, limit)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	out := &StartBatchResult{Total: total, Limit: limit, Instances: make([]*Instance, 0, len(ids))}
+	for _, id := range ids {
+		in, err := s.Start(ctx, p, definitionID, &Target{Kind: TargetAsset, ID: id})
+		if err != nil {
+			return out, err
+		}
+		out.Instances = append(out.Instances, in)
+		out.Started++
+	}
+	return out, nil
+}
+
 // apply persists a step: tasks opened and closed, events, and the resulting
 // status. It returns the notifications to send after commit.
 func (s *Service) apply(ctx context.Context, tx *PostgresRepository, in *Instance, step *Step, actor *string) (pending, error) {
@@ -406,8 +458,10 @@ func (s *Service) data(in *Instance, extra map[string]any) map[string]any {
 
 // CompleteTask records a decision on a task and runs the instance on.
 // Deciding needs to be a candidate at this moment, not only when the task was
-// created; native admins may decide any task.
-func (s *Service) CompleteTask(ctx context.Context, p auth.Principal, taskID, decision, comment string) (*Instance, error) {
+// created; native admins may decide any task. When the user task declares
+// dgu:formFields, fields must supply every listed id and are written to the
+// target asset before the flow advances.
+func (s *Service) CompleteTask(ctx context.Context, p auth.Principal, taskID, decision, comment string, fields map[string]any) (*Instance, error) {
 	userID, ok := principalUserID(p)
 	if !ok {
 		return nil, ErrForbidden
@@ -457,6 +511,13 @@ func (s *Service) CompleteTask(ctx context.Context, p auth.Principal, taskID, de
 				return ErrForbidden
 			}
 		}
+		if len(node.FormFields) > 0 {
+			if err := s.writeFormFields(ctx, p, in, node.FormFields, fields); err != nil {
+				return err
+			}
+		} else if len(fields) > 0 {
+			return fmt.Errorf("%w: this task does not accept form fields", ErrInvalidInput)
+		}
 		vars := map[string]string{}
 		if decision != "" {
 			vars["decision"] = decision
@@ -485,6 +546,12 @@ func (s *Service) CompleteTask(ctx context.Context, p auth.Principal, taskID, de
 		if decision != "" {
 			step.Events[0].Detail = map[string]any{"decision": decision}
 		}
+		if len(fields) > 0 {
+			if step.Events[0].Detail == nil {
+				step.Events[0].Detail = map[string]any{}
+			}
+			step.Events[0].Detail["fields"] = fields
+		}
 		notes, err := s.apply(ctx, tx, in, step, &userID)
 		out = append(append(out, exec.notes...), notes...)
 		return err
@@ -494,6 +561,37 @@ func (s *Service) CompleteTask(ctx context.Context, p auth.Principal, taskID, de
 	}
 	s.send(ctx, out)
 	return in, nil
+}
+
+func (s *Service) writeFormFields(ctx context.Context, p auth.Principal, in *Instance, required []string, fields map[string]any) error {
+	if in.TargetKind == nil || *in.TargetKind != TargetAsset || in.TargetID == nil {
+		return fmt.Errorf("%w: the instance has no target asset for form fields", ErrInvalidInput)
+	}
+	if p == nil || (!p.IsAdmin() && !p.HasPermission("assets", "manage")) {
+		return fmt.Errorf("%w: may not write asset fields", ErrForbidden)
+	}
+	if fields == nil {
+		fields = map[string]any{}
+	}
+	patch := make(map[string]any, len(required))
+	for _, id := range required {
+		v, ok := fields[id]
+		if !ok {
+			return fmt.Errorf("%w: missing form field %q", ErrInvalidInput, id)
+		}
+		patch[id] = v
+	}
+	for id := range fields {
+		if !slices.Contains(required, id) {
+			return fmt.Errorf("%w: unexpected form field %q", ErrInvalidInput, id)
+		}
+	}
+	a, err := s.assets.Get(ctx, *in.TargetID)
+	if err != nil {
+		return err
+	}
+	_, err = s.assets.PatchFields(ctx, *in.TargetID, a.Version, patch)
+	return err
 }
 
 // Cancel stops a running instance.
@@ -579,6 +677,7 @@ func (s *Service) GetInstance(ctx context.Context, p auth.Principal, id string) 
 	if err != nil {
 		return nil, err
 	}
+	s.attachFormFields(ctx, tasks)
 	events, err := s.repo.ListEvents(ctx, id)
 	if err != nil {
 		return nil, err
@@ -618,7 +717,38 @@ func (s *Service) MyTasks(ctx context.Context, p auth.Principal) ([]*Task, error
 	if !ok {
 		return []*Task{}, nil
 	}
-	return s.repo.OpenTasksFor(ctx, uid)
+	tasks, err := s.repo.OpenTasksFor(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	s.attachFormFields(ctx, tasks)
+	return tasks, nil
+}
+
+func (s *Service) attachFormFields(ctx context.Context, tasks []*Task) {
+	cache := map[string]*Process{}
+	for _, task := range tasks {
+		in, err := s.repo.GetInstance(ctx, task.InstanceID, false)
+		if err != nil {
+			continue
+		}
+		proc, ok := cache[in.DefinitionID]
+		if !ok {
+			def, err := s.repo.GetDefinition(ctx, in.DefinitionID)
+			if err != nil {
+				continue
+			}
+			parsed, err := Parse([]byte(def.BPMN))
+			if err != nil {
+				continue
+			}
+			cache[in.DefinitionID] = parsed
+			proc = parsed
+		}
+		if node := proc.Nodes[task.NodeID]; node != nil && len(node.FormFields) > 0 {
+			task.FormFields = append([]string{}, node.FormFields...)
+		}
+	}
 }
 
 // RunTimers fires the boundary timers that are due. Actions reached from a
@@ -834,7 +964,7 @@ func (e *executor) Execute(ctx context.Context, n *Node, vars map[string]string)
 			Data:       e.svc.data(e.instance, map[string]any{"link": instanceLink(e.instance.ID)}),
 		})
 		return nil
-	case ActionSetField, ActionAddTag:
+	case ActionSetField, ActionClearField, ActionAddTag, ActionRemoveTag:
 		if e.instance.TargetKind == nil || *e.instance.TargetKind != TargetAsset || e.instance.TargetID == nil {
 			return errors.New("the instance has no target asset")
 		}
@@ -845,15 +975,25 @@ func (e *executor) Execute(ctx context.Context, n *Node, vars map[string]string)
 			return fmt.Errorf("%s may not manage assets", e.principal.AuditSubject())
 		}
 		id := *e.instance.TargetID
-		if n.Action == ActionAddTag {
+		switch n.Action {
+		case ActionAddTag:
 			_, err := e.svc.assets.AddTag(ctx, id, strings.TrimSpace(n.Args["tag"]))
+			return err
+		case ActionRemoveTag:
+			_, err := e.svc.assets.RemoveTag(ctx, id, strings.TrimSpace(n.Args["tag"]))
 			return err
 		}
 		a, err := e.svc.assets.Get(ctx, id)
 		if err != nil {
 			return err
 		}
-		_, err = e.svc.assets.PatchFields(ctx, id, a.Version, map[string]any{n.Args["field"]: FieldValue(n.Args["value"])})
+		var patch map[string]any
+		if n.Action == ActionClearField {
+			patch = map[string]any{n.Args["field"]: nil}
+		} else {
+			patch = map[string]any{n.Args["field"]: FieldValue(n.Args["value"])}
+		}
+		_, err = e.svc.assets.PatchFields(ctx, id, a.Version, patch)
 		return err
 	}
 	return fmt.Errorf("unknown action %q", n.Action)
