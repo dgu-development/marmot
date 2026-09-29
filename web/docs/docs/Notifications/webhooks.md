@@ -1,6 +1,6 @@
 ---
 title: Webhooks
-description: Send team notifications to Slack, Discord, or any HTTP endpoint.
+description: Send team notifications to Slack, Discord, Microsoft Teams, Google Chat, or any HTTP endpoint.
 ---
 
 # Webhooks
@@ -23,6 +23,16 @@ import { Steps, Step, TipBox } from '@site/src/components/Steps';
     title="Discord"
     description="Embedded notifications to Discord channels via webhook URLs"
     icon="simple-icons:discord"
+  />
+  <FeatureCard
+    title="Microsoft Teams"
+    description="Adaptive Cards to a Teams channel via a Workflows webhook"
+    icon="mdi:microsoft-teams"
+  />
+  <FeatureCard
+    title="Google Chat"
+    description="Cards to a Google Chat space via an incoming webhook"
+    icon="simple-icons:googlechat"
   />
   <FeatureCard
     title="Generic HTTP"
@@ -51,7 +61,7 @@ alt="Team webhooks section"
 Click **Add Webhook** and fill in the details:
 
 - **Name**: a descriptive label (e.g. "Schema alerts to #data-eng")
-- **Provider**: choose Slack, Discord, or Generic
+- **Provider**: choose Slack, Discord, Microsoft Teams, Google Chat, or Generic
 - **Webhook URL**: the incoming webhook URL from your provider
 - **Notification Types**: select which types to forward
 
@@ -93,6 +103,26 @@ Create a webhook in your Discord server:
 3. Copy the webhook URL (starts with `https://discord.com/api/webhooks/`)
 
 Notifications are delivered as embedded messages with colour-coded types.
+
+### Microsoft Teams
+
+Teams channels receive webhooks through the **Workflows** app (Office 365 connectors are retired):
+
+1. In the channel, open **⋯** > **Workflows**
+2. Choose the template **Post to a channel when a webhook request is received** and finish the setup
+3. Copy the URL the workflow gives you
+
+Notifications arrive as Adaptive Cards with the affected asset and a **View** button back to Marmot.
+
+### Google Chat
+
+Create an incoming webhook in a Google Chat space:
+
+1. Open the space, then **Apps & integrations** > **Webhooks** > **Add webhook**
+2. Give it a name and save
+3. Copy the webhook URL (starts with `https://chat.googleapis.com/v1/spaces/`)
+
+Notifications are delivered as cards, with a plain-text fallback for mobile push notifications.
 
 ### Generic HTTP
 
