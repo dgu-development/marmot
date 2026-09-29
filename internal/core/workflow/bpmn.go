@@ -55,6 +55,8 @@ type Node struct {
 	Assignee        string   `json:"-"`
 	CandidateUsers  []string `json:"-"`
 	CandidateGroups []string `json:"-"`
+	// FormFields are governed field ids the decider must supply (dgu:formFields).
+	FormFields []string `json:"-"`
 
 	// Service task action and its arguments (dgu:action, dgu:field, …).
 	Action  string            `json:"-"`
@@ -293,6 +295,7 @@ func buildProcess(el *element) (*Process, []Issue) {
 			n.Assignee = strings.TrimSpace(c.attr(NamespaceCamunda, "assignee"))
 			n.CandidateUsers = splitList(c.attr(NamespaceCamunda, "candidateUsers"))
 			n.CandidateGroups = splitList(c.attr(NamespaceCamunda, "candidateGroups"))
+			n.FormFields = splitList(c.attr(NamespaceDGU, "formFields"))
 		case NodeServiceTask:
 			n.Action = c.attr(NamespaceDGU, "action")
 			n.Args = map[string]string{}
@@ -396,6 +399,11 @@ func validate(p *Process) []Issue {
 			for _, g := range n.CandidateGroups {
 				if _, err := ParseGroup(g); err != nil {
 					issues = append(issues, Issue{Element: id, Code: "invalid_candidate_group", Detail: g})
+				}
+			}
+			for _, field := range n.FormFields {
+				if !identRE.MatchString(field) {
+					issues = append(issues, Issue{Element: id, Code: "invalid_form_field", Detail: field})
 				}
 			}
 		case NodeServiceTask:
