@@ -431,6 +431,8 @@
 	"discover_filter_provider_label": "Proveedor:",
 	"discover_filter_tag_label": "Etiqueta:",
 	"discover_filter_type_label": "Tipo:",
+	"discover_technical_type": "Tipo técnico",
+	"discover_technical_type_label": "Tipo técnico:",
 	"discover_filters_collapse_title": "Contraer filtros",
 	"discover_filters_expand_title": "Expandir filtros",
 	"discover_filters_heading": "Filtros",

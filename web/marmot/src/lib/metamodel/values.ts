@@ -92,6 +92,28 @@ export function facetableFields(fields: MetamodelField[]): MetamodelField[] {
 	return governedFields(fields).filter((field) => field.presentation?.facet);
 }
 
+const LEAD_FACET_IDS = ['asset_family', 'asset_type'];
+
+/**
+ * Facetable fields with the asset family and type first, so they lead the panel. When the profile
+ * has an asset type it supersedes the plugin's native type, which the panel keeps as a technical one.
+ */
+export function orderFacetFields(fields: MetamodelField[]): {
+	lead: MetamodelField[];
+	rest: MetamodelField[];
+	technicalType: boolean;
+} {
+	const facets = facetableFields(fields);
+	const lead = LEAD_FACET_IDS.map((id) => facets.find((field) => field.id === id)).filter(
+		(field): field is MetamodelField => Boolean(field)
+	);
+	return {
+		lead,
+		rest: facets.filter((field) => !LEAD_FACET_IDS.includes(field.id)),
+		technicalType: lead.some((field) => field.id === 'asset_type')
+	};
+}
+
 export function governedPaths(fields: MetamodelField[]): string[][] {
 	return fields
 		.filter((field) => isMetadataStorage(field.storage))
