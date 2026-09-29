@@ -1,10 +1,12 @@
 import { m } from '$lib/paraglide/messages';
 
+export type WebhookProvider = 'slack' | 'discord' | 'generic' | 'teams' | 'google_chat';
+
 export interface TeamWebhook {
 	id: string;
 	team_id: string;
 	name: string;
-	provider: 'slack' | 'discord' | 'generic';
+	provider: WebhookProvider;
 	webhook_url: string;
 	notification_types: string[];
 	enabled: boolean;
@@ -16,7 +18,7 @@ export interface TeamWebhook {
 
 export interface CreateWebhookInput {
 	name: string;
-	provider: 'slack' | 'discord' | 'generic';
+	provider: WebhookProvider;
 	webhook_url: string;
 	notification_types: string[];
 	enabled?: boolean;
@@ -88,11 +90,19 @@ export const NOTIFICATION_TYPES = [
 export const providerOptions = () => [
 	{ value: 'slack', label: m.webhook_provider_slack(), icon: 'mdi:slack' },
 	{ value: 'discord', label: m.webhook_provider_discord(), icon: 'mdi:discord' },
+	{ value: 'teams', label: m.webhook_provider_teams(), icon: 'mdi:microsoft-teams' },
+	{
+		value: 'google_chat',
+		label: m.webhook_provider_google_chat(),
+		icon: 'simple-icons:googlechat'
+	},
 	{ value: 'generic', label: m.webhook_provider_generic(), icon: 'mdi:webhook' }
 ];
 
 export const providerLabels = (): Record<string, string> => ({
 	slack: m.webhook_provider_slack(),
 	discord: m.webhook_provider_discord(),
+	teams: m.webhook_provider_teams(),
+	google_chat: m.webhook_provider_google_chat(),
 	generic: m.webhook_provider_generic()
 });

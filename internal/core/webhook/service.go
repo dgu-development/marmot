@@ -14,18 +14,22 @@ import (
 )
 
 const (
-	ProviderSlack   = "slack"
-	ProviderDiscord = "discord"
-	ProviderGeneric = "generic"
+	ProviderSlack      = "slack"
+	ProviderDiscord    = "discord"
+	ProviderGeneric    = "generic"
+	ProviderTeams      = "teams"
+	ProviderGoogleChat = "google_chat"
 )
 
 var (
 	ErrNotFound = errors.New("webhook not found")
 
 	ValidProviders = map[string]bool{
-		ProviderSlack:   true,
-		ProviderDiscord: true,
-		ProviderGeneric: true,
+		ProviderSlack:      true,
+		ProviderDiscord:    true,
+		ProviderGeneric:    true,
+		ProviderTeams:      true,
+		ProviderGoogleChat: true,
 	}
 )
 
@@ -254,7 +258,7 @@ func (s *Service) validateCreate(input CreateWebhookInput) error {
 		return &ValidationError{Message: "name must be 255 characters or less"}
 	}
 	if !ValidProviders[input.Provider] {
-		return &ValidationError{Message: fmt.Sprintf("invalid provider: %q, must be one of: slack, discord, generic", input.Provider)}
+		return &ValidationError{Message: fmt.Sprintf("invalid provider: %q, must be one of: slack, discord, generic, teams, google_chat", input.Provider)}
 	}
 	if strings.TrimSpace(input.WebhookURL) == "" {
 		return &ValidationError{Message: "webhook_url is required"}

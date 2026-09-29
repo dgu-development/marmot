@@ -1,6 +1,9 @@
 package webhook
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 // Provider formats notification messages for a specific webhook destination.
 type Provider interface {
@@ -52,5 +55,35 @@ func DefaultRegistry() *ProviderRegistry {
 	registry.Register(ProviderSlack, &SlackProvider{})
 	registry.Register(ProviderDiscord, &DiscordProvider{})
 	registry.Register(ProviderGeneric, &GenericProvider{})
+	registry.Register(ProviderTeams, &TeamsProvider{})
+	registry.Register(ProviderGoogleChat, &GoogleChatProvider{})
 	return registry
+}
+
+type notificationFact struct {
+	label string
+	value string
+}
+
+// notificationFacts returns the data fields every provider shows, in a stable order,
+// and the link back to Marmot, if any.
+func notificationFacts(data map[string]interface{}) ([]notificationFact, string) {
+	var facts []notificationFact
+	link := ""
+	for _, key := range []string{"asset_name", "asset_mrn", "pipeline_name", "status", "link"} {
+		val, ok := data[key]
+		if !ok {
+			continue
+		}
+		strVal := fmt.Sprintf("%v", val)
+		if strVal == "" {
+			continue
+		}
+		if key == "link" {
+			link = strVal
+			continue
+		}
+		facts = append(facts, notificationFact{label: formatFieldLabel(key), value: strVal})
+	}
+	return facts, link
 }
