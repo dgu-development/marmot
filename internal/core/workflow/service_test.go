@@ -496,7 +496,7 @@ func TestFormFieldsAndNewActions(t *testing.T) {
 	}
 	done, err := f.svc.CompleteTask(ctx, f.bob, tasks[0].ID, "", "", map[string]any{
 		"classification": "public",
-		"lifecycle":      "true", // form UIs send strings; coerce like set_field
+		"lifecycle":      "active",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -504,7 +504,7 @@ func TestFormFieldsAndNewActions(t *testing.T) {
 	if done.Status != workflow.InstanceCompleted {
 		t.Fatalf("status = %s detail=%v", done.Status, done.FailureDetail)
 	}
-	if f.assets.patched["classification"] != "public" || f.assets.patched["lifecycle"] != true {
+	if f.assets.patched["classification"] != "public" || f.assets.patched["lifecycle"] != "active" {
 		t.Fatalf("patched = %+v", f.assets.patched)
 	}
 	if f.assets.removedTag != "draft" {
