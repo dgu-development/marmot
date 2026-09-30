@@ -3,6 +3,7 @@ package workflow
 import (
 	"errors"
 	"fmt"
+	"github.com/robfig/cron/v3"
 	"regexp"
 	"strconv"
 	"strings"
@@ -153,6 +154,55 @@ func ParseDuration(text string) (time.Duration, error) {
 	return total, nil
 }
 
+// MinCycle is the shortest gap between two scheduled starts: a start event that
+// fired every minute would flood the platform with runs.
+const MinCycle = 15 * time.Minute
+
+// ErrCycleTooFrequent means a cycle fires more often than MinCycle allows.
+var ErrCycleTooFrequent = errors.New("cycle fires too often")
+
+var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+
+// Cycle is when a timer start event fires: a five-field cron expression, or an
+// ISO 8601 interval (P1D, PT6H) counted from each start.
+type Cycle struct {
+	cron  cron.Schedule
+	every time.Duration
+}
+
+// ParseCycle reads a timeCycle. The interval between fires is at least MinCycle.
+func ParseCycle(text string) (*Cycle, error) {
+	text = strings.TrimSpace(text)
+	if d, err := ParseDuration(text); err == nil {
+		if d < MinCycle {
+			return nil, ErrCycleTooFrequent
+		}
+		return &Cycle{every: d}, nil
+	}
+	schedule, err := cronParser.Parse(text)
+	if err != nil {
+		return nil, fmt.Errorf("neither an ISO 8601 interval nor a five-field cron expression: %w", err)
+	}
+	c := &Cycle{cron: schedule}
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 8; i++ {
+		next := c.Next(at)
+		if next.Sub(at) < MinCycle {
+			return nil, ErrCycleTooFrequent
+		}
+		at = next
+	}
+	return c, nil
+}
+
+// Next is the first fire after from.
+func (c *Cycle) Next(from time.Time) time.Time {
+	if c.cron != nil {
+		return c.cron.Next(from)
+	}
+	return from.Add(c.every)
+}
+
 // Actions a service task may run. Each one is implemented by the platform.
 const (
 	// ActionNotify sends an in-app notification: dgu:message, and dgu:to, a
@@ -168,6 +218,10 @@ const (
 	ActionRemoveTag = "remove_tag"
 	// ActionClearField clears a governed field (PatchFields with null).
 	ActionClearField = "clear_field"
+	// ActionLinkTerm links the glossary term named dgu:term to the target asset.
+	ActionLinkTerm = "link_term"
+	// ActionUnlinkTerm removes that link.
+	ActionUnlinkTerm = "unlink_term"
 )
 
 // Recipients a notify action names besides team: and role: groups.
@@ -198,6 +252,8 @@ var Actions = []ActionSpec{
 	{ID: ActionClearField, Args: []ArgSpec{{"field", true}}, Writes: true},
 	{ID: ActionAddTag, Args: []ArgSpec{{"tag", true}}, Writes: true},
 	{ID: ActionRemoveTag, Args: []ArgSpec{{"tag", true}}, Writes: true},
+	{ID: ActionLinkTerm, Args: []ArgSpec{{"term", true}}, Writes: true},
+	{ID: ActionUnlinkTerm, Args: []ArgSpec{{"term", true}}, Writes: true},
 }
 
 func validateAction(n *Node) string {
@@ -230,6 +286,10 @@ func validateAction(n *Node) string {
 	case ActionAddTag, ActionRemoveTag:
 		if strings.TrimSpace(n.Args["tag"]) == "" {
 			return "action_needs_tag"
+		}
+	case ActionLinkTerm, ActionUnlinkTerm:
+		if strings.TrimSpace(n.Args["term"]) == "" {
+			return "action_needs_term"
 		}
 	default:
 		return "unknown_action"

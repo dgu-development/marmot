@@ -52,9 +52,10 @@ type NewTask struct {
 	TokenID string
 	Node    *Node
 	// DueAt and Timer come from the earliest boundary timer on the task, or
-	// from the wait itself.
-	DueAt *time.Time
-	Timer string
+	// from the wait itself. RemindAt is when its candidates get a reminder.
+	DueAt    *time.Time
+	Timer    string
+	RemindAt *time.Time
 }
 
 // StepEvent is an audit entry: a node reached or a flow taken.
@@ -287,6 +288,11 @@ func (r *Runner) attachTimer(task *NewTask) {
 		if task.DueAt == nil || due.Before(*task.DueAt) {
 			task.DueAt = &due
 			task.Timer = b.ID
+			task.RemindAt = nil
+			if lead, err := ParseDuration(b.Remind); err == nil && lead < d {
+				remind := due.Add(-lead)
+				task.RemindAt = &remind
+			}
 		}
 	}
 }

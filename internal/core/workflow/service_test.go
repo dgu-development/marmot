@@ -13,6 +13,7 @@ import (
 	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/auth"
 	"github.com/marmotdata/marmot/internal/core/domain"
+	"github.com/marmotdata/marmot/internal/core/glossary"
 	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/notification"
 	"github.com/marmotdata/marmot/internal/core/team"
@@ -98,6 +99,9 @@ func (f *fakeDomains) set(roles ...domain.RoleAssignment) {
 type fakeAssets struct {
 	patched    map[string]any
 	removedTag string
+	addedTag   string
+	linked     []string
+	unlinked   string
 	fail       error
 }
 
@@ -125,8 +129,28 @@ func (f *fakeAssets) PatchFields(_ context.Context, _ string, version int64, fie
 	return &asset.Asset{}, nil
 }
 
-func (f *fakeAssets) AddTag(context.Context, string, string) (*asset.Asset, error) {
+func (f *fakeAssets) AddTag(_ context.Context, _ string, tag string) (*asset.Asset, error) {
+	f.addedTag = tag
 	return &asset.Asset{}, nil
+}
+
+func (f *fakeAssets) AddTerms(_ context.Context, _ string, termIDs []string, source, _ string) error {
+	f.linked = append(f.linked, source+":"+strings.Join(termIDs, ","))
+	return nil
+}
+
+func (f *fakeAssets) RemoveTerm(_ context.Context, _ string, termID string) error {
+	f.unlinked = termID
+	return nil
+}
+
+type fakeGlossary struct{}
+
+func (fakeGlossary) GetByName(_ context.Context, name string) (*glossary.GlossaryTerm, error) {
+	if name != "Customer" {
+		return nil, glossary.ErrTermNotFound
+	}
+	return &glossary.GlossaryTerm{ID: "term-1", Name: name}, nil
 }
 
 func (f *fakeAssets) Metamodel(string) metamodel.Schema {
@@ -169,6 +193,7 @@ func (f *fakeNotifier) types(recipient string) []string {
 }
 
 type fixture struct {
+	users                            *fakeUsers
 	svc                              *workflow.Service
 	pool                             *pgxpool.Pool
 	domains                          *fakeDomains
@@ -179,7 +204,7 @@ type fixture struct {
 	adminID, aliceID, bobID, carolID string
 }
 
-var manageAssets = user.Role{Name: "user", Permissions: []user.Permission{{ResourceType: "assets", Action: "manage"}, {ResourceType: "workflows", Action: "view"}}}
+var manageAssets = user.Role{Name: "user", Permissions: []user.Permission{{ResourceType: "assets", Action: "manage"}, {ResourceType: "workflows", Action: "view"}, {ResourceType: "workflows", Action: "start"}}}
 
 func setup(t *testing.T) *fixture {
 	t.Helper()
@@ -187,6 +212,7 @@ func setup(t *testing.T) *fixture {
 	ctx := context.Background()
 	f := &fixture{pool: pool, domains: &fakeDomains{}, assets: &fakeAssets{}, notes: &fakeNotifier{}}
 	users := &fakeUsers{byID: map[string]*user.User{}}
+	f.users = users
 	mk := func(name string, roles ...user.Role) (auth.Principal, string) {
 		var id string
 		if err := pool.QueryRow(ctx, `INSERT INTO users (username, name) VALUES ($1, $1) RETURNING id::text`, name).Scan(&id); err != nil {
@@ -205,8 +231,12 @@ func setup(t *testing.T) *fixture {
 	now := time.Date(2026, 9, 29, 9, 0, 0, 0, time.UTC)
 	f.now = &now
 	workflow.SetClock(f.svc, func() time.Time { return *f.now })
+	f.svc.WithPrincipalContext(func(ctx context.Context, _ auth.Principal) context.Context { return ctx })
+	f.svc.WithGlossary(fakeGlossary{})
 	return f
 }
+
+func (f *fixture) setInactive(id string) { f.users.byID[id].Active = false }
 
 func (f *fixture) published(t *testing.T, bpmn string) *workflow.Definition {
 	t.Helper()
@@ -675,12 +705,12 @@ func TestABatchStopsWhenTheDefinitionIsNotRunnable(t *testing.T) {
 
 func TestCapabilitiesListTheCatalogueAndTheBatchFeatureOnlyWithAMatcher(t *testing.T) {
 	f := setup(t)
-	caps := f.svc.Capabilities()
+	caps := f.svc.Capabilities(f.alice)
 	if len(caps.Actions) != len(workflow.Actions) || slices.Contains(caps.Features, "batch_start") || !slices.Contains(caps.Features, "wait_timer") {
 		t.Fatalf("caps = %+v", caps)
 	}
 	f.svc.WithQueries(&fakeQuery{})
-	if !slices.Contains(f.svc.Capabilities().Features, "batch_start") {
+	if !slices.Contains(f.svc.Capabilities(f.alice).Features, "batch_start") {
 		t.Fatal("batch_start missing with a matcher")
 	}
 }
@@ -735,5 +765,315 @@ func TestAFormValueThatDoesNotMatchTheFieldTypeIsRefusedAsFields(t *testing.T) {
 	}
 	if open := openTask(t, f, f.bob); open.ID != task.ID {
 		t.Fatalf("the task moved on: %+v", open)
+	}
+}
+
+func TestStartingNeedsItsOwnPermission(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, doc)
+	viewer := auth.NewUserPrincipal(&user.User{ID: f.carolID, Username: "carol", Active: true, Roles: []user.Role{{Name: "user", Permissions: []user.Permission{{ResourceType: "workflows", Action: "view"}}}}})
+
+	if _, err := f.svc.Start(ctx, viewer, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); !errors.Is(err, workflow.ErrForbidden) {
+		t.Fatalf("a viewer started a run: %v", err)
+	}
+	if _, err := f.svc.Start(ctx, f.admin, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); err != nil {
+		t.Fatalf("an admin could not start: %v", err)
+	}
+	if caps := f.svc.Capabilities(viewer); caps.CanStart || caps.CanManage {
+		t.Fatalf("viewer caps = %+v", caps)
+	}
+	if caps := f.svc.Capabilities(f.admin); !caps.CanStart || !caps.CanManage {
+		t.Fatalf("admin caps = %+v", caps)
+	}
+}
+
+func TestARejectionDoesNotWriteTheFormFields(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, formDoc)
+	if _, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); err != nil {
+		t.Fatal(err)
+	}
+	task := openTask(t, f, f.bob)
+
+	if _, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "rejected", "", map[string]any{"classification": "public", "lifecycle": "active"}); !errors.Is(err, workflow.ErrInvalidInput) {
+		t.Fatalf("fields with a rejection: %v", err)
+	}
+	if _, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "Rejected", "", nil); err != nil {
+		t.Fatalf("a rejection needs no fields: %v", err)
+	}
+	if _, ok := f.assets.patched["classification"]; ok {
+		t.Fatalf("a rejected task wrote %#v", f.assets.patched)
+	}
+}
+
+func TestATaskKeepsItsFormFieldsWithoutReadingTheDiagram(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, formDoc)
+	in, _ := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if _, err := f.pool.Exec(ctx, `UPDATE workflow_definitions SET bpmn = 'not xml' WHERE id::text = $1`, def.ID); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := f.svc.MyTasks(ctx, f.bob)
+	if err != nil || len(tasks) != 1 || strings.Join(tasks[0].FormFields, ",") != "classification,lifecycle" {
+		t.Fatalf("tasks = %+v, %v (run %s)", tasks, err, in.ID)
+	}
+}
+
+func TestACandidateIsRemindedOnceBeforeTheTaskIsDue(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	remind := strings.Replace(doc, `<bpmn:boundaryEvent id="late" attachedToRef="review">`, `<bpmn:boundaryEvent id="late" attachedToRef="review" dgu:remind="PT12H">`, 1)
+	def := f.published(t, remind)
+	if _, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); err != nil {
+		t.Fatal(err)
+	}
+
+	*f.now = f.now.Add(35 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.notes.types(f.bobID); strings.Contains(strings.Join(got, ","), workflow.TypeTaskDue) {
+		t.Fatalf("reminded too early: %v", got)
+	}
+
+	*f.now = f.now.Add(2 * time.Hour)
+	for i := 0; i < 2; i++ {
+		if err := f.svc.RunTimers(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count := 0
+	for _, kind := range f.notes.types(f.bobID) {
+		if kind == workflow.TypeTaskDue {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("bob was reminded %d times", count)
+	}
+}
+
+const writeAfterWait = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:dgu="https://dgu-development.github.io/schema/workflows" id="d">
+<bpmn:process id="later" name="Later">
+<bpmn:startEvent id="start"/>
+<bpmn:intermediateCatchEvent id="pause"><bpmn:timerEventDefinition><bpmn:timeDuration>PT1H</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent>
+<bpmn:serviceTask id="mark" dgu:action="add_tag" dgu:tag="rechecked"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="pause"/>
+<bpmn:sequenceFlow id="f2" sourceRef="pause" targetRef="mark"/>
+<bpmn:sequenceFlow id="f3" sourceRef="mark" targetRef="ok"/>
+</bpmn:process></bpmn:definitions>`
+
+func TestAPathAfterATimerActsAsTheInitiator(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, writeAfterWait)
+	in, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	*f.now = f.now.Add(2 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := f.svc.GetInstance(ctx, f.alice, in.ID)
+	if err != nil || detail.Status != workflow.InstanceCompleted {
+		t.Fatalf("status = %v, %v", detail.Status, err)
+	}
+	if f.assets.addedTag != "rechecked" {
+		t.Fatalf("added tag = %q", f.assets.addedTag)
+	}
+}
+
+func TestAPathAfterATimerFailsVisiblyWhenTheInitiatorNoLongerMayWrite(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, writeAfterWait)
+	in, _ := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if _, err := f.pool.Exec(ctx, `UPDATE users SET active = false WHERE id::text = $1`, f.aliceID); err != nil {
+		t.Fatal(err)
+	}
+	f.setInactive(f.aliceID)
+	*f.now = f.now.Add(2 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	detail, _ := f.svc.GetInstance(ctx, f.admin, in.ID)
+	if detail.Status != workflow.InstanceFailed || detail.FailureCode == nil || *detail.FailureCode != "action_failed" || f.assets.addedTag != "" {
+		t.Fatalf("status = %v code = %v tag = %q", detail.Status, detail.FailureCode, f.assets.addedTag)
+	}
+}
+
+const scheduledDoc = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:dgu="https://dgu-development.github.io/schema/workflows" id="d">
+<bpmn:process id="recertify" name="Recertify">
+<bpmn:startEvent id="start" dgu:query="tag = &quot;pii&quot;"><bpmn:timerEventDefinition><bpmn:timeCycle>0 8 * * *</bpmn:timeCycle></bpmn:timerEventDefinition></bpmn:startEvent>
+<bpmn:serviceTask id="tell" dgu:action="notify" dgu:message="Recertify this asset"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="tell"/>
+<bpmn:sequenceFlow id="f2" sourceRef="tell" targetRef="ok"/>
+</bpmn:process></bpmn:definitions>`
+
+func runs(t *testing.T, f *fixture) []*workflow.Instance {
+	t.Helper()
+	out, err := f.svc.ListInstances(context.Background(), f.admin, workflow.InstanceFilter{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestAPublishedTimerStartRunsOnItsCycleAsThePublisher(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{assetID}, total: 1})
+	ctx := context.Background()
+	def := f.published(t, scheduledDoc)
+
+	got, err := f.svc.GetDefinition(ctx, def.ID)
+	if err != nil || got.Schedule == nil || !got.Schedule.Enabled || got.Schedule.Cycle != "0 8 * * *" ||
+		!got.Schedule.NextRunAt.Equal(time.Date(2026, 9, 30, 8, 0, 0, 0, time.UTC)) {
+		t.Fatalf("schedule = %+v, %v", got.Schedule, err)
+	}
+
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(runs(t, f)); n != 0 {
+		t.Fatalf("started %d runs before the cycle", n)
+	}
+
+	*f.now = time.Date(2026, 9, 30, 8, 1, 0, 0, time.UTC)
+	for i := 0; i < 2; i++ {
+		if err := f.svc.RunTimers(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	started := runs(t, f)
+	if len(started) != 1 || started[0].TargetID == nil || *started[0].TargetID != assetID || started[0].InitiatorID == nil || *started[0].InitiatorID != f.adminID {
+		t.Fatalf("runs = %+v", started)
+	}
+	got, _ = f.svc.GetDefinition(ctx, def.ID)
+	if got.Schedule.LastRunAt == nil || got.Schedule.LastError != "" || !got.Schedule.NextRunAt.Equal(time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)) {
+		t.Fatalf("after the run: %+v", got.Schedule)
+	}
+}
+
+func TestRetiringAScheduledDefinitionStopsItsRuns(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{assetID}, total: 1})
+	ctx := context.Background()
+	def := f.published(t, scheduledDoc)
+	if _, err := f.svc.Retire(ctx, f.admin, def.ID); err != nil {
+		t.Fatal(err)
+	}
+	*f.now = f.now.Add(48 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(runs(t, f)); n != 0 {
+		t.Fatalf("a retired definition started %d runs", n)
+	}
+	if got, _ := f.svc.GetDefinition(ctx, def.ID); got.Schedule == nil || got.Schedule.Enabled {
+		t.Fatalf("schedule = %+v", got.Schedule)
+	}
+}
+
+func TestANewVersionReplacesTheScheduleOfTheOldOne(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{assetID}, total: 1})
+	ctx := context.Background()
+	first := f.published(t, scheduledDoc)
+	second := f.published(t, scheduledDoc)
+	if first.ID == second.ID {
+		t.Fatal("expected two versions")
+	}
+	if got, _ := f.svc.GetDefinition(ctx, first.ID); got.Schedule == nil || got.Schedule.Enabled {
+		t.Fatalf("the old version still runs: %+v", got.Schedule)
+	}
+	*f.now = time.Date(2026, 9, 30, 8, 1, 0, 0, time.UTC)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(runs(t, f)); n != 1 {
+		t.Fatalf("two versions started %d runs", n)
+	}
+}
+
+func TestAScheduleStopsVisiblyWhenThePublisherCanNoLongerAct(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{assetID}, total: 1})
+	ctx := context.Background()
+	def := f.published(t, scheduledDoc)
+	f.setInactive(f.adminID)
+
+	*f.now = time.Date(2026, 9, 30, 8, 1, 0, 0, time.UTC)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(runs(t, f)); n != 0 {
+		t.Fatalf("started %d runs with no one to act as", n)
+	}
+	got, _ := f.svc.GetDefinition(ctx, def.ID)
+	if got.Schedule == nil || !strings.Contains(got.Schedule.LastError, "can no longer act") {
+		t.Fatalf("schedule = %+v", got.Schedule)
+	}
+}
+
+const termDoc = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:dgu="https://dgu-development.github.io/schema/workflows" id="d">
+<bpmn:process id="terms" name="Terms">
+<bpmn:startEvent id="start"/>
+<bpmn:serviceTask id="link" dgu:action="link_term" dgu:term="%s"/>
+<bpmn:serviceTask id="unlink" dgu:action="unlink_term" dgu:term="Customer"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="link"/>
+<bpmn:sequenceFlow id="f2" sourceRef="link" targetRef="unlink"/>
+<bpmn:sequenceFlow id="f3" sourceRef="unlink" targetRef="ok"/>
+</bpmn:process></bpmn:definitions>`
+
+func TestTermActionsResolveTheTermByNameAndActAsTheStarter(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, strings.Replace(termDoc, "%s", "Customer", 1))
+	in, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if err != nil || in.Status != workflow.InstanceCompleted {
+		t.Fatalf("run = %+v, %v", in, err)
+	}
+	if strings.Join(f.assets.linked, ",") != "workflow:term-1" || f.assets.unlinked != "term-1" {
+		t.Fatalf("linked %v unlinked %q", f.assets.linked, f.assets.unlinked)
+	}
+}
+
+func TestAMissingTermFailsTheRunVisibly(t *testing.T) {
+	f := setup(t)
+	def := f.published(t, strings.Replace(termDoc, "%s", "Nope", 1))
+	in, err := f.svc.Start(context.Background(), f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if err != nil || in.Status != workflow.InstanceFailed || in.FailureCode == nil || *in.FailureCode != "action_failed" {
+		t.Fatalf("run = %+v, %v", in, err)
+	}
+	if len(f.assets.linked) != 0 {
+		t.Fatalf("linked %v", f.assets.linked)
+	}
+}
+
+func TestTermActionsAreOnlyOfferedWhenTheGlossaryIsWired(t *testing.T) {
+	f := setup(t)
+	ids := func() []string {
+		var out []string
+		for _, spec := range f.svc.Capabilities(f.alice).Actions {
+			out = append(out, spec.ID)
+		}
+		return out
+	}
+	if !slices.Contains(ids(), "link_term") {
+		t.Fatalf("actions = %v", ids())
+	}
+	f.svc.WithGlossary(nil)
+	if slices.Contains(ids(), "link_term") || slices.Contains(ids(), "unlink_term") {
+		t.Fatalf("actions = %v", ids())
 	}
 }

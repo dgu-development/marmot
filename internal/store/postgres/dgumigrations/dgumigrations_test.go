@@ -144,3 +144,21 @@ func TestDomainConstraints(t *testing.T) {
 		}
 	})
 }
+
+func TestStartingWorkflowsIsGrantedToAdminOnly(t *testing.T) {
+	pool := pgtest.TempDB(t)
+	ctx := context.Background()
+	var admin, user int
+	err := pool.QueryRow(ctx, `
+		SELECT count(*) FILTER (WHERE r.name = 'admin'), count(*) FILTER (WHERE r.name = 'user')
+		  FROM permissions p
+		  JOIN role_permissions rp ON rp.permission_id = p.id
+		  JOIN roles r ON r.id = rp.role_id
+		 WHERE p.resource_type = 'workflows' AND p.action = 'start'`).Scan(&admin, &user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if admin != 1 || user != 0 {
+		t.Fatalf("admin has %d and user has %d grants of workflows:start", admin, user)
+	}
+}

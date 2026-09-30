@@ -54,6 +54,26 @@ type Definition struct {
 	PublishedAt *time.Time `json:"published_at,omitempty"`
 	// Issues is filled on read: what keeps a draft from being published.
 	Issues []Issue `json:"issues"`
+	// Schedule is filled on read when the definition starts itself on a timer.
+	Schedule *ScheduleInfo `json:"schedule,omitempty"`
+}
+
+// ScheduleInfo is what a client shows of a timer start.
+type ScheduleInfo struct {
+	Cycle     string     `json:"cycle"`
+	Query     string     `json:"query,omitempty"`
+	NextRunAt time.Time  `json:"next_run_at"`
+	LastRunAt *time.Time `json:"last_run_at,omitempty"`
+	LastError string     `json:"last_error,omitempty"`
+	Enabled   bool       `json:"enabled"`
+}
+
+// Schedule is a timer start that is due.
+type Schedule struct {
+	DefinitionID string
+	Cycle        string
+	Query        string
+	RunAs        string
 }
 
 type Instance struct {
@@ -100,6 +120,8 @@ type Task struct {
 	FormFields []string `json:"form_fields,omitempty"`
 	// Wait marks a timed wait, which nobody decides: it ends when DueAt passes.
 	Wait bool `json:"wait,omitempty"`
+	// RemindAt is when the candidates are reminded that the task is due.
+	RemindAt *time.Time `json:"-"`
 }
 
 type Event struct {
@@ -162,6 +184,97 @@ func (r *PostgresRepository) CreateDefinition(ctx context.Context, key, name, bp
 		return nil, ErrConflict
 	}
 	return d, err
+}
+
+// UpsertSchedule stores the timer start of a definition and switches off the schedules of
+// its other versions, so a new version replaces the old one instead of doubling the runs.
+func (r *PostgresRepository) UpsertSchedule(ctx context.Context, definitionID, processKey, cycle, query, runAs string, next time.Time) error {
+	if _, err := r.db.Exec(ctx, `
+		UPDATE workflow_schedules SET enabled = false
+		 WHERE definition_id::text <> $1
+		   AND definition_id IN (SELECT id FROM workflow_definitions WHERE process_key = $2)`, definitionID, processKey); err != nil {
+		return err
+	}
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO workflow_schedules (definition_id, cycle, query, run_as, next_run_at)
+		VALUES ($1::uuid, $2, $3, NULLIF($4, '')::uuid, $5)
+		ON CONFLICT (definition_id) DO UPDATE
+		   SET cycle = $2, query = $3, run_as = NULLIF($4, '')::uuid, next_run_at = $5, enabled = true, last_error = NULL`,
+		definitionID, cycle, query, runAs, next)
+	return err
+}
+
+func (r *PostgresRepository) DisableSchedule(ctx context.Context, definitionID string) error {
+	_, err := r.db.Exec(ctx, `UPDATE workflow_schedules SET enabled = false WHERE definition_id::text = $1`, definitionID)
+	return err
+}
+
+// ClaimSchedules takes the schedules that are due and moves each to its next fire before
+// returning it, so a start that fails does not come back on the next tick and two replicas
+// never take the same one.
+func (r *PostgresRepository) ClaimSchedules(ctx context.Context, now time.Time, limit int) ([]*Schedule, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT definition_id::text, cycle, query, COALESCE(run_as::text, '')
+		  FROM workflow_schedules
+		 WHERE enabled AND next_run_at <= $1
+		 ORDER BY next_run_at
+		 LIMIT $2
+		 FOR UPDATE SKIP LOCKED`, now, limit)
+	if err != nil {
+		return nil, err
+	}
+	var out []*Schedule
+	for rows.Next() {
+		sc := &Schedule{}
+		if err := rows.Scan(&sc.DefinitionID, &sc.Cycle, &sc.Query, &sc.RunAs); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out = append(out, sc)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, sc := range out {
+		next := now.Add(24 * time.Hour)
+		if cycle, err := ParseCycle(sc.Cycle); err == nil {
+			next = cycle.Next(now)
+		}
+		if _, err := r.db.Exec(ctx, `UPDATE workflow_schedules SET next_run_at = $2, last_run_at = $3 WHERE definition_id::text = $1`, sc.DefinitionID, next, now); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+func (r *PostgresRepository) SetScheduleResult(ctx context.Context, definitionID, failure string) error {
+	_, err := r.db.Exec(ctx, `UPDATE workflow_schedules SET last_error = NULLIF($2, '') WHERE definition_id::text = $1`, definitionID, failure)
+	return err
+}
+
+// SchedulesOf returns the schedule of each definition that has one, by definition id.
+func (r *PostgresRepository) SchedulesOf(ctx context.Context, ids []string) (map[string]*ScheduleInfo, error) {
+	out := map[string]*ScheduleInfo{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT definition_id::text, cycle, query, next_run_at, last_run_at, COALESCE(last_error, ''), enabled
+		  FROM workflow_schedules WHERE definition_id::text = ANY($1)`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		info := &ScheduleInfo{}
+		if err := rows.Scan(&id, &info.Cycle, &info.Query, &info.NextRunAt, &info.LastRunAt, &info.LastError, &info.Enabled); err != nil {
+			return nil, err
+		}
+		out[id] = info
+	}
+	return out, rows.Err()
 }
 
 func (r *PostgresRepository) GetDefinition(ctx context.Context, id string) (*Definition, error) {
@@ -345,12 +458,12 @@ func (r *PostgresRepository) ListInstances(ctx context.Context, f InstanceFilter
 }
 
 const taskColumns = `t.id, t.instance_id, t.token_id, t.node_id, t.name, t.status, t.candidates::text[], t.due_at, t.timer_node,
-	t.decision, t.comment, t.completed_by::text, t.completed_at, t.created_at`
+	t.decision, t.comment, t.completed_by::text, t.completed_at, t.created_at, t.form_fields, t.remind_at`
 
 func scanTask(row pgx.Row, extra ...any) (*Task, error) {
 	t := &Task{}
 	dest := []any{&t.ID, &t.InstanceID, &t.TokenID, &t.NodeID, &t.Name, &t.Status, &t.Candidates, &t.DueAt, &t.TimerNode,
-		&t.Decision, &t.Comment, &t.CompletedBy, &t.CompletedAt, &t.CreatedAt}
+		&t.Decision, &t.Comment, &t.CompletedBy, &t.CompletedAt, &t.CreatedAt, &t.FormFields, &t.RemindAt}
 	if len(extra) > 0 {
 		dest = append(dest, &t.DefinitionName, &t.TargetKind, &t.TargetID, &t.TargetName)
 	}
@@ -361,15 +474,18 @@ func scanTask(row pgx.Row, extra ...any) (*Task, error) {
 	if t.Candidates == nil {
 		t.Candidates = []string{}
 	}
+	if len(t.FormFields) == 0 {
+		t.FormFields = nil
+	}
 	return t, err
 }
 
 func (r *PostgresRepository) InsertTask(ctx context.Context, t *Task) error {
 	return r.db.QueryRow(ctx, `
-		INSERT INTO workflow_tasks (instance_id, token_id, node_id, name, candidates, due_at, timer_node)
-		VALUES ($1, $2, $3, $4, $5::uuid[], $6, $7)
+		INSERT INTO workflow_tasks (instance_id, token_id, node_id, name, candidates, due_at, timer_node, form_fields, remind_at)
+		VALUES ($1, $2, $3, $4, $5::uuid[], $6, $7, $8::text[], $9)
 		RETURNING id, status, created_at`,
-		t.InstanceID, t.TokenID, t.NodeID, t.Name, t.Candidates, t.DueAt, t.TimerNode,
+		t.InstanceID, t.TokenID, t.NodeID, t.Name, t.Candidates, t.DueAt, t.TimerNode, nonNil(t.FormFields), t.RemindAt,
 	).Scan(&t.ID, &t.Status, &t.CreatedAt)
 }
 
@@ -461,6 +577,41 @@ func (r *PostgresRepository) DueTimers(ctx context.Context, now time.Time, limit
 		out = append(out, t)
 	}
 	return out, rows.Err()
+}
+
+func nonNil(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
+}
+
+// DueReminders lists open tasks whose reminder time has come and that have not been reminded.
+func (r *PostgresRepository) DueReminders(ctx context.Context, now time.Time, limit int) ([]*Task, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT `+taskColumns+`
+		  FROM workflow_tasks t
+		 WHERE t.status = 'open' AND t.reminded = false AND t.remind_at IS NOT NULL AND t.remind_at <= $1
+		 ORDER BY t.remind_at
+		 LIMIT $2`, now, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*Task{}
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (r *PostgresRepository) MarkReminded(ctx context.Context, taskID string) (bool, error) {
+	tag, err := r.db.Exec(ctx, `UPDATE workflow_tasks SET reminded = true WHERE id::text = $1 AND reminded = false`, taskID)
+	return tag.RowsAffected() > 0, err
 }
 
 func (r *PostgresRepository) MarkTimerFired(ctx context.Context, taskID string) error {

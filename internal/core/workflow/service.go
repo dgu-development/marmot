@@ -13,6 +13,7 @@ import (
 	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/auth"
 	"github.com/marmotdata/marmot/internal/core/domain"
+	"github.com/marmotdata/marmot/internal/core/glossary"
 	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/notification"
 	"github.com/marmotdata/marmot/internal/core/team"
@@ -24,6 +25,7 @@ import (
 const (
 	TypeTaskAssigned     = "task_assigned"
 	TypeTaskEscalated    = "task_escalated"
+	TypeTaskDue          = "task_due"
 	TypeWorkflowDecision = "workflow_decision"
 	TypeWorkflowMessage  = "workflow_message"
 )
@@ -73,7 +75,14 @@ type Assets interface {
 	PatchFields(ctx context.Context, id string, version int64, fields map[string]any) (*asset.Asset, error)
 	AddTag(ctx context.Context, id string, tag string) (*asset.Asset, error)
 	RemoveTag(ctx context.Context, id string, tag string) (*asset.Asset, error)
+	AddTerms(ctx context.Context, assetID string, termIDs []string, source, createdBy string) error
+	RemoveTerm(ctx context.Context, assetID, termID string) error
 	Metamodel(kind string) metamodel.Schema
+}
+
+// Glossary resolves the term an action names. Nil disables the term actions.
+type Glossary interface {
+	GetByName(ctx context.Context, name string) (*glossary.GlossaryTerm, error)
 }
 
 // QueryMatcher resolves a Discover/asset-rule query_expression to asset ids.
@@ -93,8 +102,12 @@ type Service struct {
 	domains  Domains
 	assets   Assets
 	queries  QueryMatcher
+	glossary Glossary
 	notifier Notifier
 	now      func() time.Time
+	// withPrincipal carries a person into the context the write guards read.
+	// Without it a timer path has no identity.
+	withPrincipal func(context.Context, auth.Principal) context.Context
 }
 
 func NewService(repo *PostgresRepository, users Users, teams Teams, domains Domains, assets Assets, notifier Notifier) *Service {
@@ -106,15 +119,52 @@ func NewService(repo *PostgresRepository, users Users, teams Teams, domains Doma
 type Capabilities struct {
 	Actions  []ActionSpec `json:"actions"`
 	Features []string     `json:"features"`
+	// CanStart and CanManage are about the caller: whether it may start runs and manage definitions.
+	CanStart  bool `json:"can_start"`
+	CanManage bool `json:"can_manage"`
 }
 
-// Capabilities reports the action catalogue and the optional features in use.
-func (s *Service) Capabilities() Capabilities {
-	features := []string{"boundary_timer", "wait_timer", "form_fields", "notify_groups"}
+// Capabilities reports the action catalogue, the optional features in use and what p may do.
+func (s *Service) Capabilities(p auth.Principal) Capabilities {
+	features := []string{"boundary_timer", "wait_timer", "timer_start", "task_reminder", "form_fields", "notify_groups"}
 	if s.queries != nil {
 		features = append(features, "batch_start")
 	}
-	return Capabilities{Actions: Actions, Features: features}
+	actions := make([]ActionSpec, 0, len(Actions))
+	for _, spec := range Actions {
+		if (spec.ID == ActionLinkTerm || spec.ID == ActionUnlinkTerm) && s.glossary == nil {
+			continue
+		}
+		actions = append(actions, spec)
+	}
+	return Capabilities{Actions: actions, Features: features, CanStart: canStart(p), CanManage: canManage(p)}
+}
+
+// WithPrincipalContext lets timer paths and scheduled starts act as a person: fn returns a
+// context in which the write guards see that person.
+func (s *Service) WithPrincipalContext(fn func(context.Context, auth.Principal) context.Context) *Service {
+	s.withPrincipal = fn
+	return s
+}
+
+// actingAs loads the person a path without a request acts as, with the permissions they have
+// now. A missing, inactive or unknown user yields no identity, so the action fails visibly.
+func (s *Service) actingAs(ctx context.Context, userID *string) (auth.Principal, context.Context) {
+	if userID == nil || s.withPrincipal == nil {
+		return nil, ctx
+	}
+	u, err := s.users.Get(ctx, *userID)
+	if err != nil || u == nil || !u.Active {
+		return nil, ctx
+	}
+	p := auth.NewUserPrincipal(u)
+	return p, s.withPrincipal(ctx, p)
+}
+
+// WithGlossary enables the actions that link a glossary term to the target asset.
+func (s *Service) WithGlossary(g Glossary) *Service {
+	s.glossary = g
+	return s
 }
 
 // WithQueries enables starting runs for every asset matching a query_expression.
@@ -128,6 +178,10 @@ func principalUserID(p auth.Principal) (string, bool) {
 		return "", false
 	}
 	return p.ID(), true
+}
+
+func canStart(p auth.Principal) bool {
+	return p != nil && (p.IsAdmin() || p.HasPermission("workflows", "start"))
 }
 
 func canManage(p auth.Principal) bool {
@@ -218,7 +272,27 @@ func (s *Service) UpdateDefinition(ctx context.Context, p auth.Principal, id str
 
 func (s *Service) GetDefinition(ctx context.Context, id string) (*Definition, error) {
 	d, err := s.repo.GetDefinition(ctx, id)
+	if err == nil {
+		s.attachSchedules(ctx, []*Definition{d})
+	}
 	return withIssues(d), err
+}
+
+// attachSchedules fills the timer start of the definitions that have one. A failed lookup
+// leaves the list without it: the schedule is information, not a reason to fail a read.
+func (s *Service) attachSchedules(ctx context.Context, defs []*Definition) {
+	ids := make([]string, 0, len(defs))
+	for _, d := range defs {
+		ids = append(ids, d.ID)
+	}
+	found, err := s.repo.SchedulesOf(ctx, ids)
+	if err != nil {
+		log.Warn().Err(err).Msg("Workflow schedules unavailable")
+		return
+	}
+	for _, d := range defs {
+		d.Schedule = found[d.ID]
+	}
 }
 
 // ListDefinitions lists every version to managers and only published ones to
@@ -228,7 +302,12 @@ func (s *Service) ListDefinitions(ctx context.Context, p auth.Principal) ([]*Def
 	if canManage(p) {
 		status = ""
 	}
-	return s.repo.ListDefinitions(ctx, status)
+	defs, err := s.repo.ListDefinitions(ctx, status)
+	if err != nil {
+		return nil, err
+	}
+	s.attachSchedules(ctx, defs)
+	return defs, nil
 }
 
 // Publish freezes a draft that runs.
@@ -240,11 +319,33 @@ func (s *Service) Publish(ctx context.Context, p auth.Principal, id string) (*De
 	if err != nil {
 		return nil, err
 	}
-	if _, err := Parse([]byte(d.BPMN)); err != nil {
+	proc, err := Parse([]byte(d.BPMN))
+	if err != nil {
 		return nil, err
 	}
-	d, err = s.repo.SetDefinitionStatus(ctx, id, StatusDraft, StatusPublished)
-	return withIssues(d), err
+	publisher, isUser := principalUserID(p)
+	if proc.Schedule != nil && !isUser {
+		// A scheduled start acts as a person, and only a person can be that.
+		return nil, ErrForbidden
+	}
+	var published *Definition
+	err = s.repo.WithTx(ctx, func(tx *PostgresRepository) error {
+		var err error
+		published, err = tx.SetDefinitionStatus(ctx, id, StatusDraft, StatusPublished)
+		if err != nil || proc.Schedule == nil {
+			return err
+		}
+		cycle, err := ParseCycle(proc.Schedule.Cycle)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrInvalidInput, err)
+		}
+		return tx.UpsertSchedule(ctx, id, published.ProcessKey, proc.Schedule.Cycle, proc.Schedule.Query, publisher, cycle.Next(s.now()))
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.attachSchedules(ctx, []*Definition{published})
+	return withIssues(published), nil
 }
 
 // Retire stops new runs of a published version; running ones go on.
@@ -252,8 +353,20 @@ func (s *Service) Retire(ctx context.Context, p auth.Principal, id string) (*Def
 	if !canManage(p) {
 		return nil, ErrForbidden
 	}
-	d, err := s.repo.SetDefinitionStatus(ctx, id, StatusPublished, StatusRetired)
-	return withIssues(d), err
+	var retired *Definition
+	err := s.repo.WithTx(ctx, func(tx *PostgresRepository) error {
+		var err error
+		retired, err = tx.SetDefinitionStatus(ctx, id, StatusPublished, StatusRetired)
+		if err != nil {
+			return err
+		}
+		return tx.DisableSchedule(ctx, id)
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.attachSchedules(ctx, []*Definition{retired})
+	return withIssues(retired), nil
 }
 
 func (s *Service) DeleteDraft(ctx context.Context, p auth.Principal, id string) error {
@@ -302,7 +415,7 @@ const tasksLink = "/dgu/workflows/tasks"
 // Start runs a published definition until its first waits.
 func (s *Service) Start(ctx context.Context, p auth.Principal, definitionID string, target *Target) (*Instance, error) {
 	initiator, ok := principalUserID(p)
-	if !ok {
+	if !ok || !canStart(p) {
 		return nil, ErrForbidden
 	}
 	def, err := s.repo.GetDefinition(ctx, definitionID)
@@ -447,7 +560,7 @@ func (s *Service) apply(ctx context.Context, tx *PostgresRepository, in *Instanc
 		if err != nil {
 			return nil, err
 		}
-		t := &Task{InstanceID: in.ID, TokenID: nt.TokenID, NodeID: nt.Node.ID, Name: displayName(nt.Node.ID, nt.Node.Name), Candidates: candidates, DueAt: nt.DueAt}
+		t := &Task{InstanceID: in.ID, TokenID: nt.TokenID, NodeID: nt.Node.ID, Name: displayName(nt.Node.ID, nt.Node.Name), Candidates: candidates, DueAt: nt.DueAt, RemindAt: nt.RemindAt, FormFields: nt.Node.FormFields}
 		if nt.Timer != "" {
 			timer := nt.Timer
 			t.TimerNode = &timer
@@ -570,12 +683,17 @@ func (s *Service) CompleteTask(ctx context.Context, p auth.Principal, taskID, de
 				return ErrForbidden
 			}
 		}
-		if len(node.FormFields) > 0 {
+		switch {
+		case len(node.FormFields) == 0 && len(fields) > 0:
+			return fmt.Errorf("%w: this task does not accept form fields", ErrInvalidInput)
+		case len(node.FormFields) > 0 && isRejection(decision):
+			if len(fields) > 0 {
+				return fmt.Errorf("%w: fields are not written when a task is rejected", ErrInvalidInput)
+			}
+		case len(node.FormFields) > 0:
 			if err := s.writeFormFields(ctx, p, in, node.FormFields, fields); err != nil {
 				return err
 			}
-		} else if len(fields) > 0 {
-			return fmt.Errorf("%w: this task does not accept form fields", ErrInvalidInput)
 		}
 		vars := map[string]string{}
 		if decision != "" {
@@ -620,6 +738,13 @@ func (s *Service) CompleteTask(ctx context.Context, p auth.Principal, taskID, de
 	}
 	s.send(ctx, out)
 	return in, nil
+}
+
+// rejections are the decisions that end a task without the changes its form asks for.
+var rejections = []string{"rejected", "reject", "denied", "declined"}
+
+func isRejection(decision string) bool {
+	return slices.Contains(rejections, strings.ToLower(decision))
 }
 
 // coerceField turns the text a form or a dgu:value carries into what the
@@ -761,7 +886,6 @@ func (s *Service) GetInstance(ctx context.Context, p auth.Principal, id string) 
 	for _, t := range tasks {
 		t.Wait = t.TimerNode != nil && *t.TimerNode == t.NodeID
 	}
-	s.attachFormFields(ctx, tasks)
 	events, err := s.repo.ListEvents(ctx, id)
 	if err != nil {
 		return nil, err
@@ -805,41 +929,12 @@ func (s *Service) MyTasks(ctx context.Context, p auth.Principal) ([]*Task, error
 	if err != nil {
 		return nil, err
 	}
-	s.attachFormFields(ctx, tasks)
 	return tasks, nil
 }
 
-func (s *Service) attachFormFields(ctx context.Context, tasks []*Task) {
-	cache := map[string]*Process{}
-	for _, task := range tasks {
-		in, err := s.repo.GetInstance(ctx, task.InstanceID, false)
-		if err != nil {
-			log.Warn().Err(err).Str("task_id", task.ID).Msg("Workflow task form fields unavailable")
-			continue
-		}
-		proc, ok := cache[in.DefinitionID]
-		if !ok {
-			def, err := s.repo.GetDefinition(ctx, in.DefinitionID)
-			if err != nil {
-				log.Warn().Err(err).Str("task_id", task.ID).Msg("Workflow task form fields unavailable")
-				continue
-			}
-			parsed, err := Parse([]byte(def.BPMN))
-			if err != nil {
-				log.Warn().Err(err).Str("task_id", task.ID).Msg("Workflow task form fields unavailable")
-				continue
-			}
-			cache[in.DefinitionID] = parsed
-			proc = parsed
-		}
-		if node := proc.Nodes[task.NodeID]; node != nil && len(node.FormFields) > 0 {
-			task.FormFields = append([]string{}, node.FormFields...)
-		}
-	}
-}
-
-// RunTimers fires the boundary timers that are due. Actions reached from a
-// timer run with no user identity, so a timer path cannot write assets.
+// RunTimers fires the boundary timers and waits that are due, then sends the
+// reminders that are. Actions reached from a timer act as the run's initiator,
+// with the permissions that person has when it fires.
 func (s *Service) RunTimers(ctx context.Context) error {
 	due, err := s.repo.DueTimers(ctx, s.now(), timerBatch)
 	if err != nil {
@@ -849,6 +944,94 @@ func (s *Service) RunTimers(ctx context.Context) error {
 		if err := s.fireTimer(ctx, task); err != nil && !errors.Is(err, ErrNotRunning) && !errors.Is(err, ErrConflict) {
 			log.Error().Err(err).Str("task_id", task.ID).Msg("Workflow timer failed")
 		}
+	}
+	return errors.Join(s.remind(ctx), s.runSchedules(ctx))
+}
+
+// runSchedules starts the definitions whose timer start is due.
+func (s *Service) runSchedules(ctx context.Context) error {
+	var due []*Schedule
+	err := s.repo.WithTx(ctx, func(tx *PostgresRepository) error {
+		var err error
+		due, err = tx.ClaimSchedules(ctx, s.now(), timerBatch)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	for _, sc := range due {
+		s.startScheduled(ctx, sc)
+	}
+	return nil
+}
+
+// startScheduled starts one scheduled definition as the person who published it and records
+// how it went. A publisher who is gone, or who lost the right to start, stops the runs
+// visibly: last_error says why, and nothing borrows another identity.
+func (s *Service) startScheduled(ctx context.Context, sc *Schedule) {
+	failure := ""
+	defer func() {
+		if err := s.repo.SetScheduleResult(ctx, sc.DefinitionID, failure); err != nil {
+			log.Warn().Err(err).Str("definition_id", sc.DefinitionID).Msg("Workflow schedule result not stored")
+		}
+	}()
+	def, err := s.repo.GetDefinition(ctx, sc.DefinitionID)
+	if err != nil || def.Status != StatusPublished {
+		failure = "the definition is no longer published"
+		_ = s.repo.DisableSchedule(ctx, sc.DefinitionID)
+		return
+	}
+	var runAs *string
+	if sc.RunAs != "" {
+		runAs = &sc.RunAs
+	}
+	person, actCtx := s.actingAs(ctx, runAs)
+	if person == nil {
+		failure = "the person who published it can no longer act"
+		return
+	}
+	if sc.Query == "" {
+		if _, err := s.Start(actCtx, person, sc.DefinitionID, nil); err != nil {
+			failure = err.Error()
+		}
+		return
+	}
+	batch, err := s.StartQuery(actCtx, person, sc.DefinitionID, sc.Query, maxStartBatch)
+	switch {
+	case err != nil:
+		failure = err.Error()
+	case len(batch.Failed) > 0:
+		failure = fmt.Sprintf("%d assets could not start", len(batch.Failed))
+	}
+}
+
+// remind tells the candidates of each task whose reminder time has come that it is due soon.
+// Marking the task first makes a reminder at most once, even across replicas.
+func (s *Service) remind(ctx context.Context) error {
+	tasks, err := s.repo.DueReminders(ctx, s.now(), timerBatch)
+	if err != nil {
+		return err
+	}
+	for _, task := range tasks {
+		marked, err := s.repo.MarkReminded(ctx, task.ID)
+		if err != nil || !marked || len(task.Candidates) == 0 {
+			continue
+		}
+		in, err := s.repo.GetInstance(ctx, task.InstanceID, false)
+		if err != nil || in.Status != InstanceRunning {
+			continue
+		}
+		data := map[string]any{"task_id": task.ID, "link": tasksLink}
+		if task.DueAt != nil {
+			data["due_at"] = task.DueAt.UTC().Format(time.RFC3339)
+		}
+		s.send(ctx, pending{{
+			Recipients: users(task.Candidates),
+			Type:       TypeTaskDue,
+			Title:      task.Name,
+			Message:    fmt.Sprintf("%s: %s is due soon", in.DefinitionName, task.Name),
+			Data:       s.data(in, data),
+		}})
 	}
 	return nil
 }
@@ -878,9 +1061,10 @@ func (s *Service) fireTimer(ctx context.Context, task *Task) error {
 		if err != nil {
 			return err
 		}
-		exec := &executor{svc: s, instance: in}
+		person, actCtx := s.actingAs(ctx, in.InitiatorID)
+		exec := &executor{svc: s, instance: in, principal: person}
 		runner := &Runner{Process: proc, Executor: exec, Now: s.now}
-		step, err := runner.FireTimer(ctx, in.State, current.TokenID, *current.TimerNode)
+		step, err := runner.FireTimer(actCtx, in.State, current.TokenID, *current.TimerNode)
 		if err != nil {
 			return nil
 		}
@@ -1030,6 +1214,23 @@ type executor struct {
 	notes     pending
 }
 
+// linkTerm links or unlinks the glossary term dgu:term names. The name is resolved when the
+// action runs, so a renamed or deleted term fails the run visibly instead of linking another.
+func (e *executor) linkTerm(ctx context.Context, assetID string, n *Node) error {
+	if e.svc.glossary == nil {
+		return errors.New("glossary actions are not available")
+	}
+	name := strings.TrimSpace(n.Args["term"])
+	term, err := e.svc.glossary.GetByName(ctx, name)
+	if err != nil {
+		return fmt.Errorf("glossary term %q: %w", name, err)
+	}
+	if n.Action == ActionUnlinkTerm {
+		return e.svc.assets.RemoveTerm(ctx, assetID, term.ID)
+	}
+	return e.svc.assets.AddTerms(ctx, assetID, []string{term.ID}, "workflow", e.principal.ID())
+}
+
 // recipients resolves a dgu:to list to user ids, once, when the action runs.
 func (e *executor) recipients(ctx context.Context, spec string, vars map[string]string) ([]string, error) {
 	entries := splitList(spec)
@@ -1088,7 +1289,7 @@ func (e *executor) Execute(ctx context.Context, n *Node, vars map[string]string)
 			Data:       e.svc.data(e.instance, map[string]any{"link": instanceLink(e.instance.ID)}),
 		})
 		return nil
-	case ActionSetField, ActionClearField, ActionAddTag, ActionRemoveTag:
+	case ActionSetField, ActionClearField, ActionAddTag, ActionRemoveTag, ActionLinkTerm, ActionUnlinkTerm:
 		if e.instance.TargetKind == nil || *e.instance.TargetKind != TargetAsset || e.instance.TargetID == nil {
 			return errors.New("the instance has no target asset")
 		}
@@ -1106,6 +1307,8 @@ func (e *executor) Execute(ctx context.Context, n *Node, vars map[string]string)
 		case ActionRemoveTag:
 			_, err := e.svc.assets.RemoveTag(ctx, id, strings.TrimSpace(n.Args["tag"]))
 			return err
+		case ActionLinkTerm, ActionUnlinkTerm:
+			return e.linkTerm(ctx, id, n)
 		}
 		a, err := e.svc.assets.Get(ctx, id)
 		if err != nil {

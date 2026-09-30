@@ -71,6 +71,13 @@ type Node struct {
 	AttachedTo     string `json:"-"`
 	Duration       string `json:"-"`
 	CancelActivity bool   `json:"-"`
+	// Cycle and Query belong to a timer start event: when it fires (timeCycle)
+	// and the asset query it starts one run per match for (dgu:query).
+	Cycle string `json:"-"`
+	Query string `json:"-"`
+	// Remind is how long before a boundary timer fires the task's candidates are
+	// reminded (dgu:remind, ISO 8601).
+	Remind string `json:"-"`
 }
 
 // Flow is a sequence flow.
@@ -91,6 +98,16 @@ type Process struct {
 	Flows map[string]*Flow
 	// Order keeps document order, for stable validation output.
 	Order []string
+	// Schedule is set when the start event is a timer: the process starts itself.
+	Schedule *StartSchedule
+}
+
+// StartSchedule is the timer start event of a process.
+type StartSchedule struct {
+	Cycle string
+	// Query is an asset query: each fire starts one run per match, up to the batch cap.
+	// Empty starts a single run with no target.
+	Query string
 }
 
 // Issue is a reason a diagram cannot run. Code is stable for clients to
@@ -283,9 +300,19 @@ func buildProcess(el *element) (*Process, []Issue) {
 		defs := eventDefinitions(c)
 		switch n.Type {
 		case NodeStart:
-			if len(defs) > 0 {
-				issues = append(issues, Issue{Element: id, Code: "unsupported_event", Detail: defs[0].name.Local})
+			for _, d := range defs {
+				if d.name.Local != "timerEventDefinition" || n.Cycle != "" {
+					issues = append(issues, Issue{Element: id, Code: "unsupported_event", Detail: d.name.Local})
+					continue
+				}
+				for _, cycle := range d.bpmnChildren("timeCycle") {
+					n.Cycle = strings.TrimSpace(cycle.text.String())
+				}
+				if n.Cycle == "" {
+					issues = append(issues, Issue{Element: id, Code: "timer_needs_cycle"})
+				}
 			}
+			n.Query = strings.TrimSpace(c.attr(NamespaceDGU, "query"))
 		case NodeEnd:
 			for _, d := range defs {
 				if d.name.Local == "terminateEventDefinition" {
@@ -331,6 +358,7 @@ func buildProcess(el *element) (*Process, []Issue) {
 			for _, d := range defs[0].bpmnChildren("timeDuration") {
 				n.Duration = strings.TrimSpace(d.text.String())
 			}
+			n.Remind = strings.TrimSpace(c.attr(NamespaceDGU, "remind"))
 			if n.Duration == "" {
 				issues = append(issues, Issue{Element: id, Code: "timer_needs_duration"})
 			}
@@ -398,6 +426,13 @@ func validate(p *Process) []Issue {
 			if len(n.Outgoing) != 1 {
 				issues = append(issues, Issue{Element: id, Code: "start_needs_one_outgoing"})
 			}
+			if n.Cycle != "" {
+				if _, err := ParseCycle(n.Cycle); errors.Is(err, ErrCycleTooFrequent) {
+					issues = append(issues, Issue{Element: id, Code: "cycle_too_frequent", Detail: n.Cycle})
+				} else if err != nil {
+					issues = append(issues, Issue{Element: id, Code: "invalid_cycle", Detail: n.Cycle})
+				}
+			}
 		case NodeEnd:
 			ends++
 			if len(n.Outgoing) > 0 {
@@ -455,6 +490,13 @@ func validate(p *Process) []Issue {
 					issues = append(issues, Issue{Element: id, Code: "invalid_duration", Detail: n.Duration})
 				}
 			}
+			if n.Remind != "" {
+				lead, err := ParseDuration(n.Remind)
+				due, dueErr := ParseDuration(n.Duration)
+				if err != nil || (dueErr == nil && lead >= due) {
+					issues = append(issues, Issue{Element: id, Code: "invalid_reminder", Detail: n.Remind})
+				}
+			}
 		}
 		if n.Type != NodeStart && n.Type != NodeBoundaryEvent && len(n.Incoming) == 0 {
 			issues = append(issues, Issue{Element: id, Code: "unreachable"})
@@ -465,6 +507,9 @@ func validate(p *Process) []Issue {
 		issues = append(issues, Issue{Code: "no_start"})
 	case 1:
 		p.Start = starts[0]
+		if start := p.Nodes[p.Start]; start.Cycle != "" {
+			p.Schedule = &StartSchedule{Cycle: start.Cycle, Query: start.Query}
+		}
 	default:
 		issues = append(issues, Issue{Code: "several_starts"})
 	}

@@ -124,13 +124,13 @@ type DefinitionRequest struct {
 }
 
 // @Summary Workflow engine capabilities
-// @Description The action catalogue and the optional features this server runs. A 404 means the engine is off.
+// @Description The action catalogue, the optional features this server runs and what the caller may do. A 404 means the engine is off.
 // @Tags workflows
 // @Produce json
 // @Success 200 {object} workflow.Capabilities
 // @Router /api/v1/workflows/capabilities [get]
-func (h *Handler) capabilities(w http.ResponseWriter, _ *http.Request) {
-	common.RespondJSON(w, http.StatusOK, h.service.Capabilities())
+func (h *Handler) capabilities(w http.ResponseWriter, r *http.Request) {
+	common.RespondJSON(w, http.StatusOK, h.service.Capabilities(principal(r)))
 }
 
 // @Summary List workflow definitions

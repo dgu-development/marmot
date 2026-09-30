@@ -85,7 +85,8 @@ func TestParseRejectsWhatWouldNotRun(t *testing.T) {
 	}{
 		"script":            {`<bpmn:startEvent id="s"/><bpmn:scriptTask id="x"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="e"/>`, "script_not_allowed"},
 		"subprocess":        {`<bpmn:startEvent id="s"/><bpmn:subProcess id="x"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="e"/>`, "unsupported_element"},
-		"timer start":       {`<bpmn:startEvent id="s"><bpmn:timerEventDefinition/></bpmn:startEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="e"/>`, "unsupported_event"},
+		"message start":     {`<bpmn:startEvent id="s"><bpmn:messageEventDefinition/></bpmn:startEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="e"/>`, "unsupported_event"},
+		"timer start empty": {`<bpmn:startEvent id="s"><bpmn:timerEventDefinition/></bpmn:startEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="e"/>`, "timer_needs_cycle"},
 		"no assignee":       {`<bpmn:startEvent id="s"/><bpmn:userTask id="u"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="u"/><bpmn:sequenceFlow id="b" sourceRef="u" targetRef="e"/>`, "task_needs_assignment"},
 		"bad group":         {`<bpmn:startEvent id="s"/><bpmn:userTask id="u" camunda:candidateGroups="role:king"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="u"/><bpmn:sequenceFlow id="b" sourceRef="u" targetRef="e"/>`, "invalid_candidate_group"},
 		"no action":         {`<bpmn:startEvent id="s"/><bpmn:serviceTask id="x"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="x"/><bpmn:sequenceFlow id="b" sourceRef="x" targetRef="e"/>`, "service_needs_action"},
@@ -436,7 +437,7 @@ func TestNotifyRecipientsAreValidated(t *testing.T) {
 }
 
 func TestEveryCataloguedActionValidates(t *testing.T) {
-	sample := map[string]string{"message": "hi", "field": "lifecycle", "value": "active", "tag": "pii"}
+	sample := map[string]string{"message": "hi", "field": "lifecycle", "value": "active", "tag": "pii", "term": "Customer"}
 	for _, spec := range Actions {
 		args := map[string]string{}
 		for _, arg := range spec.Args {
@@ -461,5 +462,89 @@ func TestEveryCataloguedActionValidates(t *testing.T) {
 				t.Errorf("%s runs without its required %s", spec.ID, arg.Name)
 			}
 		}
+	}
+}
+
+const remindable = `
+<bpmn:startEvent id="start"/>
+<bpmn:userTask id="review" name="Review" camunda:candidateGroups="role:steward"/>
+<bpmn:boundaryEvent id="late" attachedToRef="review" dgu:remind="%s"><bpmn:timerEventDefinition><bpmn:timeDuration>P2D</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:boundaryEvent>
+<bpmn:endEvent id="ok"/><bpmn:endEvent id="late_end"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+<bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="ok"/>
+<bpmn:sequenceFlow id="f3" sourceRef="late" targetRef="late_end"/>`
+
+func TestAReminderIsScheduledBeforeTheTimerAndValidated(t *testing.T) {
+	now := time.Date(2026, 9, 30, 9, 0, 0, 0, time.UTC)
+	p, err := Parse(diagram(strings.Replace(remindable, "%s", "PT12H", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	step := (&Runner{Process: p, Executor: &recorder{}, Now: func() time.Time { return now }}).Start(context.Background(), NewState(nil))
+	task := step.NewTasks[0]
+	if task.RemindAt == nil || !task.RemindAt.Equal(now.Add(36*time.Hour)) || !task.DueAt.Equal(now.Add(48*time.Hour)) {
+		t.Fatalf("task = %+v", task)
+	}
+	for _, bad := range []string{"PT48H", "P3D", "soon"} {
+		_, err := Parse(diagram(strings.Replace(remindable, "%s", bad, 1)))
+		if !slices.Contains(codes(err), "invalid_reminder") {
+			t.Errorf("%q: %v", bad, codes(err))
+		}
+	}
+}
+
+func startTimer(cycle, attrs string) string {
+	return `<bpmn:startEvent id="start" ` + attrs + `><bpmn:timerEventDefinition><bpmn:timeCycle>` + cycle + `</bpmn:timeCycle></bpmn:timerEventDefinition></bpmn:startEvent>
+<bpmn:serviceTask id="tell" dgu:action="notify" dgu:message="Recertify"/><bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="tell"/><bpmn:sequenceFlow id="f2" sourceRef="tell" targetRef="ok"/>`
+}
+
+func TestATimerStartEventCarriesItsCycleAndQuery(t *testing.T) {
+	p, err := Parse(diagram(startTimer("0 8 * * 1", `dgu:query="tag = &quot;pii&quot;"`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Schedule == nil || p.Schedule.Cycle != "0 8 * * 1" || p.Schedule.Query != `tag = "pii"` {
+		t.Fatalf("schedule = %+v", p.Schedule)
+	}
+	plain := mustParse(t, approval)
+	if plain.Schedule != nil {
+		t.Fatalf("a manual start has a schedule: %+v", plain.Schedule)
+	}
+}
+
+func TestTimerStartCyclesAreValidated(t *testing.T) {
+	for cycle, want := range map[string]string{
+		"* * * * *":   "cycle_too_frequent",
+		"*/5 * * * *": "cycle_too_frequent",
+		"PT5M":        "cycle_too_frequent",
+		"soon":        "invalid_cycle",
+		"1 2 3":       "invalid_cycle",
+		"":            "timer_needs_cycle",
+	} {
+		_, err := Parse(diagram(startTimer(cycle, "")))
+		if !slices.Contains(codes(err), want) {
+			t.Errorf("%q: got %v, want %s", cycle, codes(err), want)
+		}
+	}
+	for _, ok := range []string{"0 8 * * 1", "*/15 * * * *", "PT6H", "P1D", "P1W"} {
+		if _, err := Parse(diagram(startTimer(ok, ""))); err != nil {
+			t.Errorf("%q rejected: %v", ok, codes(err))
+		}
+	}
+	if _, err := Parse(diagram(strings.Replace(startTimer("PT6H", ""), "timerEventDefinition", "messageEventDefinition", 2))); !slices.Contains(codes(err), "unsupported_event") {
+		t.Errorf("a message start is not supported: %v", codes(err))
+	}
+}
+
+func TestACycleSaysWhenItFiresNext(t *testing.T) {
+	from := time.Date(2026, 9, 29, 9, 0, 0, 0, time.UTC)
+	cron, _ := ParseCycle("0 8 * * *")
+	if got := cron.Next(from); !got.Equal(time.Date(2026, 9, 30, 8, 0, 0, 0, time.UTC)) {
+		t.Fatalf("cron next = %v", got)
+	}
+	every, _ := ParseCycle("PT6H")
+	if got := every.Next(from); !got.Equal(from.Add(6 * time.Hour)) {
+		t.Fatalf("interval next = %v", got)
 	}
 }
