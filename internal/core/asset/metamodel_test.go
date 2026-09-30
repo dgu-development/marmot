@@ -93,26 +93,6 @@ func TestPatchFieldsDoesNotRequireFullDocument(t *testing.T) {
 	}
 }
 
-func TestPatchFieldsCoercesWireStrings(t *testing.T) {
-	svc := newGovernedService(t)
-	created := mustCreateGoverned(t, svc, 30)
-	updated, err := svc.PatchFields(context.Background(), created.ID, created.Version, map[string]any{
-		"retention": "90",
-		"note":      "true",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, _ := metamodel.ValueAt(updated.Metadata, "metadata.example.retention")
-	if got != 90.0 {
-		t.Fatalf("retention = %#v", got)
-	}
-	note, _ := metamodel.ValueAt(updated.Metadata, "metadata.example.note")
-	if note != "true" {
-		t.Fatalf("note must stay a string: %#v", note)
-	}
-}
-
 func TestLegacyUpdatePreservesGovernedMetadata(t *testing.T) {
 	svc := newGovernedService(t)
 	created := mustCreateGoverned(t, svc, 30)

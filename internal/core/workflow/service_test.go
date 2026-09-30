@@ -13,6 +13,7 @@ import (
 	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/auth"
 	"github.com/marmotdata/marmot/internal/core/domain"
+	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/notification"
 	"github.com/marmotdata/marmot/internal/core/team"
 	"github.com/marmotdata/marmot/internal/core/user"
@@ -126,6 +127,14 @@ func (f *fakeAssets) PatchFields(_ context.Context, _ string, version int64, fie
 
 func (f *fakeAssets) AddTag(context.Context, string, string) (*asset.Asset, error) {
 	return &asset.Asset{}, nil
+}
+
+func (f *fakeAssets) Metamodel(string) metamodel.Schema {
+	field := func(id, kind string) metamodel.Field { return metamodel.Field{ID: id, Type: kind} }
+	return metamodel.Schema{Profile: metamodel.Profile{Fields: []metamodel.Field{
+		field("retention", "integer"), field("contains_pii", "boolean"), field("quality_score", "number"),
+		field("classification", "enum"), field("lifecycle", "enum"),
+	}}}
 }
 
 func (f *fakeAssets) RemoveTag(_ context.Context, _ string, tag string) (*asset.Asset, error) {
@@ -673,5 +682,58 @@ func TestCapabilitiesListTheCatalogueAndTheBatchFeatureOnlyWithAMatcher(t *testi
 	f.svc.WithQueries(&fakeQuery{})
 	if !slices.Contains(f.svc.Capabilities().Features, "batch_start") {
 		t.Fatal("batch_start missing with a matcher")
+	}
+}
+
+const coerceDoc = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dgu="https://dgu-development.github.io/schema/workflows" id="d">
+<bpmn:process id="typed" name="Typed">
+<bpmn:startEvent id="start"/>
+<bpmn:userTask id="fill" name="Fill" camunda:candidateGroups="role:steward" dgu:formFields="retention,contains_pii"/>
+<bpmn:serviceTask id="score" dgu:action="set_field" dgu:field="quality_score" dgu:value="0.5"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="fill"/>
+<bpmn:sequenceFlow id="f2" sourceRef="fill" targetRef="score"/>
+<bpmn:sequenceFlow id="f3" sourceRef="score" targetRef="ok"/>
+</bpmn:process></bpmn:definitions>`
+
+func TestTextIsCoercedByTheFieldTypeInsideTheWorkflow(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, coerceDoc)
+	if _, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); err != nil {
+		t.Fatal(err)
+	}
+	task := openTask(t, f, f.bob)
+	done, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "", "", map[string]any{"retention": "90", "contains_pii": "true"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Status != workflow.InstanceCompleted {
+		t.Fatalf("status = %s detail = %v", done.Status, done.FailureDetail)
+	}
+	if f.assets.patched["retention"] != 90.0 || f.assets.patched["contains_pii"] != true || f.assets.patched["quality_score"] != 0.5 {
+		t.Fatalf("patched = %#v", f.assets.patched)
+	}
+}
+
+func TestAFormValueThatDoesNotMatchTheFieldTypeIsRefusedAsFields(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, coerceDoc)
+	if _, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); err != nil {
+		t.Fatal(err)
+	}
+	task := openTask(t, f, f.bob)
+	_, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "", "", map[string]any{"retention": "many", "contains_pii": "true"})
+	var invalid *metamodel.ValidationError
+	if !errors.As(err, &invalid) || len(invalid.Fields) != 1 || invalid.Fields[0].Field != "retention" || invalid.Fields[0].Code != "type" {
+		t.Fatalf("err = %v", err)
+	}
+	if len(f.assets.patched) != 0 {
+		t.Fatalf("something was written: %#v", f.assets.patched)
+	}
+	if open := openTask(t, f, f.bob); open.ID != task.ID {
+		t.Fatalf("the task moved on: %+v", open)
 	}
 }

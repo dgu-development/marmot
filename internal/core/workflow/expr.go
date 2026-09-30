@@ -160,7 +160,7 @@ const (
 	// same team:/role: groups a user task accepts.
 	ActionNotify = "notify"
 	// ActionSetField writes a governed field of the target asset through the
-	// metamodel: dgu:field and dgu:value (raw text; PatchFields coerces by type).
+	// metamodel: dgu:field and dgu:value (raw text, coerced by the field's declared type).
 	ActionSetField = "set_field"
 	// ActionAddTag adds dgu:tag to the target asset.
 	ActionAddTag = "add_tag"

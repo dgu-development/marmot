@@ -13,6 +13,7 @@ import (
 	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/auth"
 	"github.com/marmotdata/marmot/internal/core/domain"
+	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/notification"
 	"github.com/marmotdata/marmot/internal/core/team"
 	"github.com/marmotdata/marmot/internal/core/user"
@@ -72,6 +73,7 @@ type Assets interface {
 	PatchFields(ctx context.Context, id string, version int64, fields map[string]any) (*asset.Asset, error)
 	AddTag(ctx context.Context, id string, tag string) (*asset.Asset, error)
 	RemoveTag(ctx context.Context, id string, tag string) (*asset.Asset, error)
+	Metamodel(kind string) metamodel.Schema
 }
 
 // QueryMatcher resolves a Discover/asset-rule query_expression to asset ids.
@@ -620,6 +622,24 @@ func (s *Service) CompleteTask(ctx context.Context, p auth.Principal, taskID, de
 	return in, nil
 }
 
+// coerceField turns the text a form or a dgu:value carries into what the
+// field's declared type expects. The asset API stays strict: only the workflow
+// accepts text for a number, a boolean or a list. An unknown field passes
+// through, so PatchFields reports it as it would for any client.
+func (s *Service) coerceField(id string, value any) (any, error) {
+	for _, field := range s.assets.Metamodel("asset").Fields {
+		if field.ID != id {
+			continue
+		}
+		coerced, ok := metamodel.Coerce(field, value)
+		if !ok {
+			return nil, &metamodel.ValidationError{Fields: []metamodel.Violation{{Field: id, Code: "type"}}}
+		}
+		return coerced, nil
+	}
+	return value, nil
+}
+
 func (s *Service) writeFormFields(ctx context.Context, p auth.Principal, in *Instance, required []string, fields map[string]any) error {
 	if in.TargetKind == nil || *in.TargetKind != TargetAsset || in.TargetID == nil {
 		return fmt.Errorf("%w: the instance has no target asset for form fields", ErrInvalidInput)
@@ -636,7 +656,11 @@ func (s *Service) writeFormFields(ctx context.Context, p auth.Principal, in *Ins
 		if !ok {
 			return fmt.Errorf("%w: missing form field %q", ErrInvalidInput, id)
 		}
-		patch[id] = v
+		coerced, err := s.coerceField(id, v)
+		if err != nil {
+			return err
+		}
+		patch[id] = coerced
 	}
 	for id := range fields {
 		if !slices.Contains(required, id) {
@@ -1091,8 +1115,11 @@ func (e *executor) Execute(ctx context.Context, n *Node, vars map[string]string)
 		if n.Action == ActionClearField {
 			patch = map[string]any{n.Args["field"]: nil}
 		} else {
-			// Raw text: PatchFields coerces by the field's declared type.
-			patch = map[string]any{n.Args["field"]: n.Args["value"]}
+			value, err := e.svc.coerceField(n.Args["field"], n.Args["value"])
+			if err != nil {
+				return err
+			}
+			patch = map[string]any{n.Args["field"]: value}
 		}
 		_, err = e.svc.assets.PatchFields(ctx, id, a.Version, patch)
 		return err
