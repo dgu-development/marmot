@@ -8,11 +8,12 @@ The engine executes a declared subset of BPMN and refuses anything else with a s
 
 | Element | Behaviour |
 | --- | --- |
-| `startEvent` (none) | One per process. Runs are started by a user, with an optional target asset |
-| `userTask` | Waits for a decision. Assignment: `camunda:assignee`, `camunda:candidateUsers` (username or id; `${initiator}`), `camunda:candidateGroups` (`team:<name or id>`, `role:<domain role>` for the target's domain, `role:<role>@<domain id>`) |
-| `serviceTask` | One platform action in `dgu:action`: `notify` (`dgu:message`, `dgu:to` = `initiator` or `participants`), `set_field` (`dgu:field`, `dgu:value`, through the metamodel `PatchFields`), `add_tag` (`dgu:tag`) |
+| `startEvent` (none) | One per process. Runs are started by a user, with an optional target asset, or in batch with `query_expression` (same language as asset rules / Discover; capped at 50) |
+| `userTask` | Waits for a decision. Assignment: `camunda:assignee`, `camunda:candidateUsers` (username or id; `${initiator}`), `camunda:candidateGroups` (`team:<name or id>`, `role:<domain role>` for the target's domain, `role:<role>@<domain id>`). Optional `dgu:formFields` (comma-separated metamodel field ids): the decider must supply each value; they are written with `PatchFields` (wire strings coerced by declared type) before the flow advances |
+| `serviceTask` | One platform action in `dgu:action`: `notify` (`dgu:message`; `dgu:to` is a comma-separated list of `initiator` (default), `participants` and the `team:` / `role:` groups a user task accepts, resolved when the action runs), `set_field` (`dgu:field`, `dgu:value` as text; `PatchFields` coerces by field type), `clear_field` (`dgu:field`, writes null), `add_tag` / `remove_tag` (`dgu:tag`) |
 | `exclusiveGateway` | First outgoing flow whose condition holds, else `default`. Conditions are `variable == value` / `!=` joined by `&&`, optionally in `${…}`; nothing else parses |
 | `parallelGateway` | Fork, and join when every incoming flow arrived |
+| `intermediateCatchEvent` with `timerEventDefinition` | A timed wait: ISO 8601 `timeDuration`, one outgoing flow. The run pauses and no one decides it; it appears among the run's tasks with `wait: true` until its timer fires |
 | `boundaryEvent` with `timerEventDefinition` | On a user task; ISO 8601 `timeDuration` in weeks, days, hours, minutes, seconds. Interrupting cancels the task; `cancelActivity="false"` opens a second path |
 | `endEvent` (none, terminate) | Terminate cancels every open task |
 
@@ -22,7 +23,7 @@ Completing a task sets `decision` and `<task id>.decision`; the instance also ca
 
 ## Rules
 
-- **Identity.** A service task writes as the user who advanced the run (who started it or decided the task before it), never as a service credential. `set_field` and `add_tag` need `assets:manage`, and the domain write guard applies as for any request. A path reached from a timer has no user, so a write there fails the run (`action_failed`) instead of borrowing one.
+- **Identity.** A service task writes as the user who advanced the run (who started it or decided the task before it), never as a service credential. `set_field`, `clear_field`, `add_tag` and `remove_tag` need `assets:manage`, and the domain write guard applies as for any request. Form fields on a user task need the same permission. A path reached from a timer, including the one after a wait, has no user, so a write there fails the run (`action_failed`) instead of borrowing one; `notify` and user tasks work there.
 - **Deciding.** A task's candidates are resolved when it opens (for the inbox) and **again** when someone decides it: a revoked role or a left team cannot decide. Native admins may decide any task. A task with no candidate is logged as `task_unassigned` and waits for an admin.
 - **Versions.** A definition is a draft until published; published and retired versions are frozen, and runs pin the version they started on. A draft may be saved with issues; publishing requires none. The process id ties versions together and cannot change.
 - **Visibility.** Runs are visible to their initiator, to anyone who has or had a task in them, and to `workflows:manage`. Anyone else gets 404, not 403.
@@ -44,11 +45,12 @@ Every route needs `workflows:view`; managing definitions, listing every run (`al
 | `GET/PUT/DELETE /api/v1/workflows/definitions/{id}` | Read, replace or delete a draft (409 once published) |
 | `GET /api/v1/workflows/definitions/{id}/bpmn` | Export the BPMN |
 | `POST /api/v1/workflows/definitions/{id}/publish`, `/retire` | Freeze a valid draft; stop new runs of a version |
-| `GET/POST /api/v1/workflows/instances` | List visible runs; start `{definition_id, target: {kind: "asset", id}}` |
-| `GET /api/v1/workflows/instances/{id}` | Run with tasks, events, diagram and active nodes |
+| `GET /api/v1/workflows/capabilities` | The action catalogue (`actions`: id, args, whether it writes) and the optional `features` this server runs; clients list from it instead of probing |
+| `GET/POST /api/v1/workflows/instances` | List visible runs; start `{definition_id, target}` or batch `{definition_id, query_expression, limit?}` (returns `{instances, total, started, limit, failed?}`; an asset that cannot start is listed in `failed` with a code and the rest still start) |
+| `GET /api/v1/workflows/instances/{id}` | Run with tasks (open tasks include `form_fields` when declared), events, diagram and active nodes |
 | `POST /api/v1/workflows/instances/{id}/cancel` | Cancel a run |
-| `GET /api/v1/workflows/tasks` | The caller's open tasks |
-| `POST /api/v1/workflows/tasks/{id}/complete` | `{decision, comment}` |
+| `GET /api/v1/workflows/tasks` | The caller's open tasks (`form_fields` when the user task declares them) |
+| `POST /api/v1/workflows/tasks/{id}/complete` | `{decision, comment, fields?}` |
 
 ## Schema
 
@@ -64,4 +66,4 @@ Fork migration `009_workflows.sql`: `workflow_definitions`, `workflow_instances`
 | `permissions`, `role_permissions` (data, fork migration `009`) | rows `dgu_view_workflows`, `dgu_manage_workflows` | Same `dgu_` rule as domains |
 | `docs/docs.go`, `docs/swagger.json`, `docs/swagger.yaml` | generated | Include the workflow endpoints; regenerate with `make swagger` |
 
-Not yet: the Helm chart does not expose `workflows.*`, and there is no start from platform events.
+Not yet: the Helm chart does not expose `workflows.*`; no start from platform events; timer start events (scheduled recertification); `task_due` reminders; and a timer path acting as a person.

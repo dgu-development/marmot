@@ -22,8 +22,8 @@ type State struct {
 	Vars  map[string]string   `json:"vars"`
 }
 
-// Token waits on a user task. Tokens only exist while waiting: everything
-// else runs to the next wait within one advance.
+// Token waits on a user task or a timed wait. Tokens only exist while
+// waiting: everything else runs to the next wait within one advance.
 type Token struct {
 	ID   string `json:"id"`
 	Node string `json:"node"`
@@ -39,17 +39,20 @@ type Executor interface {
 type Step struct {
 	NewTasks       []NewTask
 	CancelledTasks []string
-	Events         []StepEvent
-	Done           bool
+	// ReleasedWaits are the tokens of waits whose timer ran out.
+	ReleasedWaits []string
+	Events        []StepEvent
+	Done          bool
 	// Failure is set when the instance cannot go on; Done is then false.
 	Failure *Failure
 }
 
-// NewTask is a user task the instance now waits on.
+// NewTask is a user task, or a timed wait, the instance now waits on.
 type NewTask struct {
 	TokenID string
 	Node    *Node
-	// DueAt and Timer come from the earliest boundary timer on the task.
+	// DueAt and Timer come from the earliest boundary timer on the task, or
+	// from the wait itself.
 	DueAt *time.Time
 	Timer string
 }
@@ -125,7 +128,7 @@ func (r *Runner) Complete(ctx context.Context, st *State, tokenID string, vars m
 // one starts a second path and leaves the task open.
 func (r *Runner) FireTimer(ctx context.Context, st *State, tokenID, timerID string) (*Step, error) {
 	timer := r.Process.Nodes[timerID]
-	if timer == nil || timer.Type != NodeBoundaryEvent {
+	if timer == nil || (timer.Type != NodeBoundaryEvent && timer.Type != NodeWait) {
 		return nil, errors.New("no such timer")
 	}
 	i := slices.IndexFunc(st.Tokens, func(t Token) bool { return t.ID == tokenID })
@@ -134,7 +137,13 @@ func (r *Runner) FireTimer(ctx context.Context, st *State, tokenID, timerID stri
 	}
 	step := &Step{}
 	step.Events = append(step.Events, StepEvent{Type: "timer_fired", Element: timerID})
-	if timer.CancelActivity {
+	if timer.Type == NodeWait {
+		if st.Tokens[i].Node != timerID {
+			return nil, errors.New("the token does not wait on this timer")
+		}
+		st.Tokens = slices.Delete(st.Tokens, i, i+1)
+		step.ReleasedWaits = append(step.ReleasedWaits, tokenID)
+	} else if timer.CancelActivity {
 		st.Tokens = slices.Delete(st.Tokens, i, i+1)
 		step.CancelledTasks = append(step.CancelledTasks, tokenID)
 	}
@@ -222,6 +231,17 @@ func (r *Runner) run(ctx context.Context, st *State, step *Step, queue []arrival
 				delete(st.Joins, n.ID)
 			}
 			queue = append(queue, r.follow(n)...)
+		case NodeWait:
+			d, err := ParseDuration(n.Duration)
+			if err != nil {
+				step.Failure = &Failure{Element: n.ID, Code: "invalid_duration", Err: err}
+				return
+			}
+			due := r.now().Add(d)
+			token := Token{ID: uuid.NewString(), Node: n.ID}
+			st.Tokens = append(st.Tokens, token)
+			step.NewTasks = append(step.NewTasks, NewTask{TokenID: token.ID, Node: n, DueAt: &due, Timer: n.ID})
+			step.Events = append(step.Events, StepEvent{Type: "wait_started", Element: n.ID})
 		case NodeBoundaryEvent:
 			queue = append(queue, r.follow(n)...)
 		}

@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -156,8 +155,9 @@ func ParseDuration(text string) (time.Duration, error) {
 
 // Actions a service task may run. Each one is implemented by the platform.
 const (
-	// ActionNotify sends an in-app notification: dgu:message, and dgu:to set
-	// to "initiator" (default) or "participants".
+	// ActionNotify sends an in-app notification: dgu:message, and dgu:to, a
+	// comma-separated list of "initiator" (default), "participants" and the
+	// same team:/role: groups a user task accepts.
 	ActionNotify = "notify"
 	// ActionSetField writes a governed field of the target asset through the
 	// metamodel: dgu:field and dgu:value (raw text; PatchFields coerces by type).
@@ -170,6 +170,36 @@ const (
 	ActionClearField = "clear_field"
 )
 
+// Recipients a notify action names besides team: and role: groups.
+const (
+	RecipientInitiator    = "initiator"
+	RecipientParticipants = "participants"
+)
+
+// ArgSpec is one dgu:<name> attribute of an action.
+type ArgSpec struct {
+	Name     string `json:"name"`
+	Required bool   `json:"required"`
+}
+
+// ActionSpec describes an action for clients, so an editor lists what the
+// engine runs instead of keeping its own copy. Writes marks the actions that
+// change the target asset and so need an acting user with assets:manage.
+type ActionSpec struct {
+	ID     string    `json:"id"`
+	Args   []ArgSpec `json:"args"`
+	Writes bool      `json:"writes"`
+}
+
+// Actions is the closed catalogue, in display order.
+var Actions = []ActionSpec{
+	{ID: ActionNotify, Args: []ArgSpec{{"message", true}, {"to", false}}},
+	{ID: ActionSetField, Args: []ArgSpec{{"field", true}, {"value", true}}, Writes: true},
+	{ID: ActionClearField, Args: []ArgSpec{{"field", true}}, Writes: true},
+	{ID: ActionAddTag, Args: []ArgSpec{{"tag", true}}, Writes: true},
+	{ID: ActionRemoveTag, Args: []ArgSpec{{"tag", true}}, Writes: true},
+}
+
 func validateAction(n *Node) string {
 	switch n.Action {
 	case "":
@@ -178,8 +208,13 @@ func validateAction(n *Node) string {
 		if strings.TrimSpace(n.Args["message"]) == "" {
 			return "action_needs_message"
 		}
-		if to := n.Args["to"]; to != "" && to != "initiator" && to != "participants" {
-			return "invalid_recipients"
+		for _, entry := range splitList(n.Args["to"]) {
+			if entry == RecipientInitiator || entry == RecipientParticipants {
+				continue
+			}
+			if _, err := ParseGroup(entry); err != nil {
+				return "invalid_recipients"
+			}
 		}
 	case ActionSetField:
 		if !identRE.MatchString(n.Args["field"]) {
@@ -200,17 +235,4 @@ func validateAction(n *Node) string {
 		return "unknown_action"
 	}
 	return ""
-}
-
-// FieldValue turns a BPMN dgu:value into a JSON literal when it parses as one.
-// Prefer metamodel.Coerce when the field type is known (PatchFields does).
-func FieldValue(raw string) any {
-	trimmed := strings.TrimSpace(raw)
-	var v any
-	if trimmed != "" && json.Unmarshal([]byte(trimmed), &v) == nil {
-		if _, isMap := v.(map[string]any); !isMap {
-			return v
-		}
-	}
-	return raw
 }

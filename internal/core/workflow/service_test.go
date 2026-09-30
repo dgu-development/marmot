@@ -3,6 +3,7 @@ package workflow_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -547,5 +548,130 @@ func TestStartQueryRequiresMatcher(t *testing.T) {
 	_, err := f.svc.StartQuery(context.Background(), f.alice, def.ID, `tag = "pii"`, 10)
 	if !errors.Is(err, workflow.ErrInvalidInput) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+const waitDoc = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dgu="https://dgu-development.github.io/schema/workflows" id="d">
+<bpmn:process id="recheck" name="Recheck">
+<bpmn:startEvent id="start"/>
+<bpmn:intermediateCatchEvent id="pause"><bpmn:timerEventDefinition><bpmn:timeDuration>P7D</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent>
+<bpmn:serviceTask id="tell" dgu:action="notify" dgu:message="Review again" dgu:to="initiator,role:steward"/>
+<bpmn:userTask id="again" name="Review again" camunda:candidateGroups="role:steward"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="pause"/>
+<bpmn:sequenceFlow id="f2" sourceRef="pause" targetRef="tell"/>
+<bpmn:sequenceFlow id="f3" sourceRef="tell" targetRef="again"/>
+<bpmn:sequenceFlow id="f4" sourceRef="again" targetRef="ok"/>
+</bpmn:process></bpmn:definitions>`
+
+func TestAWaitPausesTheRunAndThenNotifiesAndOpensTheNextTask(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, waitDoc)
+	in, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	detail, err := f.svc.GetInstance(ctx, f.alice, in.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Tasks) != 1 || !detail.Tasks[0].Wait || detail.Tasks[0].DueAt == nil ||
+		!detail.Tasks[0].DueAt.Equal(f.now.Add(7*24*time.Hour)) || len(detail.Active) != 1 || detail.Active[0] != "pause" {
+		t.Fatalf("detail = %+v active = %v", detail.Tasks, detail.Active)
+	}
+	if tasks, _ := f.svc.MyTasks(ctx, f.bob); len(tasks) != 0 {
+		t.Fatalf("a wait is not an inbox task: %+v", tasks)
+	}
+	if _, err := f.svc.CompleteTask(ctx, f.admin, detail.Tasks[0].ID, "approved", "", nil); !errors.Is(err, workflow.ErrInvalidInput) {
+		t.Fatalf("an admin decided a wait: %v", err)
+	}
+
+	*f.now = f.now.Add(6 * 24 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if tasks, _ := f.svc.MyTasks(ctx, f.bob); len(tasks) != 0 {
+		t.Fatalf("the wait ended early: %+v", tasks)
+	}
+
+	*f.now = f.now.Add(2 * 24 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.notes.types(f.bobID); strings.Join(got, ",") != workflow.TypeWorkflowMessage+","+workflow.TypeTaskAssigned {
+		t.Fatalf("bob was notified %v", got)
+	}
+	if got := f.notes.types(f.aliceID); strings.Join(got, ",") != workflow.TypeWorkflowMessage {
+		t.Fatalf("the initiator was notified %v", got)
+	}
+	next := openTask(t, f, f.bob)
+	if next.NodeID != "again" {
+		t.Fatalf("task = %+v", next)
+	}
+	detail, _ = f.svc.GetInstance(ctx, f.alice, in.ID)
+	if detail.Status != workflow.InstanceRunning {
+		t.Fatalf("status = %s", detail.Status)
+	}
+	for _, task := range detail.Tasks {
+		if task.Wait && task.Status != workflow.TaskCompleted {
+			t.Fatalf("the wait is %s", task.Status)
+		}
+	}
+}
+
+func TestCancellingARunEndsItsWait(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, waitDoc)
+	in, _ := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if _, err := f.svc.Cancel(ctx, f.admin, in.ID); err != nil {
+		t.Fatal(err)
+	}
+	*f.now = f.now.Add(30 * 24 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.notes.types(f.bobID); len(got) != 0 {
+		t.Fatalf("a cancelled run kept going: %v", got)
+	}
+}
+
+func TestABatchSkipsWhatItCannotStartAndReportsIt(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{"33333333-3333-4333-8333-333333333333", assetID}, total: 2})
+	def := f.published(t, doc)
+	batch, err := f.svc.StartQuery(context.Background(), f.alice, def.ID, `tag = "pii"`, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if batch.Started != 1 || len(batch.Failed) != 1 || batch.Failed[0].Code != "invalid_input" {
+		t.Fatalf("batch = %+v", batch)
+	}
+}
+
+func TestABatchStopsWhenTheDefinitionIsNotRunnable(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{assetID}, total: 1})
+	d, err := f.svc.CreateDefinition(context.Background(), f.admin, []byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.StartQuery(context.Background(), f.alice, d.ID, `tag = "pii"`, 10); !errors.Is(err, workflow.ErrNotRunnable) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestCapabilitiesListTheCatalogueAndTheBatchFeatureOnlyWithAMatcher(t *testing.T) {
+	f := setup(t)
+	caps := f.svc.Capabilities()
+	if len(caps.Actions) != len(workflow.Actions) || slices.Contains(caps.Features, "batch_start") || !slices.Contains(caps.Features, "wait_timer") {
+		t.Fatalf("caps = %+v", caps)
+	}
+	f.svc.WithQueries(&fakeQuery{})
+	if !slices.Contains(f.svc.Capabilities().Features, "batch_start") {
+		t.Fatal("batch_start missing with a matcher")
 	}
 }

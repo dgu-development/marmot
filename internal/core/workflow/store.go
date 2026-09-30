@@ -98,6 +98,8 @@ type Task struct {
 	TargetName     *string `json:"target_name,omitempty"`
 	// FormFields are governed field ids the task expects when completing.
 	FormFields []string `json:"form_fields,omitempty"`
+	// Wait marks a timed wait, which nobody decides: it ends when DueAt passes.
+	Wait bool `json:"wait,omitempty"`
 }
 
 type Event struct {

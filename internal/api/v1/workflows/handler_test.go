@@ -11,7 +11,10 @@ import (
 	"testing"
 
 	"github.com/marmotdata/marmot/internal/api/v1/common"
+	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/auth"
+	"github.com/marmotdata/marmot/internal/core/domain"
+	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/user"
 	"github.com/marmotdata/marmot/internal/core/workflow"
 )
@@ -89,5 +92,34 @@ func TestRoutesDoNotCollide(t *testing.T) {
 	mux := http.NewServeMux()
 	for _, r := range (&Handler{}).Routes() {
 		mux.HandleFunc(r.Method+" "+r.Path, func(http.ResponseWriter, *http.Request) {})
+	}
+}
+
+func TestRefusedFieldValuesAreABadRequestWithTheirFields(t *testing.T) {
+	err := fmt.Errorf("writing the form: %w", &metamodel.ValidationError{Fields: []metamodel.Violation{{Field: "classification", Code: "enum"}}})
+	w := httptest.NewRecorder()
+
+	respondErr(w, err)
+
+	var got ErrorResponse
+	if e := json.Unmarshal(w.Body.Bytes(), &got); e != nil {
+		t.Fatal(e)
+	}
+	if w.Code != http.StatusBadRequest || got.Code != "invalid_fields" || len(got.Fields) != 1 || got.Fields[0].Field != "classification" {
+		t.Fatalf("status %d, body %s", w.Code, w.Body)
+	}
+}
+
+func TestAssetErrorsKeepTheirMeaning(t *testing.T) {
+	cases := map[error]int{
+		asset.ErrVersionConflict: http.StatusConflict,
+		domain.ErrForbidden:      http.StatusForbidden,
+	}
+	for err, want := range cases {
+		w := httptest.NewRecorder()
+		respondErr(w, fmt.Errorf("wrapped: %w", err))
+		if w.Code != want {
+			t.Errorf("%v -> %d, want %d", err, w.Code, want)
+		}
 	}
 }

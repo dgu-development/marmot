@@ -35,6 +35,9 @@ const (
 	NodeExclusiveGateway NodeType = "exclusiveGateway"
 	NodeParallelGateway  NodeType = "parallelGateway"
 	NodeBoundaryEvent    NodeType = "boundaryEvent"
+	// NodeWait is an intermediate catch event with a timer: the run pauses
+	// there for a duration and then goes on.
+	NodeWait NodeType = "intermediateCatchEvent"
 )
 
 // Node is one flow node of the process.
@@ -63,8 +66,8 @@ type Node struct {
 	Args    map[string]string `json:"-"`
 	Timeout string            `json:"-"`
 
-	// Boundary timer: the task it hangs on, its ISO 8601 duration and whether
-	// it cancels the task.
+	// Timer of a boundary event or a wait: for a boundary event, the task it
+	// hangs on, its ISO 8601 duration and whether it cancels the task.
 	AttachedTo     string `json:"-"`
 	Duration       string `json:"-"`
 	CancelActivity bool   `json:"-"`
@@ -307,6 +310,17 @@ func buildProcess(el *element) (*Process, []Issue) {
 		case NodeExclusiveGateway:
 			n.Default = c.attr("", "default")
 		case NodeParallelGateway:
+		case NodeWait:
+			if len(defs) != 1 || defs[0].name.Local != "timerEventDefinition" {
+				issues = append(issues, Issue{Element: id, Code: "unsupported_event"})
+				break
+			}
+			for _, d := range defs[0].bpmnChildren("timeDuration") {
+				n.Duration = strings.TrimSpace(d.text.String())
+			}
+			if n.Duration == "" {
+				issues = append(issues, Issue{Element: id, Code: "timer_needs_duration"})
+			}
 		case NodeBoundaryEvent:
 			n.AttachedTo = c.attr("", "attachedToRef")
 			n.CancelActivity = !c.hasAttr("", "cancelActivity") || c.attr("", "cancelActivity") != "false"
@@ -418,6 +432,15 @@ func validate(p *Process) []Issue {
 		case NodeParallelGateway:
 			if len(n.Outgoing) == 0 {
 				issues = append(issues, Issue{Element: id, Code: "gateway_needs_outgoing"})
+			}
+		case NodeWait:
+			if len(n.Outgoing) != 1 {
+				issues = append(issues, Issue{Element: id, Code: "wait_needs_one_outgoing"})
+			}
+			if n.Duration != "" {
+				if _, err := ParseDuration(n.Duration); err != nil {
+					issues = append(issues, Issue{Element: id, Code: "invalid_duration", Detail: n.Duration})
+				}
 			}
 		case NodeBoundaryEvent:
 			host, ok := p.Nodes[n.AttachedTo]

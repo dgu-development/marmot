@@ -10,7 +10,10 @@ import (
 	"strings"
 
 	"github.com/marmotdata/marmot/internal/api/v1/common"
+	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/auth"
+	"github.com/marmotdata/marmot/internal/core/domain"
+	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/user"
 	"github.com/marmotdata/marmot/internal/core/workflow"
 	"github.com/marmotdata/marmot/pkg/config"
@@ -39,6 +42,7 @@ func (h *Handler) Routes() []common.Route {
 		common.RequirePermission(h.userService, "workflows", "view"),
 	}
 	return []common.Route{
+		{Path: "/api/v1/workflows/capabilities", Method: http.MethodGet, Handler: h.capabilities, Middleware: view},
 		{Path: "/api/v1/workflows/definitions", Method: http.MethodGet, Handler: h.listDefinitions, Middleware: view},
 		{Path: "/api/v1/workflows/definitions", Method: http.MethodPost, Handler: h.createDefinition, Middleware: view},
 		{Path: "/api/v1/workflows/definitions/validate", Method: http.MethodPost, Handler: h.validate, Middleware: view},
@@ -63,6 +67,8 @@ type ErrorResponse struct {
 	Error  string           `json:"error"`
 	Code   string           `json:"code"`
 	Issues []workflow.Issue `json:"issues,omitempty"`
+	// Fields lists the governed fields whose values the metamodel refused.
+	Fields []metamodel.Violation `json:"fields,omitempty"`
 }
 
 func respondCode(w http.ResponseWriter, status int, code, message string) {
@@ -71,9 +77,16 @@ func respondCode(w http.ResponseWriter, status int, code, message string) {
 
 func respondErr(w http.ResponseWriter, err error) {
 	var invalid *workflow.ValidationError
+	var fields *metamodel.ValidationError
 	switch {
 	case errors.As(err, &invalid):
 		common.RespondJSON(w, http.StatusBadRequest, ErrorResponse{Error: "The diagram cannot run", Code: "invalid_diagram", Issues: invalid.Issues})
+	case errors.As(err, &fields):
+		common.RespondJSON(w, http.StatusBadRequest, ErrorResponse{Error: "The asset refused the field values", Code: "invalid_fields", Fields: fields.Fields})
+	case errors.Is(err, asset.ErrVersionConflict):
+		respondCode(w, http.StatusConflict, "conflict", "The asset changed meanwhile; reload and try again")
+	case errors.Is(err, domain.ErrForbidden):
+		respondCode(w, http.StatusForbidden, "forbidden", "Not allowed in this domain")
 	case errors.Is(err, workflow.ErrInvalidInput):
 		respondCode(w, http.StatusBadRequest, "invalid_input", err.Error())
 	case errors.Is(err, workflow.ErrForbidden):
@@ -108,6 +121,16 @@ func principal(r *http.Request) auth.Principal {
 // DefinitionRequest carries a BPMN 2.0 document.
 type DefinitionRequest struct {
 	BPMN string `json:"bpmn"`
+}
+
+// @Summary Workflow engine capabilities
+// @Description The action catalogue and the optional features this server runs. A 404 means the engine is off.
+// @Tags workflows
+// @Produce json
+// @Success 200 {object} workflow.Capabilities
+// @Router /api/v1/workflows/capabilities [get]
+func (h *Handler) capabilities(w http.ResponseWriter, _ *http.Request) {
+	common.RespondJSON(w, http.StatusOK, h.service.Capabilities())
 }
 
 // @Summary List workflow definitions

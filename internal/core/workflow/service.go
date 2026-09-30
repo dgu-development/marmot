@@ -99,6 +99,22 @@ func NewService(repo *PostgresRepository, users Users, teams Teams, domains Doma
 	return &Service{repo: repo, users: users, teams: teams, domains: domains, assets: assets, notifier: notifier, now: time.Now}
 }
 
+// Capabilities is what this engine runs, so a client lists it instead of
+// guessing from the version or from a probe request.
+type Capabilities struct {
+	Actions  []ActionSpec `json:"actions"`
+	Features []string     `json:"features"`
+}
+
+// Capabilities reports the action catalogue and the optional features in use.
+func (s *Service) Capabilities() Capabilities {
+	features := []string{"boundary_timer", "wait_timer", "form_fields", "notify_groups"}
+	if s.queries != nil {
+		features = append(features, "batch_start")
+	}
+	return Capabilities{Actions: Actions, Features: features}
+}
+
 // WithQueries enables starting runs for every asset matching a query_expression.
 func (s *Service) WithQueries(q QueryMatcher) *Service {
 	s.queries = q
@@ -346,6 +362,25 @@ type StartBatchResult struct {
 	Total     int         `json:"total"`
 	Started   int         `json:"started"`
 	Limit     int         `json:"limit"`
+	// Failed lists the matches that could not start; the others did.
+	Failed []StartFailure `json:"failed,omitempty"`
+}
+
+// StartFailure is one asset of a batch that did not start, with a stable code.
+type StartFailure struct {
+	AssetID string `json:"asset_id"`
+	Code    string `json:"code"`
+}
+
+func startFailureCode(err error) string {
+	switch {
+	case errors.Is(err, ErrForbidden):
+		return "forbidden"
+	case errors.Is(err, ErrInvalidInput):
+		return "invalid_input"
+	default:
+		return "failed"
+	}
 }
 
 // StartQuery starts one run per asset matching query_expression (same language
@@ -368,11 +403,17 @@ func (s *Service) StartQuery(ctx context.Context, p auth.Principal, definitionID
 	out := &StartBatchResult{Total: total, Limit: limit, Instances: make([]*Instance, 0, len(ids))}
 	for _, id := range ids {
 		in, err := s.Start(ctx, p, definitionID, &Target{Kind: TargetAsset, ID: id})
-		if err != nil {
+		switch {
+		case err == nil:
+			out.Instances = append(out.Instances, in)
+			out.Started++
+		case errors.Is(err, ErrNotRunnable), errors.Is(err, ErrNotFound), ctx.Err() != nil:
+			// Nothing about the asset explains it: every remaining start would fail the same way.
 			return out, err
+		default:
+			log.Warn().Err(err).Str("asset_id", id).Msg("Workflow batch start skipped an asset")
+			out.Failed = append(out.Failed, StartFailure{AssetID: id, Code: startFailureCode(err)})
 		}
-		out.Instances = append(out.Instances, in)
-		out.Started++
 	}
 	return out, nil
 }
@@ -386,7 +427,20 @@ func (s *Service) apply(ctx context.Context, tx *PostgresRepository, in *Instanc
 			return nil, err
 		}
 	}
+	for _, token := range step.ReleasedWaits {
+		if err := tx.CloseTask(ctx, in.ID, token, TaskCompleted, nil, nil, nil); err != nil && !errors.Is(err, ErrConflict) {
+			return nil, err
+		}
+	}
 	for _, nt := range step.NewTasks {
+		if nt.Node.Type == NodeWait {
+			node := nt.Node.ID
+			wait := &Task{InstanceID: in.ID, TokenID: nt.TokenID, NodeID: node, Name: displayName(node, nt.Node.Name), Candidates: []string{}, DueAt: nt.DueAt, TimerNode: &node}
+			if err := tx.InsertTask(ctx, wait); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		candidates, err := s.candidates(ctx, nt.Node, in)
 		if err != nil {
 			return nil, err
@@ -502,6 +556,9 @@ func (s *Service) CompleteTask(ctx context.Context, p auth.Principal, taskID, de
 			return err
 		}
 		node := proc.Nodes[current.NodeID]
+		if node == nil || node.Type != NodeUserTask {
+			return fmt.Errorf("%w: only a user task can be decided", ErrInvalidInput)
+		}
 		if !p.IsAdmin() {
 			candidates, err := s.candidates(ctx, node, in)
 			if err != nil {
@@ -677,6 +734,9 @@ func (s *Service) GetInstance(ctx context.Context, p auth.Principal, id string) 
 	if err != nil {
 		return nil, err
 	}
+	for _, t := range tasks {
+		t.Wait = t.TimerNode != nil && *t.TimerNode == t.NodeID
+	}
 	s.attachFormFields(ctx, tasks)
 	events, err := s.repo.ListEvents(ctx, id)
 	if err != nil {
@@ -730,16 +790,19 @@ func (s *Service) attachFormFields(ctx context.Context, tasks []*Task) {
 	for _, task := range tasks {
 		in, err := s.repo.GetInstance(ctx, task.InstanceID, false)
 		if err != nil {
+			log.Warn().Err(err).Str("task_id", task.ID).Msg("Workflow task form fields unavailable")
 			continue
 		}
 		proc, ok := cache[in.DefinitionID]
 		if !ok {
 			def, err := s.repo.GetDefinition(ctx, in.DefinitionID)
 			if err != nil {
+				log.Warn().Err(err).Str("task_id", task.ID).Msg("Workflow task form fields unavailable")
 				continue
 			}
 			parsed, err := Parse([]byte(def.BPMN))
 			if err != nil {
+				log.Warn().Err(err).Str("task_id", task.ID).Msg("Workflow task form fields unavailable")
 				continue
 			}
 			cache[in.DefinitionID] = parsed
@@ -799,8 +862,9 @@ func (s *Service) fireTimer(ctx context.Context, task *Task) error {
 		}
 		notes, err := s.apply(ctx, tx, in, step, nil)
 		out = append(out, exec.notes...)
+		escalated := proc.Nodes[*current.TimerNode].Type == NodeBoundaryEvent
 		for _, n := range notes {
-			if n.Type == TypeTaskAssigned {
+			if escalated && n.Type == TypeTaskAssigned {
 				n.Type = TypeTaskEscalated
 			}
 			out = append(out, n)
@@ -942,19 +1006,55 @@ type executor struct {
 	notes     pending
 }
 
+// recipients resolves a dgu:to list to user ids, once, when the action runs.
+func (e *executor) recipients(ctx context.Context, spec string, vars map[string]string) ([]string, error) {
+	entries := splitList(spec)
+	if len(entries) == 0 {
+		entries = []string{RecipientInitiator}
+	}
+	ids := []string{}
+	add := func(candidates ...string) {
+		for _, id := range candidates {
+			if id != "" && !slices.Contains(ids, id) {
+				ids = append(ids, id)
+			}
+		}
+	}
+	for _, entry := range entries {
+		switch entry {
+		case RecipientInitiator:
+			if e.instance.InitiatorID != nil {
+				add(*e.instance.InitiatorID)
+			}
+		case RecipientParticipants:
+			if e.instance.InitiatorID != nil {
+				add(*e.instance.InitiatorID)
+			}
+			add(strings.Split(vars["_participants"], ",")...)
+		default:
+			group, err := ParseGroup(entry)
+			if err != nil {
+				return nil, err
+			}
+			members, err := e.svc.groupMembers(ctx, group, e.instance)
+			if err != nil {
+				return nil, err
+			}
+			add(members...)
+		}
+	}
+	return ids, nil
+}
+
 func (e *executor) Execute(ctx context.Context, n *Node, vars map[string]string) error {
 	switch n.Action {
 	case ActionNotify:
-		ids := []string{}
-		if e.instance.InitiatorID != nil {
-			ids = append(ids, *e.instance.InitiatorID)
+		ids, err := e.recipients(ctx, n.Args["to"], vars)
+		if err != nil {
+			return err
 		}
-		if n.Args["to"] == "participants" {
-			for _, id := range strings.Split(vars["_participants"], ",") {
-				if id != "" && !slices.Contains(ids, id) {
-					ids = append(ids, id)
-				}
-			}
+		if len(ids) == 0 {
+			return nil
 		}
 		e.notes = append(e.notes, notification.CreateNotificationInput{
 			Recipients: users(ids),

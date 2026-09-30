@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -182,7 +183,7 @@ func TestDurations(t *testing.T) {
 	}
 }
 
-func TestGroupsAndFieldValues(t *testing.T) {
+func TestGroups(t *testing.T) {
 	g, err := ParseGroup("role:domain_admin@abc")
 	if err != nil || g.Kind != GroupRole || g.Value != "domain_admin" || g.DomainID != "abc" {
 		t.Fatalf("group = %+v, %v", g, err)
@@ -194,9 +195,6 @@ func TestGroupsAndFieldValues(t *testing.T) {
 		if _, err := ParseGroup(bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
-	}
-	if FieldValue("true") != true || FieldValue("3") != float64(3) || FieldValue("active") != "active" || FieldValue(`{"a":1}`) != `{"a":1}` {
-		t.Fatal("field values")
 	}
 }
 
@@ -355,5 +353,113 @@ func TestRunnerStopsALoopWithoutWaits(t *testing.T) {
 
 	if step.Failure == nil || step.Failure.Code != "loop_limit" {
 		t.Fatalf("step = %+v", step)
+	}
+}
+
+const waiting = `
+<bpmn:startEvent id="start"/>
+<bpmn:intermediateCatchEvent id="pause"><bpmn:timerEventDefinition><bpmn:timeDuration>PT2H</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent>
+<bpmn:serviceTask id="tell" dgu:action="notify" dgu:message="Time is up"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="pause"/>
+<bpmn:sequenceFlow id="f2" sourceRef="pause" targetRef="tell"/>
+<bpmn:sequenceFlow id="f3" sourceRef="tell" targetRef="ok"/>`
+
+func TestAWaitPausesTheRunUntilItsTimerFires(t *testing.T) {
+	now := time.Date(2026, 9, 30, 9, 0, 0, 0, time.UTC)
+	exec := &recorder{}
+	r := &Runner{Process: mustParse(t, waiting), Executor: exec, Now: func() time.Time { return now }}
+	st := NewState(nil)
+
+	step := r.Start(context.Background(), st)
+	if step.Done || len(step.NewTasks) != 1 || step.NewTasks[0].Node.ID != "pause" {
+		t.Fatalf("start = %+v", step)
+	}
+	wait := step.NewTasks[0]
+	if wait.DueAt == nil || !wait.DueAt.Equal(now.Add(2*time.Hour)) || wait.Timer != "pause" {
+		t.Fatalf("wait = %+v", wait)
+	}
+	if len(exec.ran) != 0 {
+		t.Fatalf("ran before the timer: %v", exec.ran)
+	}
+
+	step, err := r.FireTimer(context.Background(), st, wait.TokenID, "pause")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !step.Done || strings.Join(exec.ran, ",") != "tell" {
+		t.Fatalf("fire = %+v, ran %v", step, exec.ran)
+	}
+	if len(step.ReleasedWaits) != 1 || step.ReleasedWaits[0] != wait.TokenID || len(step.CancelledTasks) != 0 {
+		t.Fatalf("released = %v cancelled = %v", step.ReleasedWaits, step.CancelledTasks)
+	}
+	if len(st.Tokens) != 0 {
+		t.Fatalf("tokens left: %+v", st.Tokens)
+	}
+}
+
+func TestAWaitTimerCannotReleaseAnotherToken(t *testing.T) {
+	r := &Runner{Process: mustParse(t, approval), Executor: &recorder{}}
+	st := NewState(nil)
+	step := r.Start(context.Background(), st)
+	if _, err := r.FireTimer(context.Background(), st, step.NewTasks[0].TokenID, "review"); err == nil {
+		t.Fatal("a user task is not a timer")
+	}
+}
+
+func TestWaitValidation(t *testing.T) {
+	cases := map[string]string{
+		"timer_needs_duration":    `<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="w"><bpmn:timerEventDefinition/></bpmn:intermediateCatchEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="w"/><bpmn:sequenceFlow id="b" sourceRef="w" targetRef="e"/>`,
+		"invalid_duration":        `<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="w"><bpmn:timerEventDefinition><bpmn:timeDuration>soon</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="w"/><bpmn:sequenceFlow id="b" sourceRef="w" targetRef="e"/>`,
+		"wait_needs_one_outgoing": `<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="w"><bpmn:timerEventDefinition><bpmn:timeDuration>PT1H</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="w"/>`,
+		"unsupported_event":       `<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="w"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="w"/><bpmn:sequenceFlow id="b" sourceRef="w" targetRef="e"/>`,
+	}
+	for want, body := range cases {
+		_, err := Parse(diagram(body))
+		if !slices.Contains(codes(err), want) {
+			t.Errorf("%s: got %v", want, codes(err))
+		}
+	}
+}
+
+func TestNotifyRecipientsAreValidated(t *testing.T) {
+	for _, to := range []string{"", "initiator", "participants", "initiator, team:Data office", "role:steward,role:domain_admin@abc"} {
+		if code := validateAction(&Node{Action: ActionNotify, Args: map[string]string{"message": "hi", "to": to}}); code != "" {
+			t.Errorf("%q rejected: %s", to, code)
+		}
+	}
+	for _, to := range []string{"everyone", "initiator,role:owner", "user:bob"} {
+		if code := validateAction(&Node{Action: ActionNotify, Args: map[string]string{"message": "hi", "to": to}}); code != "invalid_recipients" {
+			t.Errorf("%q accepted: %q", to, code)
+		}
+	}
+}
+
+func TestEveryCataloguedActionValidates(t *testing.T) {
+	sample := map[string]string{"message": "hi", "field": "lifecycle", "value": "active", "tag": "pii"}
+	for _, spec := range Actions {
+		args := map[string]string{}
+		for _, arg := range spec.Args {
+			if arg.Required {
+				args[arg.Name] = sample[arg.Name]
+			}
+		}
+		if code := validateAction(&Node{Action: spec.ID, Args: args}); code != "" {
+			t.Errorf("%s: %s", spec.ID, code)
+		}
+		for _, arg := range spec.Args {
+			if !arg.Required {
+				continue
+			}
+			short := map[string]string{}
+			for k, v := range args {
+				if k != arg.Name {
+					short[k] = v
+				}
+			}
+			if code := validateAction(&Node{Action: spec.ID, Args: short}); code == "" {
+				t.Errorf("%s runs without its required %s", spec.ID, arg.Name)
+			}
+		}
 	}
 }
