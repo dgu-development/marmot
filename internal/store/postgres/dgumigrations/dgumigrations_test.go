@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/tern/v2/migrate"
 	"github.com/marmotdata/marmot/internal/store/postgres/dgumigrations"
 	"github.com/marmotdata/marmot/internal/store/postgres/pgtest"
 )
@@ -160,5 +161,46 @@ func TestStartingWorkflowsIsGrantedToAdminOnly(t *testing.T) {
 	}
 	if admin != 1 || user != 0 {
 		t.Fatalf("admin has %d and user has %d grants of workflows:start", admin, user)
+	}
+}
+
+func TestSearchUnaccentMigrationKeepsExistingDataSearchableAndReverses(t *testing.T) {
+	pool := pgtest.TempDB(t)
+	ctx := context.Background()
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Release()
+	m, err := migrate.NewMigrator(ctx, conn.Conn(), dgumigrations.VersionTable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.LoadMigrations(os.DirFS("migrations")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Back to the english vectors, with data indexed the old way.
+	if err := m.MigrateTo(ctx, 10); err != nil {
+		t.Fatalf("rolling back: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO glossary_terms (name, definition) VALUES ('Clasificación', 'Nivel de sensibilidad')`); err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	if err := pool.QueryRow(ctx, `SELECT search_text @@ websearch_to_tsquery('english', 'clasificacion') FROM search_index WHERE name = 'Clasificación'`).Scan(&found); err != nil || found {
+		t.Fatalf("after rollback an unaccented word matched (%v, %v): the vectors are not english again", found, err)
+	}
+
+	// Forward again: the existing row, and its search_index copy, become accent-insensitive.
+	if err := m.MigrateTo(ctx, 11); err != nil {
+		t.Fatalf("migrating up over existing data: %v", err)
+	}
+	for _, table := range []string{"glossary_terms", "search_index"} {
+		var n int
+		q := `SELECT count(*) FROM ` + table + ` WHERE name = 'Clasificación' AND search_text @@ websearch_to_tsquery('public.dgu_search', 'clasificacion sensibilidad')`
+		if err := pool.QueryRow(ctx, q).Scan(&n); err != nil || n != 1 {
+			t.Fatalf("%s: existing row not searchable without accents after the migration (%d, %v)", table, n, err)
+		}
 	}
 }

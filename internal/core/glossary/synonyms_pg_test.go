@@ -45,7 +45,7 @@ func TestSearchFindsATermBySynonym(t *testing.T) {
 
 	var indexed bool
 	if err := pool.QueryRow(ctx,
-		`SELECT search_text @@ websearch_to_tsquery('english', 'purchaser') FROM search_index WHERE type = 'glossary' AND entity_id = $1`,
+		`SELECT search_text @@ websearch_to_tsquery('public.dgu_search', 'purchaser') FROM search_index WHERE type = 'glossary' AND entity_id = $1`,
 		customer.ID).Scan(&indexed); err != nil || !indexed {
 		t.Fatalf("global search index misses the synonym: %v, %v", indexed, err)
 	}
