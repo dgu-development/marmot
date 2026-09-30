@@ -426,7 +426,7 @@ func (r *PostgresRepository) SearchPages(ctx context.Context, entityType EntityT
 	countQuery := `
 		SELECT COUNT(*)
 		FROM doc_pages
-		WHERE entity_type = $1 AND entity_id = $2 AND search_text @@ plainto_tsquery('english', $3)`
+		WHERE entity_type = $1 AND entity_id = $2 AND search_text @@ plainto_tsquery('public.dgu_search', $3)`
 
 	var total int
 	err := r.db.QueryRow(ctx, countQuery, entityType, entityID, queryStr).Scan(&total)
@@ -436,9 +436,9 @@ func (r *PostgresRepository) SearchPages(ctx context.Context, entityType EntityT
 
 	searchQuery := `
 		SELECT id, entity_type, entity_id, parent_id, position, title, emoji, content, created_by, created_at, updated_at,
-		       ts_rank(search_text, plainto_tsquery('english', $3)) as rank
+		       ts_rank(search_text, plainto_tsquery('public.dgu_search', $3)) as rank
 		FROM doc_pages
-		WHERE entity_type = $1 AND entity_id = $2 AND search_text @@ plainto_tsquery('english', $3)
+		WHERE entity_type = $1 AND entity_id = $2 AND search_text @@ plainto_tsquery('public.dgu_search', $3)
 		ORDER BY rank DESC, updated_at DESC
 		LIMIT $4 OFFSET $5`
 

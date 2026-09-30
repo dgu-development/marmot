@@ -207,7 +207,7 @@ func (r *PostgresRepository) FindSimilarTeamNames(ctx context.Context, searchTer
 	query := `
 		SELECT name
 		FROM teams
-		WHERE name ILIKE $1
+		WHERE dgu_unaccent(name) ILIKE dgu_unaccent($1)
 		ORDER BY name
 		LIMIT $2`
 
@@ -907,7 +907,7 @@ func (r *PostgresRepository) SearchOwners(ctx context.Context, query string, lim
 		SELECT 'user' as type, u.id, u.name, u.username, ui.provider_email, u.profile_picture
 		FROM users u
 		LEFT JOIN user_identities ui ON u.id = ui.user_id
-		WHERE u.name ILIKE '%' || $1 || '%' OR u.username ILIKE '%' || $1 || '%' OR u.id::text = $1
+		WHERE dgu_unaccent(u.name) ILIKE '%' || dgu_unaccent($1) || '%' OR dgu_unaccent(u.username) ILIKE '%' || dgu_unaccent($1) || '%' OR u.id::text = $1
 		ORDER BY u.name
 		LIMIT $2`
 
@@ -929,7 +929,7 @@ func (r *PostgresRepository) SearchOwners(ctx context.Context, query string, lim
 	teamsQuery := `
 		SELECT 'team' as type, id, name, NULL as username, NULL as email, NULL as profile_picture
 		FROM teams
-		WHERE name ILIKE '%' || $1 || '%'
+		WHERE dgu_unaccent(name) ILIKE '%' || dgu_unaccent($1) || '%'
 		ORDER BY name
 		LIMIT $2`
 

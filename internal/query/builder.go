@@ -76,7 +76,7 @@ func (b *Builder) BuildSQL(q *Query, baseQuery string) (string, []interface{}, e
 	// Then handle free text search
 	if q.FreeText != "" {
 		paramCount++
-		conditions = append(conditions, fmt.Sprintf("(search_text @@ websearch_to_tsquery('english', $%d) OR word_similarity($%d, name) > 0.3)", paramCount, paramCount))
+		conditions = append(conditions, fmt.Sprintf("(search_text @@ websearch_to_tsquery('public.dgu_search', $%d) OR word_similarity(dgu_unaccent($%d), dgu_unaccent(name)) > 0.3)", paramCount, paramCount))
 		params = append(params, q.FreeText)
 	}
 
@@ -265,7 +265,7 @@ func (b *Builder) buildFilterCondition(filter Filter, paramCount int) (string, [
 
 	// Handle special case for freetext
 	if filter.Field[0] == "freetext" {
-		condition = fmt.Sprintf("(search_text @@ websearch_to_tsquery('english', $%d) OR word_similarity($%d, name) > 0.3)", paramCount, paramCount)
+		condition = fmt.Sprintf("(search_text @@ websearch_to_tsquery('public.dgu_search', $%d) OR word_similarity(dgu_unaccent($%d), dgu_unaccent(name)) > 0.3)", paramCount, paramCount)
 		params = append(params, filter.Value)
 		return condition, params, paramCount, nil
 	}
@@ -308,8 +308,8 @@ func (b *Builder) buildFilterCondition(filter Filter, paramCount int) (string, [
 			return "", nil, paramCount, fmt.Errorf("wildcard operator not supported for provider fields")
 		}
 		value := strings.ReplaceAll(fmt.Sprintf("%v", filter.Value), "*", "%")
-		// Use ILIKE for case-insensitive wildcard matching
-		condition = fmt.Sprintf("%s ILIKE $%d", columnRef, paramCount)
+		// Case- and accent-insensitive: "orden*" finds "Órdenes".
+		condition = fmt.Sprintf("dgu_unaccent(%s) ILIKE dgu_unaccent($%d)", columnRef, paramCount)
 		params = append(params, value)
 
 	case OpEquals:
@@ -347,11 +347,11 @@ func (b *Builder) buildFilterCondition(filter Filter, paramCount int) (string, [
 	case OpContains:
 		if filter.FieldType == FieldProvider {
 			// For array fields, check if any element contains the value (must use unnest for partial match)
-			condition = fmt.Sprintf("EXISTS (SELECT 1 FROM unnest(%s) AS elem WHERE lower(elem) LIKE lower($%d))", columnRef, paramCount)
+			condition = fmt.Sprintf("EXISTS (SELECT 1 FROM unnest(%s) AS elem WHERE dgu_unaccent(lower(elem)) LIKE dgu_unaccent(lower($%d)))", columnRef, paramCount)
 			params = append(params, fmt.Sprintf("%%%v%%", filter.Value))
 		} else {
-			// Use ILIKE for partial matching (can't use functional index for contains)
-			condition = fmt.Sprintf("%s ILIKE $%d", columnRef, paramCount)
+			// Partial match ignoring case and accents (no index can serve a contains).
+			condition = fmt.Sprintf("dgu_unaccent(%s) ILIKE dgu_unaccent($%d)", columnRef, paramCount)
 			params = append(params, fmt.Sprintf("%%%v%%", filter.Value))
 		}
 

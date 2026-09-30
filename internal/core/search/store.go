@@ -276,12 +276,12 @@ func (r *PostgresRepository) buildPrefixSearchQuery(searchQuery string, filter F
 		SELECT
 			type, entity_id, name, description, url_path,
 			CASE
-				WHEN lower(name) = $%d THEN 1000.0
+				WHEN dgu_unaccent(lower(name)) = dgu_unaccent($%d) THEN 1000.0
 				ELSE 500.0
 			END::real as rank,
 			updated_at, asset_type, primary_provider, providers, tags, mrn, created_by, created_at
 		FROM search_index
-		WHERE (lower(name) = $%d OR lower(name) LIKE $%d || '%%')
+		WHERE (dgu_unaccent(lower(name)) = dgu_unaccent($%d) OR dgu_unaccent(lower(name)) LIKE dgu_unaccent($%d) || '%%')
 		%s
 		ORDER BY rank DESC, updated_at DESC
 		LIMIT $%d OFFSET $%d
@@ -315,10 +315,10 @@ func (r *PostgresRepository) buildFuzzySearchQuery(searchQuery string, filter Fi
 
 	sqlQuery := fmt.Sprintf(`
 		SELECT type, entity_id, name, description, url_path,
-		       (word_similarity($%d, name) * 100.0)::real as rank,
+		       (word_similarity(dgu_unaccent($%d), dgu_unaccent(name)) * 100.0)::real as rank,
 		       updated_at, asset_type, primary_provider, providers, tags, mrn, created_by, created_at
 		FROM search_index
-		WHERE name %%> $%d
+		WHERE dgu_unaccent(name) %%> dgu_unaccent($%d)
 		%s
 		ORDER BY rank DESC, updated_at DESC
 		LIMIT $%d OFFSET $%d
@@ -358,13 +358,13 @@ func (r *PostgresRepository) buildFullTextSearchQuery(searchQuery string, filter
 			SELECT entity_id, type, name, description, url_path, search_text,
 			       updated_at, asset_type, primary_provider, providers, tags, mrn, created_by, created_at
 			FROM search_index
-			WHERE search_text @@ websearch_to_tsquery('english', $%d)
+			WHERE search_text @@ websearch_to_tsquery('public.dgu_search', $%d)
 			%s
 			LIMIT 1000
 		)
 		SELECT
 			type, entity_id, name, description, url_path,
-			ts_rank_cd(search_text, websearch_to_tsquery('english', $%d), 32)::real as rank,
+			ts_rank_cd(search_text, websearch_to_tsquery('public.dgu_search', $%d), 32)::real as rank,
 			updated_at, asset_type, primary_provider, providers, tags, mrn, created_by, created_at
 		FROM candidates
 		ORDER BY rank DESC, updated_at DESC

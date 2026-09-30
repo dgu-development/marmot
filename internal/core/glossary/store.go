@@ -458,7 +458,7 @@ func (r *PostgresRepository) Search(ctx context.Context, filter SearchFilter) (*
 
 	if filter.Query != "" {
 		// Use both full-text search AND ILIKE for better matching (especially acronyms)
-		conditions = append(conditions, fmt.Sprintf("(search_text @@ plainto_tsquery('english', $%d) OR name ILIKE $%d)", argCount, argCount+1))
+		conditions = append(conditions, fmt.Sprintf("(search_text @@ plainto_tsquery('public.dgu_search', $%d) OR dgu_unaccent(name) ILIKE dgu_unaccent($%d))", argCount, argCount+1))
 		args = append(args, filter.Query)
 		args = append(args, "%"+filter.Query+"%")
 		argCount += 2

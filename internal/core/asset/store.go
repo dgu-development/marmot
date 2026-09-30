@@ -482,7 +482,7 @@ func (r *PostgresRepository) GetMetadataFieldsWithContext(ctx context.Context, q
 			value
 		FROM (
 			SELECT metadata FROM assets
-			WHERE search_text @@ websearch_to_tsquery('english', $1)
+			WHERE search_text @@ websearch_to_tsquery('public.dgu_search', $1)
 			AND is_stub = FALSE
 			AND metadata IS NOT NULL
 			AND metadata != '{}'::jsonb
@@ -500,7 +500,7 @@ func (r *PostgresRepository) GetMetadataFieldsWithContext(ctx context.Context, q
 			value
 		FROM glossary_terms,
 			jsonb_each(metadata)
-		WHERE search_text @@ websearch_to_tsquery('english', $1)
+		WHERE search_text @@ websearch_to_tsquery('public.dgu_search', $1)
 			AND metadata IS NOT NULL
 			AND metadata != '{}'::jsonb
 			AND jsonb_typeof(metadata) = 'object'
@@ -515,7 +515,7 @@ func (r *PostgresRepository) GetMetadataFieldsWithContext(ctx context.Context, q
 			value
 		FROM teams,
 			jsonb_each(metadata)
-		WHERE search_text @@ websearch_to_tsquery('english', $1)
+		WHERE search_text @@ websearch_to_tsquery('public.dgu_search', $1)
 			AND metadata IS NOT NULL
 			AND metadata != '{}'::jsonb
 			AND jsonb_typeof(metadata) = 'object'
@@ -594,7 +594,7 @@ func (r *PostgresRepository) GetMetadataValues(ctx context.Context, field string
 				COUNT(DISTINCT id) as count
 			FROM assets
 			WHERE is_stub = FALSE
-			AND ($1 = '' OR type ILIKE '%' || $1 || '%')
+			AND ($1 = '' OR dgu_unaccent(type) ILIKE '%' || dgu_unaccent($1) || '%')
 			GROUP BY type
 			ORDER BY count DESC, value ASC
 			LIMIT $2`
@@ -609,7 +609,7 @@ func (r *PostgresRepository) GetMetadataValues(ctx context.Context, field string
 			FROM assets
 			WHERE is_stub = FALSE
 			AND ($1 = '' OR EXISTS (
-				SELECT 1 FROM unnest(providers) AS p WHERE p ILIKE '%' || $1 || '%'
+				SELECT 1 FROM unnest(providers) AS p WHERE dgu_unaccent(p) ILIKE '%' || dgu_unaccent($1) || '%'
 			))
 			GROUP BY value
 			ORDER BY count DESC, value ASC
@@ -624,7 +624,7 @@ func (r *PostgresRepository) GetMetadataValues(ctx context.Context, field string
 				COUNT(DISTINCT id) as count
 			FROM assets
 			WHERE is_stub = FALSE
-			AND ($1 = '' OR name ILIKE '%' || $1 || '%')
+			AND ($1 = '' OR dgu_unaccent(name) ILIKE '%' || dgu_unaccent($1) || '%')
 			GROUP BY name
 			ORDER BY count DESC, value ASC
 			LIMIT $2`
@@ -673,7 +673,7 @@ func (r *PostgresRepository) GetMetadataValues(ctx context.Context, field string
 			FROM assets
 			WHERE is_stub = FALSE
 			AND metadata ? $1
-			AND ($2 = '' OR (metadata->$1)::text ILIKE '%' || $2 || '%')
+			AND ($2 = '' OR dgu_unaccent((metadata->$1)::text) ILIKE '%' || dgu_unaccent($2) || '%')
 			GROUP BY value
 			ORDER BY count DESC, value ASC
 			LIMIT $3`
@@ -705,7 +705,7 @@ func (r *PostgresRepository) GetMetadataValuesWithContext(ctx context.Context, f
 		query := `
 			WITH matching_assets AS (
 				SELECT id FROM assets
-				WHERE search_text @@ websearch_to_tsquery('english', $1) AND is_stub = FALSE
+				WHERE search_text @@ websearch_to_tsquery('public.dgu_search', $1) AND is_stub = FALSE
 			)
 			SELECT
 				a.type as value,
@@ -713,7 +713,7 @@ func (r *PostgresRepository) GetMetadataValuesWithContext(ctx context.Context, f
 			FROM assets a
 			JOIN matching_assets ma ON a.id = ma.id
 			WHERE is_stub = FALSE
-			AND ($2 = '' OR a.type ILIKE '%' || $2 || '%')
+			AND ($2 = '' OR dgu_unaccent(a.type) ILIKE '%' || dgu_unaccent($2) || '%')
 			GROUP BY a.type
 			ORDER BY count DESC, value ASC
 			LIMIT $3`
@@ -724,7 +724,7 @@ func (r *PostgresRepository) GetMetadataValuesWithContext(ctx context.Context, f
 		query := `
 			WITH matching_assets AS (
 				SELECT id FROM assets
-				WHERE search_text @@ websearch_to_tsquery('english', $1) AND is_stub = FALSE
+				WHERE search_text @@ websearch_to_tsquery('public.dgu_search', $1) AND is_stub = FALSE
 			)
 			SELECT
 				unnest(a.providers) as value,
@@ -733,7 +733,7 @@ func (r *PostgresRepository) GetMetadataValuesWithContext(ctx context.Context, f
 			JOIN matching_assets ma ON a.id = ma.id
 			WHERE is_stub = FALSE
 			AND ($2 = '' OR EXISTS (
-				SELECT 1 FROM unnest(a.providers) AS p WHERE p ILIKE '%' || $2 || '%'
+				SELECT 1 FROM unnest(a.providers) AS p WHERE dgu_unaccent(p) ILIKE '%' || dgu_unaccent($2) || '%'
 			))
 			GROUP BY value
 			ORDER BY count DESC, value ASC
@@ -745,7 +745,7 @@ func (r *PostgresRepository) GetMetadataValuesWithContext(ctx context.Context, f
 		query := `
 			WITH matching_assets AS (
 				SELECT id FROM assets
-				WHERE search_text @@ websearch_to_tsquery('english', $1) AND is_stub = FALSE
+				WHERE search_text @@ websearch_to_tsquery('public.dgu_search', $1) AND is_stub = FALSE
 			)
 			SELECT
 				a.name as value,
@@ -753,7 +753,7 @@ func (r *PostgresRepository) GetMetadataValuesWithContext(ctx context.Context, f
 			FROM assets a
 			JOIN matching_assets ma ON a.id = ma.id
 			WHERE is_stub = FALSE
-			AND ($2 = '' OR a.name ILIKE '%' || $2 || '%')
+			AND ($2 = '' OR dgu_unaccent(a.name) ILIKE '%' || dgu_unaccent($2) || '%')
 			GROUP BY a.name
 			ORDER BY count DESC, value ASC
 			LIMIT $3`
@@ -763,15 +763,15 @@ func (r *PostgresRepository) GetMetadataValuesWithContext(ctx context.Context, f
 		query := `
 			WITH matching_assets AS (
 				SELECT id FROM assets
-				WHERE search_text @@ websearch_to_tsquery('english', $1) AND is_stub = FALSE
+				WHERE search_text @@ websearch_to_tsquery('public.dgu_search', $1) AND is_stub = FALSE
 			),
 			matching_glossary AS (
 				SELECT id FROM glossary_terms
-				WHERE search_text @@ websearch_to_tsquery('english', $1) AND deleted_at IS NULL
+				WHERE search_text @@ websearch_to_tsquery('public.dgu_search', $1) AND deleted_at IS NULL
 			),
 			matching_teams AS (
 				SELECT id FROM teams
-				WHERE search_text @@ websearch_to_tsquery('english', $1)
+				WHERE search_text @@ websearch_to_tsquery('public.dgu_search', $1)
 			),
 			MetadataValues AS (
 				SELECT
@@ -813,8 +813,8 @@ func (r *PostgresRepository) GetMetadataValuesWithContext(ctx context.Context, f
 			AND (
 				$3 = '' OR
 				CASE
-					WHEN jsonb_typeof(value) = 'string' THEN value::text ILIKE $3 || '%'
-					WHEN jsonb_typeof(value) IN ('number', 'boolean') THEN value::text ILIKE $3 || '%'
+					WHEN jsonb_typeof(value) = 'string' THEN dgu_unaccent(value::text) ILIKE dgu_unaccent($3) || '%'
+					WHEN jsonb_typeof(value) IN ('number', 'boolean') THEN dgu_unaccent(value::text) ILIKE dgu_unaccent($3) || '%'
 					ELSE FALSE
 				END
 			)
@@ -937,7 +937,7 @@ func (r *PostgresRepository) Search(ctx context.Context, filter SearchFilter, ca
 		return nil, 0, AvailableFilters{}, fmt.Errorf("%w: %v", ErrInvalidQuery, err)
 	}
 
-	baseQuery := `SELECT *, ts_rank_cd(search_text, websearch_to_tsquery('english', $1), 32) as search_rank, word_similarity($1, name) as name_similarity FROM assets`
+	baseQuery := `SELECT *, ts_rank_cd(search_text, websearch_to_tsquery('public.dgu_search', $1), 32) as search_rank, word_similarity(dgu_unaccent($1), dgu_unaccent(name)) as name_similarity FROM assets`
 	query, params, err := builder.BuildSQL(searchQuery, baseQuery)
 	if err != nil {
 		return nil, 0, AvailableFilters{}, fmt.Errorf("building query: %w", err)
@@ -1048,7 +1048,7 @@ func (r *PostgresRepository) Search(ctx context.Context, filter SearchFilter, ca
 		}
 
 		if filter.Query != "" && !strings.HasPrefix(filter.Query, "@metadata") {
-			countQuery += " AND search_text @@ websearch_to_tsquery('english', $1)"
+			countQuery += " AND search_text @@ websearch_to_tsquery('public.dgu_search', $1)"
 			countParams = append(countParams, filter.Query)
 		} else if filter.Query != "" {
 			searchQ, err := parser.Parse(filter.Query)

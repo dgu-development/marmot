@@ -240,7 +240,7 @@ func (r *PostgresRepository) ListUsers(ctx context.Context, filter Filter) ([]*U
 	argNum := 1
 
 	if filter.Query != "" {
-		conditions = append(conditions, fmt.Sprintf("(username ILIKE $%d OR name ILIKE $%d)", argNum, argNum))
+		conditions = append(conditions, fmt.Sprintf("(dgu_unaccent(username) ILIKE dgu_unaccent($%d) OR dgu_unaccent(name) ILIKE dgu_unaccent($%d))", argNum, argNum))
 		args = append(args, "%"+filter.Query+"%")
 		argNum++
 	}
@@ -580,7 +580,7 @@ func (r *PostgresRepository) FindSimilarUsernames(ctx context.Context, searchTer
 	query := `
 		SELECT username
 		FROM users
-		WHERE username ILIKE $1
+		WHERE dgu_unaccent(username) ILIKE dgu_unaccent($1)
 		ORDER BY username
 		LIMIT $2`
 
