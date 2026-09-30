@@ -7,9 +7,13 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/marmotdata/marmot/internal/api/v1/common"
+	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/auth"
+	"github.com/marmotdata/marmot/internal/core/domain"
+	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/user"
 	"github.com/marmotdata/marmot/internal/core/workflow"
 	"github.com/marmotdata/marmot/pkg/config"
@@ -38,6 +42,7 @@ func (h *Handler) Routes() []common.Route {
 		common.RequirePermission(h.userService, "workflows", "view"),
 	}
 	return []common.Route{
+		{Path: "/api/v1/workflows/capabilities", Method: http.MethodGet, Handler: h.capabilities, Middleware: view},
 		{Path: "/api/v1/workflows/definitions", Method: http.MethodGet, Handler: h.listDefinitions, Middleware: view},
 		{Path: "/api/v1/workflows/definitions", Method: http.MethodPost, Handler: h.createDefinition, Middleware: view},
 		{Path: "/api/v1/workflows/definitions/validate", Method: http.MethodPost, Handler: h.validate, Middleware: view},
@@ -62,6 +67,8 @@ type ErrorResponse struct {
 	Error  string           `json:"error"`
 	Code   string           `json:"code"`
 	Issues []workflow.Issue `json:"issues,omitempty"`
+	// Fields lists the governed fields whose values the metamodel refused.
+	Fields []metamodel.Violation `json:"fields,omitempty"`
 }
 
 func respondCode(w http.ResponseWriter, status int, code, message string) {
@@ -70,9 +77,16 @@ func respondCode(w http.ResponseWriter, status int, code, message string) {
 
 func respondErr(w http.ResponseWriter, err error) {
 	var invalid *workflow.ValidationError
+	var fields *metamodel.ValidationError
 	switch {
 	case errors.As(err, &invalid):
 		common.RespondJSON(w, http.StatusBadRequest, ErrorResponse{Error: "The diagram cannot run", Code: "invalid_diagram", Issues: invalid.Issues})
+	case errors.As(err, &fields):
+		common.RespondJSON(w, http.StatusBadRequest, ErrorResponse{Error: "The asset refused the field values", Code: "invalid_fields", Fields: fields.Fields})
+	case errors.Is(err, asset.ErrVersionConflict):
+		respondCode(w, http.StatusConflict, "conflict", "The asset changed meanwhile; reload and try again")
+	case errors.Is(err, domain.ErrForbidden):
+		respondCode(w, http.StatusForbidden, "forbidden", "Not allowed in this domain")
 	case errors.Is(err, workflow.ErrInvalidInput):
 		respondCode(w, http.StatusBadRequest, "invalid_input", err.Error())
 	case errors.Is(err, workflow.ErrForbidden):
@@ -107,6 +121,16 @@ func principal(r *http.Request) auth.Principal {
 // DefinitionRequest carries a BPMN 2.0 document.
 type DefinitionRequest struct {
 	BPMN string `json:"bpmn"`
+}
+
+// @Summary Workflow engine capabilities
+// @Description The action catalogue, the optional features this server runs and what the caller may do. A 404 means the engine is off.
+// @Tags workflows
+// @Produce json
+// @Success 200 {object} workflow.Capabilities
+// @Router /api/v1/workflows/capabilities [get]
+func (h *Handler) capabilities(w http.ResponseWriter, r *http.Request) {
+	common.RespondJSON(w, http.StatusOK, h.service.Capabilities(principal(r)))
 }
 
 // @Summary List workflow definitions
@@ -288,22 +312,39 @@ func (h *Handler) retire(w http.ResponseWriter, r *http.Request) {
 }
 
 // StartRequest starts a run of a published definition.
+// Supply either target (one asset) or query_expression (batch, same language as asset rules).
 type StartRequest struct {
-	DefinitionID string           `json:"definition_id"`
-	Target       *workflow.Target `json:"target,omitempty"`
+	DefinitionID    string           `json:"definition_id"`
+	Target          *workflow.Target `json:"target,omitempty"`
+	QueryExpression string           `json:"query_expression,omitempty"`
+	Limit           int              `json:"limit,omitempty"`
 }
 
 // @Summary Start a workflow run
 // @Tags workflows
 // @Accept json
 // @Produce json
-// @Param run body StartRequest true "Definition and optional target asset"
+// @Param run body StartRequest true "Definition and optional target asset or query_expression batch"
 // @Success 201 {object} workflow.Instance
+// @Success 201 {object} workflow.StartBatchResult "When query_expression is set"
 // @Failure 409 {object} ErrorResponse "Not published"
 // @Router /api/v1/workflows/instances [post]
 func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 	var req StartRequest
 	if !decode(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.QueryExpression) != "" {
+		if req.Target != nil && req.Target.ID != "" {
+			respondCode(w, http.StatusBadRequest, "invalid_input", "Use either target or query_expression, not both")
+			return
+		}
+		batch, err := h.service.StartQuery(r.Context(), principal(r), req.DefinitionID, req.QueryExpression, req.Limit)
+		if err != nil {
+			respondErr(w, err)
+			return
+		}
+		common.RespondJSON(w, http.StatusCreated, batch)
 		return
 	}
 	in, err := h.service.Start(r.Context(), principal(r), req.DefinitionID, req.Target)
@@ -384,10 +425,12 @@ func (h *Handler) myTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 // CompleteRequest decides a task. Decision becomes the `decision` variable
-// the gateways read.
+// the gateways read. Fields supplies governed values when the user task
+// declares dgu:formFields.
 type CompleteRequest struct {
-	Decision string `json:"decision"`
-	Comment  string `json:"comment"`
+	Decision string         `json:"decision"`
+	Comment  string         `json:"comment"`
+	Fields   map[string]any `json:"fields,omitempty"`
 }
 
 // @Summary Complete a workflow task
@@ -396,7 +439,7 @@ type CompleteRequest struct {
 // @Accept json
 // @Produce json
 // @Param id path string true "Task ID"
-// @Param decision body CompleteRequest true "Decision and comment"
+// @Param decision body CompleteRequest true "Decision, comment and optional form fields"
 // @Success 200 {object} workflow.Instance
 // @Failure 403 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse "Already decided or the run ended"
@@ -406,7 +449,7 @@ func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	in, err := h.service.CompleteTask(r.Context(), principal(r), r.PathValue("id"), req.Decision, req.Comment)
+	in, err := h.service.CompleteTask(r.Context(), principal(r), r.PathValue("id"), req.Decision, req.Comment, req.Fields)
 	if err != nil {
 		respondErr(w, err)
 		return

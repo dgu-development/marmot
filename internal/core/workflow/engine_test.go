@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -84,11 +85,13 @@ func TestParseRejectsWhatWouldNotRun(t *testing.T) {
 	}{
 		"script":            {`<bpmn:startEvent id="s"/><bpmn:scriptTask id="x"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="e"/>`, "script_not_allowed"},
 		"subprocess":        {`<bpmn:startEvent id="s"/><bpmn:subProcess id="x"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="e"/>`, "unsupported_element"},
-		"timer start":       {`<bpmn:startEvent id="s"><bpmn:timerEventDefinition/></bpmn:startEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="e"/>`, "unsupported_event"},
+		"message start":     {`<bpmn:startEvent id="s"><bpmn:messageEventDefinition/></bpmn:startEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="e"/>`, "unsupported_event"},
+		"timer start empty": {`<bpmn:startEvent id="s"><bpmn:timerEventDefinition/></bpmn:startEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="e"/>`, "timer_needs_cycle"},
 		"no assignee":       {`<bpmn:startEvent id="s"/><bpmn:userTask id="u"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="u"/><bpmn:sequenceFlow id="b" sourceRef="u" targetRef="e"/>`, "task_needs_assignment"},
 		"bad group":         {`<bpmn:startEvent id="s"/><bpmn:userTask id="u" camunda:candidateGroups="role:king"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="u"/><bpmn:sequenceFlow id="b" sourceRef="u" targetRef="e"/>`, "invalid_candidate_group"},
 		"no action":         {`<bpmn:startEvent id="s"/><bpmn:serviceTask id="x"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="x"/><bpmn:sequenceFlow id="b" sourceRef="x" targetRef="e"/>`, "service_needs_action"},
 		"code action":       {`<bpmn:startEvent id="s"/><bpmn:serviceTask id="x" dgu:action="exec"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="x"/><bpmn:sequenceFlow id="b" sourceRef="x" targetRef="e"/>`, "unknown_action"},
+		"bad form field":    {`<bpmn:startEvent id="s"/><bpmn:userTask id="u" camunda:assignee="bob" dgu:formFields="bad-id!"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="u"/><bpmn:sequenceFlow id="b" sourceRef="u" targetRef="e"/>`, "invalid_form_field"},
 		"no end":            {`<bpmn:startEvent id="s"/>`, "no_end"},
 		"two starts":        {`<bpmn:startEvent id="s"/><bpmn:startEvent id="t"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="e"/><bpmn:sequenceFlow id="b" sourceRef="t" targetRef="e"/>`, "several_starts"},
 		"dangling":          {`<bpmn:startEvent id="s"/><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="nowhere"/>`, "flow_dangling"},
@@ -129,6 +132,26 @@ func TestParseRejectsDocumentsThatAreNotOneBPMNProcess(t *testing.T) {
 	}
 }
 
+func TestParseAcceptsFormFieldsAndNewActions(t *testing.T) {
+	body := `
+<bpmn:startEvent id="start"/>
+<bpmn:userTask id="review" camunda:assignee="bob" dgu:formFields="classification,lifecycle"/>
+<bpmn:serviceTask id="untag" dgu:action="remove_tag" dgu:tag="draft"/>
+<bpmn:serviceTask id="clear" dgu:action="clear_field" dgu:field="next_review"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+<bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="untag"/>
+<bpmn:sequenceFlow id="f3" sourceRef="untag" targetRef="clear"/>
+<bpmn:sequenceFlow id="f4" sourceRef="clear" targetRef="ok"/>`
+	p := mustParse(t, body)
+	if got := strings.Join(p.Nodes["review"].FormFields, ","); got != "classification,lifecycle" {
+		t.Fatalf("form fields = %v", p.Nodes["review"].FormFields)
+	}
+	if p.Nodes["untag"].Action != ActionRemoveTag || p.Nodes["clear"].Action != ActionClearField {
+		t.Fatalf("actions = %s / %s", p.Nodes["untag"].Action, p.Nodes["clear"].Action)
+	}
+}
+
 func TestConditions(t *testing.T) {
 	c, err := ParseCondition(`${decision == 'approved' && level != 2}`)
 	if err != nil {
@@ -161,7 +184,7 @@ func TestDurations(t *testing.T) {
 	}
 }
 
-func TestGroupsAndFieldValues(t *testing.T) {
+func TestGroups(t *testing.T) {
 	g, err := ParseGroup("role:domain_admin@abc")
 	if err != nil || g.Kind != GroupRole || g.Value != "domain_admin" || g.DomainID != "abc" {
 		t.Fatalf("group = %+v, %v", g, err)
@@ -173,9 +196,6 @@ func TestGroupsAndFieldValues(t *testing.T) {
 		if _, err := ParseGroup(bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
-	}
-	if FieldValue("true") != true || FieldValue("3") != float64(3) || FieldValue("active") != "active" || FieldValue(`{"a":1}`) != `{"a":1}` {
-		t.Fatal("field values")
 	}
 }
 
@@ -334,5 +354,197 @@ func TestRunnerStopsALoopWithoutWaits(t *testing.T) {
 
 	if step.Failure == nil || step.Failure.Code != "loop_limit" {
 		t.Fatalf("step = %+v", step)
+	}
+}
+
+const waiting = `
+<bpmn:startEvent id="start"/>
+<bpmn:intermediateCatchEvent id="pause"><bpmn:timerEventDefinition><bpmn:timeDuration>PT2H</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent>
+<bpmn:serviceTask id="tell" dgu:action="notify" dgu:message="Time is up"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="pause"/>
+<bpmn:sequenceFlow id="f2" sourceRef="pause" targetRef="tell"/>
+<bpmn:sequenceFlow id="f3" sourceRef="tell" targetRef="ok"/>`
+
+func TestAWaitPausesTheRunUntilItsTimerFires(t *testing.T) {
+	now := time.Date(2026, 9, 30, 9, 0, 0, 0, time.UTC)
+	exec := &recorder{}
+	r := &Runner{Process: mustParse(t, waiting), Executor: exec, Now: func() time.Time { return now }}
+	st := NewState(nil)
+
+	step := r.Start(context.Background(), st)
+	if step.Done || len(step.NewTasks) != 1 || step.NewTasks[0].Node.ID != "pause" {
+		t.Fatalf("start = %+v", step)
+	}
+	wait := step.NewTasks[0]
+	if wait.DueAt == nil || !wait.DueAt.Equal(now.Add(2*time.Hour)) || wait.Timer != "pause" {
+		t.Fatalf("wait = %+v", wait)
+	}
+	if len(exec.ran) != 0 {
+		t.Fatalf("ran before the timer: %v", exec.ran)
+	}
+
+	step, err := r.FireTimer(context.Background(), st, wait.TokenID, "pause")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !step.Done || strings.Join(exec.ran, ",") != "tell" {
+		t.Fatalf("fire = %+v, ran %v", step, exec.ran)
+	}
+	if len(step.ReleasedWaits) != 1 || step.ReleasedWaits[0] != wait.TokenID || len(step.CancelledTasks) != 0 {
+		t.Fatalf("released = %v cancelled = %v", step.ReleasedWaits, step.CancelledTasks)
+	}
+	if len(st.Tokens) != 0 {
+		t.Fatalf("tokens left: %+v", st.Tokens)
+	}
+}
+
+func TestAWaitTimerCannotReleaseAnotherToken(t *testing.T) {
+	r := &Runner{Process: mustParse(t, approval), Executor: &recorder{}}
+	st := NewState(nil)
+	step := r.Start(context.Background(), st)
+	if _, err := r.FireTimer(context.Background(), st, step.NewTasks[0].TokenID, "review"); err == nil {
+		t.Fatal("a user task is not a timer")
+	}
+}
+
+func TestWaitValidation(t *testing.T) {
+	cases := map[string]string{
+		"timer_needs_duration":    `<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="w"><bpmn:timerEventDefinition/></bpmn:intermediateCatchEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="w"/><bpmn:sequenceFlow id="b" sourceRef="w" targetRef="e"/>`,
+		"invalid_duration":        `<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="w"><bpmn:timerEventDefinition><bpmn:timeDuration>soon</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="w"/><bpmn:sequenceFlow id="b" sourceRef="w" targetRef="e"/>`,
+		"wait_needs_one_outgoing": `<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="w"><bpmn:timerEventDefinition><bpmn:timeDuration>PT1H</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="w"/>`,
+		"unsupported_event":       `<bpmn:startEvent id="s"/><bpmn:intermediateCatchEvent id="w"><bpmn:messageEventDefinition/></bpmn:intermediateCatchEvent><bpmn:endEvent id="e"/><bpmn:sequenceFlow id="a" sourceRef="s" targetRef="w"/><bpmn:sequenceFlow id="b" sourceRef="w" targetRef="e"/>`,
+	}
+	for want, body := range cases {
+		_, err := Parse(diagram(body))
+		if !slices.Contains(codes(err), want) {
+			t.Errorf("%s: got %v", want, codes(err))
+		}
+	}
+}
+
+func TestNotifyRecipientsAreValidated(t *testing.T) {
+	for _, to := range []string{"", "initiator", "participants", "initiator, team:Data office", "role:steward,role:domain_admin@abc"} {
+		if code := validateAction(&Node{Action: ActionNotify, Args: map[string]string{"message": "hi", "to": to}}); code != "" {
+			t.Errorf("%q rejected: %s", to, code)
+		}
+	}
+	for _, to := range []string{"everyone", "initiator,role:owner", "user:bob"} {
+		if code := validateAction(&Node{Action: ActionNotify, Args: map[string]string{"message": "hi", "to": to}}); code != "invalid_recipients" {
+			t.Errorf("%q accepted: %q", to, code)
+		}
+	}
+}
+
+func TestEveryCataloguedActionValidates(t *testing.T) {
+	sample := map[string]string{"message": "hi", "field": "lifecycle", "value": "active", "tag": "pii", "term": "Customer"}
+	for _, spec := range Actions {
+		args := map[string]string{}
+		for _, arg := range spec.Args {
+			if arg.Required {
+				args[arg.Name] = sample[arg.Name]
+			}
+		}
+		if code := validateAction(&Node{Action: spec.ID, Args: args}); code != "" {
+			t.Errorf("%s: %s", spec.ID, code)
+		}
+		for _, arg := range spec.Args {
+			if !arg.Required {
+				continue
+			}
+			short := map[string]string{}
+			for k, v := range args {
+				if k != arg.Name {
+					short[k] = v
+				}
+			}
+			if code := validateAction(&Node{Action: spec.ID, Args: short}); code == "" {
+				t.Errorf("%s runs without its required %s", spec.ID, arg.Name)
+			}
+		}
+	}
+}
+
+const remindable = `
+<bpmn:startEvent id="start"/>
+<bpmn:userTask id="review" name="Review" camunda:candidateGroups="role:steward"/>
+<bpmn:boundaryEvent id="late" attachedToRef="review" dgu:remind="%s"><bpmn:timerEventDefinition><bpmn:timeDuration>P2D</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:boundaryEvent>
+<bpmn:endEvent id="ok"/><bpmn:endEvent id="late_end"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+<bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="ok"/>
+<bpmn:sequenceFlow id="f3" sourceRef="late" targetRef="late_end"/>`
+
+func TestAReminderIsScheduledBeforeTheTimerAndValidated(t *testing.T) {
+	now := time.Date(2026, 9, 30, 9, 0, 0, 0, time.UTC)
+	p, err := Parse(diagram(strings.Replace(remindable, "%s", "PT12H", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	step := (&Runner{Process: p, Executor: &recorder{}, Now: func() time.Time { return now }}).Start(context.Background(), NewState(nil))
+	task := step.NewTasks[0]
+	if task.RemindAt == nil || !task.RemindAt.Equal(now.Add(36*time.Hour)) || !task.DueAt.Equal(now.Add(48*time.Hour)) {
+		t.Fatalf("task = %+v", task)
+	}
+	for _, bad := range []string{"PT48H", "P3D", "soon"} {
+		_, err := Parse(diagram(strings.Replace(remindable, "%s", bad, 1)))
+		if !slices.Contains(codes(err), "invalid_reminder") {
+			t.Errorf("%q: %v", bad, codes(err))
+		}
+	}
+}
+
+func startTimer(cycle, attrs string) string {
+	return `<bpmn:startEvent id="start" ` + attrs + `><bpmn:timerEventDefinition><bpmn:timeCycle>` + cycle + `</bpmn:timeCycle></bpmn:timerEventDefinition></bpmn:startEvent>
+<bpmn:serviceTask id="tell" dgu:action="notify" dgu:message="Recertify"/><bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="tell"/><bpmn:sequenceFlow id="f2" sourceRef="tell" targetRef="ok"/>`
+}
+
+func TestATimerStartEventCarriesItsCycleAndQuery(t *testing.T) {
+	p, err := Parse(diagram(startTimer("0 8 * * 1", `dgu:query="tag = &quot;pii&quot;"`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Schedule == nil || p.Schedule.Cycle != "0 8 * * 1" || p.Schedule.Query != `tag = "pii"` {
+		t.Fatalf("schedule = %+v", p.Schedule)
+	}
+	plain := mustParse(t, approval)
+	if plain.Schedule != nil {
+		t.Fatalf("a manual start has a schedule: %+v", plain.Schedule)
+	}
+}
+
+func TestTimerStartCyclesAreValidated(t *testing.T) {
+	for cycle, want := range map[string]string{
+		"* * * * *":   "cycle_too_frequent",
+		"*/5 * * * *": "cycle_too_frequent",
+		"PT5M":        "cycle_too_frequent",
+		"soon":        "invalid_cycle",
+		"1 2 3":       "invalid_cycle",
+		"":            "timer_needs_cycle",
+	} {
+		_, err := Parse(diagram(startTimer(cycle, "")))
+		if !slices.Contains(codes(err), want) {
+			t.Errorf("%q: got %v, want %s", cycle, codes(err), want)
+		}
+	}
+	for _, ok := range []string{"0 8 * * 1", "*/15 * * * *", "PT6H", "P1D", "P1W"} {
+		if _, err := Parse(diagram(startTimer(ok, ""))); err != nil {
+			t.Errorf("%q rejected: %v", ok, codes(err))
+		}
+	}
+	if _, err := Parse(diagram(strings.Replace(startTimer("PT6H", ""), "timerEventDefinition", "messageEventDefinition", 2))); !slices.Contains(codes(err), "unsupported_event") {
+		t.Errorf("a message start is not supported: %v", codes(err))
+	}
+}
+
+func TestACycleSaysWhenItFiresNext(t *testing.T) {
+	from := time.Date(2026, 9, 29, 9, 0, 0, 0, time.UTC)
+	cron, _ := ParseCycle("0 8 * * *")
+	if got := cron.Next(from); !got.Equal(time.Date(2026, 9, 30, 8, 0, 0, 0, time.UTC)) {
+		t.Fatalf("cron next = %v", got)
+	}
+	every, _ := ParseCycle("PT6H")
+	if got := every.Next(from); !got.Equal(from.Add(6 * time.Hour)) {
+		t.Fatalf("interval next = %v", got)
 	}
 }

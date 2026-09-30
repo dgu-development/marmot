@@ -645,7 +645,12 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 		if domainSvc != nil {
 			workflowDomains = domainSvc
 		}
-		workflowSvc := workflowService.NewService(workflowService.NewPostgresRepository(db), userSvc, teamSvc, workflowDomains, assetSvc, notificationSvc)
+		workflowSvc := workflowService.NewService(workflowService.NewPostgresRepository(db), userSvc, teamSvc, workflowDomains, assetSvc, notificationSvc).
+			WithQueries(workflowsAPI.NewQueryMatcher(assetRuleSvc)).
+			WithGlossary(glossarySvc).
+			WithPrincipalContext(func(ctx context.Context, p authService.Principal) context.Context {
+				return context.WithValue(ctx, common.PrincipalContextKey, p)
+			})
 		server.workflowTimers = background.NewSingletonTask(background.SingletonConfig{
 			Name:     "workflow-timers",
 			DB:       db,

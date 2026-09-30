@@ -35,6 +35,9 @@ const (
 	NodeExclusiveGateway NodeType = "exclusiveGateway"
 	NodeParallelGateway  NodeType = "parallelGateway"
 	NodeBoundaryEvent    NodeType = "boundaryEvent"
+	// NodeWait is an intermediate catch event with a timer: the run pauses
+	// there for a duration and then goes on.
+	NodeWait NodeType = "intermediateCatchEvent"
 )
 
 // Node is one flow node of the process.
@@ -55,17 +58,26 @@ type Node struct {
 	Assignee        string   `json:"-"`
 	CandidateUsers  []string `json:"-"`
 	CandidateGroups []string `json:"-"`
+	// FormFields are governed field ids the decider must supply (dgu:formFields).
+	FormFields []string `json:"-"`
 
 	// Service task action and its arguments (dgu:action, dgu:field, …).
 	Action  string            `json:"-"`
 	Args    map[string]string `json:"-"`
 	Timeout string            `json:"-"`
 
-	// Boundary timer: the task it hangs on, its ISO 8601 duration and whether
-	// it cancels the task.
+	// Timer of a boundary event or a wait: for a boundary event, the task it
+	// hangs on, its ISO 8601 duration and whether it cancels the task.
 	AttachedTo     string `json:"-"`
 	Duration       string `json:"-"`
 	CancelActivity bool   `json:"-"`
+	// Cycle and Query belong to a timer start event: when it fires (timeCycle)
+	// and the asset query it starts one run per match for (dgu:query).
+	Cycle string `json:"-"`
+	Query string `json:"-"`
+	// Remind is how long before a boundary timer fires the task's candidates are
+	// reminded (dgu:remind, ISO 8601).
+	Remind string `json:"-"`
 }
 
 // Flow is a sequence flow.
@@ -86,6 +98,16 @@ type Process struct {
 	Flows map[string]*Flow
 	// Order keeps document order, for stable validation output.
 	Order []string
+	// Schedule is set when the start event is a timer: the process starts itself.
+	Schedule *StartSchedule
+}
+
+// StartSchedule is the timer start event of a process.
+type StartSchedule struct {
+	Cycle string
+	// Query is an asset query: each fire starts one run per match, up to the batch cap.
+	// Empty starts a single run with no target.
+	Query string
 }
 
 // Issue is a reason a diagram cannot run. Code is stable for clients to
@@ -278,9 +300,19 @@ func buildProcess(el *element) (*Process, []Issue) {
 		defs := eventDefinitions(c)
 		switch n.Type {
 		case NodeStart:
-			if len(defs) > 0 {
-				issues = append(issues, Issue{Element: id, Code: "unsupported_event", Detail: defs[0].name.Local})
+			for _, d := range defs {
+				if d.name.Local != "timerEventDefinition" || n.Cycle != "" {
+					issues = append(issues, Issue{Element: id, Code: "unsupported_event", Detail: d.name.Local})
+					continue
+				}
+				for _, cycle := range d.bpmnChildren("timeCycle") {
+					n.Cycle = strings.TrimSpace(cycle.text.String())
+				}
+				if n.Cycle == "" {
+					issues = append(issues, Issue{Element: id, Code: "timer_needs_cycle"})
+				}
 			}
+			n.Query = strings.TrimSpace(c.attr(NamespaceDGU, "query"))
 		case NodeEnd:
 			for _, d := range defs {
 				if d.name.Local == "terminateEventDefinition" {
@@ -293,6 +325,7 @@ func buildProcess(el *element) (*Process, []Issue) {
 			n.Assignee = strings.TrimSpace(c.attr(NamespaceCamunda, "assignee"))
 			n.CandidateUsers = splitList(c.attr(NamespaceCamunda, "candidateUsers"))
 			n.CandidateGroups = splitList(c.attr(NamespaceCamunda, "candidateGroups"))
+			n.FormFields = splitList(c.attr(NamespaceDGU, "formFields"))
 		case NodeServiceTask:
 			n.Action = c.attr(NamespaceDGU, "action")
 			n.Args = map[string]string{}
@@ -304,6 +337,17 @@ func buildProcess(el *element) (*Process, []Issue) {
 		case NodeExclusiveGateway:
 			n.Default = c.attr("", "default")
 		case NodeParallelGateway:
+		case NodeWait:
+			if len(defs) != 1 || defs[0].name.Local != "timerEventDefinition" {
+				issues = append(issues, Issue{Element: id, Code: "unsupported_event"})
+				break
+			}
+			for _, d := range defs[0].bpmnChildren("timeDuration") {
+				n.Duration = strings.TrimSpace(d.text.String())
+			}
+			if n.Duration == "" {
+				issues = append(issues, Issue{Element: id, Code: "timer_needs_duration"})
+			}
 		case NodeBoundaryEvent:
 			n.AttachedTo = c.attr("", "attachedToRef")
 			n.CancelActivity = !c.hasAttr("", "cancelActivity") || c.attr("", "cancelActivity") != "false"
@@ -314,6 +358,7 @@ func buildProcess(el *element) (*Process, []Issue) {
 			for _, d := range defs[0].bpmnChildren("timeDuration") {
 				n.Duration = strings.TrimSpace(d.text.String())
 			}
+			n.Remind = strings.TrimSpace(c.attr(NamespaceDGU, "remind"))
 			if n.Duration == "" {
 				issues = append(issues, Issue{Element: id, Code: "timer_needs_duration"})
 			}
@@ -381,6 +426,13 @@ func validate(p *Process) []Issue {
 			if len(n.Outgoing) != 1 {
 				issues = append(issues, Issue{Element: id, Code: "start_needs_one_outgoing"})
 			}
+			if n.Cycle != "" {
+				if _, err := ParseCycle(n.Cycle); errors.Is(err, ErrCycleTooFrequent) {
+					issues = append(issues, Issue{Element: id, Code: "cycle_too_frequent", Detail: n.Cycle})
+				} else if err != nil {
+					issues = append(issues, Issue{Element: id, Code: "invalid_cycle", Detail: n.Cycle})
+				}
+			}
 		case NodeEnd:
 			ends++
 			if len(n.Outgoing) > 0 {
@@ -398,6 +450,11 @@ func validate(p *Process) []Issue {
 					issues = append(issues, Issue{Element: id, Code: "invalid_candidate_group", Detail: g})
 				}
 			}
+			for _, field := range n.FormFields {
+				if !identRE.MatchString(field) {
+					issues = append(issues, Issue{Element: id, Code: "invalid_form_field", Detail: field})
+				}
+			}
 		case NodeServiceTask:
 			if len(n.Outgoing) != 1 {
 				issues = append(issues, Issue{Element: id, Code: "task_needs_one_outgoing"})
@@ -410,6 +467,15 @@ func validate(p *Process) []Issue {
 		case NodeParallelGateway:
 			if len(n.Outgoing) == 0 {
 				issues = append(issues, Issue{Element: id, Code: "gateway_needs_outgoing"})
+			}
+		case NodeWait:
+			if len(n.Outgoing) != 1 {
+				issues = append(issues, Issue{Element: id, Code: "wait_needs_one_outgoing"})
+			}
+			if n.Duration != "" {
+				if _, err := ParseDuration(n.Duration); err != nil {
+					issues = append(issues, Issue{Element: id, Code: "invalid_duration", Detail: n.Duration})
+				}
 			}
 		case NodeBoundaryEvent:
 			host, ok := p.Nodes[n.AttachedTo]
@@ -424,6 +490,13 @@ func validate(p *Process) []Issue {
 					issues = append(issues, Issue{Element: id, Code: "invalid_duration", Detail: n.Duration})
 				}
 			}
+			if n.Remind != "" {
+				lead, err := ParseDuration(n.Remind)
+				due, dueErr := ParseDuration(n.Duration)
+				if err != nil || (dueErr == nil && lead >= due) {
+					issues = append(issues, Issue{Element: id, Code: "invalid_reminder", Detail: n.Remind})
+				}
+			}
 		}
 		if n.Type != NodeStart && n.Type != NodeBoundaryEvent && len(n.Incoming) == 0 {
 			issues = append(issues, Issue{Element: id, Code: "unreachable"})
@@ -434,6 +507,9 @@ func validate(p *Process) []Issue {
 		issues = append(issues, Issue{Code: "no_start"})
 	case 1:
 		p.Start = starts[0]
+		if start := p.Nodes[p.Start]; start.Cycle != "" {
+			p.Schedule = &StartSchedule{Cycle: start.Cycle, Query: start.Query}
+		}
 	default:
 		issues = append(issues, Issue{Code: "several_starts"})
 	}

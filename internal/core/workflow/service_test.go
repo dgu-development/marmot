@@ -3,6 +3,7 @@ package workflow_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,8 @@ import (
 	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/auth"
 	"github.com/marmotdata/marmot/internal/core/domain"
+	"github.com/marmotdata/marmot/internal/core/glossary"
+	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/notification"
 	"github.com/marmotdata/marmot/internal/core/team"
 	"github.com/marmotdata/marmot/internal/core/user"
@@ -94,8 +97,12 @@ func (f *fakeDomains) set(roles ...domain.RoleAssignment) {
 }
 
 type fakeAssets struct {
-	patched map[string]any
-	fail    error
+	patched    map[string]any
+	removedTag string
+	addedTag   string
+	linked     []string
+	unlinked   string
+	fail       error
 }
 
 func (f *fakeAssets) Get(_ context.Context, id string) (*asset.Asset, error) {
@@ -113,11 +120,49 @@ func (f *fakeAssets) PatchFields(_ context.Context, _ string, version int64, fie
 	if version != 3 {
 		return nil, errors.New("stale version")
 	}
-	f.patched = fields
+	if f.patched == nil {
+		f.patched = map[string]any{}
+	}
+	for k, v := range fields {
+		f.patched[k] = v
+	}
 	return &asset.Asset{}, nil
 }
 
-func (f *fakeAssets) AddTag(context.Context, string, string) (*asset.Asset, error) {
+func (f *fakeAssets) AddTag(_ context.Context, _ string, tag string) (*asset.Asset, error) {
+	f.addedTag = tag
+	return &asset.Asset{}, nil
+}
+
+func (f *fakeAssets) AddTerms(_ context.Context, _ string, termIDs []string, source, _ string) error {
+	f.linked = append(f.linked, source+":"+strings.Join(termIDs, ","))
+	return nil
+}
+
+func (f *fakeAssets) RemoveTerm(_ context.Context, _ string, termID string) error {
+	f.unlinked = termID
+	return nil
+}
+
+type fakeGlossary struct{}
+
+func (fakeGlossary) GetByName(_ context.Context, name string) (*glossary.GlossaryTerm, error) {
+	if name != "Customer" {
+		return nil, glossary.ErrTermNotFound
+	}
+	return &glossary.GlossaryTerm{ID: "term-1", Name: name}, nil
+}
+
+func (f *fakeAssets) Metamodel(string) metamodel.Schema {
+	field := func(id, kind string) metamodel.Field { return metamodel.Field{ID: id, Type: kind} }
+	return metamodel.Schema{Profile: metamodel.Profile{Fields: []metamodel.Field{
+		field("retention", "integer"), field("contains_pii", "boolean"), field("quality_score", "number"),
+		field("classification", "enum"), field("lifecycle", "enum"),
+	}}}
+}
+
+func (f *fakeAssets) RemoveTag(_ context.Context, _ string, tag string) (*asset.Asset, error) {
+	f.removedTag = tag
 	return &asset.Asset{}, nil
 }
 
@@ -148,6 +193,7 @@ func (f *fakeNotifier) types(recipient string) []string {
 }
 
 type fixture struct {
+	users                            *fakeUsers
 	svc                              *workflow.Service
 	pool                             *pgxpool.Pool
 	domains                          *fakeDomains
@@ -158,7 +204,7 @@ type fixture struct {
 	adminID, aliceID, bobID, carolID string
 }
 
-var manageAssets = user.Role{Name: "user", Permissions: []user.Permission{{ResourceType: "assets", Action: "manage"}, {ResourceType: "workflows", Action: "view"}}}
+var manageAssets = user.Role{Name: "user", Permissions: []user.Permission{{ResourceType: "assets", Action: "manage"}, {ResourceType: "workflows", Action: "view"}, {ResourceType: "workflows", Action: "start"}}}
 
 func setup(t *testing.T) *fixture {
 	t.Helper()
@@ -166,6 +212,7 @@ func setup(t *testing.T) *fixture {
 	ctx := context.Background()
 	f := &fixture{pool: pool, domains: &fakeDomains{}, assets: &fakeAssets{}, notes: &fakeNotifier{}}
 	users := &fakeUsers{byID: map[string]*user.User{}}
+	f.users = users
 	mk := func(name string, roles ...user.Role) (auth.Principal, string) {
 		var id string
 		if err := pool.QueryRow(ctx, `INSERT INTO users (username, name) VALUES ($1, $1) RETURNING id::text`, name).Scan(&id); err != nil {
@@ -184,8 +231,12 @@ func setup(t *testing.T) *fixture {
 	now := time.Date(2026, 9, 29, 9, 0, 0, 0, time.UTC)
 	f.now = &now
 	workflow.SetClock(f.svc, func() time.Time { return *f.now })
+	f.svc.WithPrincipalContext(func(ctx context.Context, _ auth.Principal) context.Context { return ctx })
+	f.svc.WithGlossary(fakeGlossary{})
 	return f
 }
+
+func (f *fixture) setInactive(id string) { f.users.byID[id].Active = false }
 
 func (f *fixture) published(t *testing.T, bpmn string) *workflow.Definition {
 	t.Helper()
@@ -233,10 +284,10 @@ func TestApprovalRunsToTheEndAndWritesTheAsset(t *testing.T) {
 		t.Fatalf("carol sees %+v", tasks)
 	}
 
-	if _, err := f.svc.CompleteTask(ctx, f.carol, task.ID, "approved", ""); !errors.Is(err, workflow.ErrForbidden) {
+	if _, err := f.svc.CompleteTask(ctx, f.carol, task.ID, "approved", "", nil); !errors.Is(err, workflow.ErrForbidden) {
 		t.Fatalf("carol decided: %v", err)
 	}
-	done, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", "Looks right")
+	done, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", "Looks right", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +318,7 @@ func TestApprovalRunsToTheEndAndWritesTheAsset(t *testing.T) {
 	if strings.Join(types, ",") != "started,task_created,task_completed,branch_taken,action_done,action_done,ended,completed" {
 		t.Fatalf("events = %v", types)
 	}
-	if _, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", ""); !errors.Is(err, workflow.ErrNotRunning) {
+	if _, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", "", nil); !errors.Is(err, workflow.ErrNotRunning) {
 		t.Fatalf("second decision: %v", err)
 	}
 }
@@ -283,10 +334,10 @@ func TestARevokedRoleCannotDecide(t *testing.T) {
 
 	f.domains.set()
 
-	if _, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", ""); !errors.Is(err, workflow.ErrForbidden) {
+	if _, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", "", nil); !errors.Is(err, workflow.ErrForbidden) {
 		t.Fatalf("err = %v", err)
 	}
-	if _, err := f.svc.CompleteTask(ctx, f.admin, task.ID, "rejected", ""); err != nil {
+	if _, err := f.svc.CompleteTask(ctx, f.admin, task.ID, "rejected", "", nil); err != nil {
 		t.Fatalf("a native admin could not decide: %v", err)
 	}
 }
@@ -344,7 +395,7 @@ func TestAFailingActionFailsTheInstance(t *testing.T) {
 	task := openTask(t, f, f.bob)
 	f.assets.fail = errors.New("412 precondition failed")
 
-	done, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", "")
+	done, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "approved", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,5 +500,580 @@ func TestStartRejectsAMissingTarget(t *testing.T) {
 	_, err := f.svc.Start(context.Background(), f.alice, def.ID, &workflow.Target{Kind: "asset", ID: "33333333-3333-4333-8333-333333333333"})
 	if !errors.Is(err, workflow.ErrInvalidInput) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+const formDoc = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dgu="https://dgu-development.github.io/schema/workflows" id="d">
+<bpmn:process id="fill_fields" name="Fill">
+<bpmn:startEvent id="start"/>
+<bpmn:userTask id="review" name="Review" camunda:candidateGroups="role:steward" dgu:formFields="classification,lifecycle"/>
+<bpmn:serviceTask id="untag" dgu:action="remove_tag" dgu:tag="draft"/>
+<bpmn:serviceTask id="clear" dgu:action="clear_field" dgu:field="next_review"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+<bpmn:sequenceFlow id="f2" sourceRef="review" targetRef="untag"/>
+<bpmn:sequenceFlow id="f3" sourceRef="untag" targetRef="clear"/>
+<bpmn:sequenceFlow id="f4" sourceRef="clear" targetRef="ok"/>
+</bpmn:process></bpmn:definitions>`
+
+func TestFormFieldsAndNewActions(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, formDoc)
+	if _, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := f.svc.MyTasks(ctx, f.bob)
+	if err != nil || len(tasks) != 1 {
+		t.Fatalf("tasks = %+v, %v", tasks, err)
+	}
+	if got := strings.Join(tasks[0].FormFields, ","); got != "classification,lifecycle" {
+		t.Fatalf("form fields = %v", tasks[0].FormFields)
+	}
+	if _, err := f.svc.CompleteTask(ctx, f.bob, tasks[0].ID, "", "", nil); !errors.Is(err, workflow.ErrInvalidInput) {
+		t.Fatalf("missing fields: %v", err)
+	}
+	done, err := f.svc.CompleteTask(ctx, f.bob, tasks[0].ID, "", "", map[string]any{
+		"classification": "public",
+		"lifecycle":      "active",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Status != workflow.InstanceCompleted {
+		t.Fatalf("status = %s detail=%v", done.Status, done.FailureDetail)
+	}
+	if f.assets.patched["classification"] != "public" || f.assets.patched["lifecycle"] != "active" {
+		t.Fatalf("patched = %+v", f.assets.patched)
+	}
+	if f.assets.removedTag != "draft" {
+		t.Fatalf("removed tag = %q", f.assets.removedTag)
+	}
+	if v, ok := f.assets.patched["next_review"]; !ok || v != nil {
+		t.Fatalf("clear_field next_review = %v ok=%v", v, ok)
+	}
+}
+
+type fakeQuery struct {
+	ids   []string
+	total int
+	err   error
+}
+
+func (f *fakeQuery) Match(context.Context, string, int) ([]string, int, error) {
+	return f.ids, f.total, f.err
+}
+
+func TestStartQueryStartsOneRunPerMatch(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{assetID}, total: 3})
+	def := f.published(t, doc)
+	batch, err := f.svc.StartQuery(context.Background(), f.alice, def.ID, `tag = "pii"`, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if batch.Started != 1 || batch.Total != 3 || len(batch.Instances) != 1 {
+		t.Fatalf("batch = %+v", batch)
+	}
+	if batch.Instances[0].TargetID == nil || *batch.Instances[0].TargetID != assetID {
+		t.Fatalf("target = %+v", batch.Instances[0].TargetID)
+	}
+}
+
+func TestStartQueryRequiresMatcher(t *testing.T) {
+	f := setup(t)
+	def := f.published(t, doc)
+	_, err := f.svc.StartQuery(context.Background(), f.alice, def.ID, `tag = "pii"`, 10)
+	if !errors.Is(err, workflow.ErrInvalidInput) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+const waitDoc = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dgu="https://dgu-development.github.io/schema/workflows" id="d">
+<bpmn:process id="recheck" name="Recheck">
+<bpmn:startEvent id="start"/>
+<bpmn:intermediateCatchEvent id="pause"><bpmn:timerEventDefinition><bpmn:timeDuration>P7D</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent>
+<bpmn:serviceTask id="tell" dgu:action="notify" dgu:message="Review again" dgu:to="initiator,role:steward"/>
+<bpmn:userTask id="again" name="Review again" camunda:candidateGroups="role:steward"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="pause"/>
+<bpmn:sequenceFlow id="f2" sourceRef="pause" targetRef="tell"/>
+<bpmn:sequenceFlow id="f3" sourceRef="tell" targetRef="again"/>
+<bpmn:sequenceFlow id="f4" sourceRef="again" targetRef="ok"/>
+</bpmn:process></bpmn:definitions>`
+
+func TestAWaitPausesTheRunAndThenNotifiesAndOpensTheNextTask(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, waitDoc)
+	in, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	detail, err := f.svc.GetInstance(ctx, f.alice, in.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Tasks) != 1 || !detail.Tasks[0].Wait || detail.Tasks[0].DueAt == nil ||
+		!detail.Tasks[0].DueAt.Equal(f.now.Add(7*24*time.Hour)) || len(detail.Active) != 1 || detail.Active[0] != "pause" {
+		t.Fatalf("detail = %+v active = %v", detail.Tasks, detail.Active)
+	}
+	if tasks, _ := f.svc.MyTasks(ctx, f.bob); len(tasks) != 0 {
+		t.Fatalf("a wait is not an inbox task: %+v", tasks)
+	}
+	if _, err := f.svc.CompleteTask(ctx, f.admin, detail.Tasks[0].ID, "approved", "", nil); !errors.Is(err, workflow.ErrInvalidInput) {
+		t.Fatalf("an admin decided a wait: %v", err)
+	}
+
+	*f.now = f.now.Add(6 * 24 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if tasks, _ := f.svc.MyTasks(ctx, f.bob); len(tasks) != 0 {
+		t.Fatalf("the wait ended early: %+v", tasks)
+	}
+
+	*f.now = f.now.Add(2 * 24 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.notes.types(f.bobID); strings.Join(got, ",") != workflow.TypeWorkflowMessage+","+workflow.TypeTaskAssigned {
+		t.Fatalf("bob was notified %v", got)
+	}
+	if got := f.notes.types(f.aliceID); strings.Join(got, ",") != workflow.TypeWorkflowMessage {
+		t.Fatalf("the initiator was notified %v", got)
+	}
+	next := openTask(t, f, f.bob)
+	if next.NodeID != "again" {
+		t.Fatalf("task = %+v", next)
+	}
+	detail, _ = f.svc.GetInstance(ctx, f.alice, in.ID)
+	if detail.Status != workflow.InstanceRunning {
+		t.Fatalf("status = %s", detail.Status)
+	}
+	for _, task := range detail.Tasks {
+		if task.Wait && task.Status != workflow.TaskCompleted {
+			t.Fatalf("the wait is %s", task.Status)
+		}
+	}
+}
+
+func TestCancellingARunEndsItsWait(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, waitDoc)
+	in, _ := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if _, err := f.svc.Cancel(ctx, f.admin, in.ID); err != nil {
+		t.Fatal(err)
+	}
+	*f.now = f.now.Add(30 * 24 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.notes.types(f.bobID); len(got) != 0 {
+		t.Fatalf("a cancelled run kept going: %v", got)
+	}
+}
+
+func TestABatchSkipsWhatItCannotStartAndReportsIt(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{"33333333-3333-4333-8333-333333333333", assetID}, total: 2})
+	def := f.published(t, doc)
+	batch, err := f.svc.StartQuery(context.Background(), f.alice, def.ID, `tag = "pii"`, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if batch.Started != 1 || len(batch.Failed) != 1 || batch.Failed[0].Code != "invalid_input" {
+		t.Fatalf("batch = %+v", batch)
+	}
+}
+
+func TestABatchStopsWhenTheDefinitionIsNotRunnable(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{assetID}, total: 1})
+	d, err := f.svc.CreateDefinition(context.Background(), f.admin, []byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.StartQuery(context.Background(), f.alice, d.ID, `tag = "pii"`, 10); !errors.Is(err, workflow.ErrNotRunnable) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestCapabilitiesListTheCatalogueAndTheBatchFeatureOnlyWithAMatcher(t *testing.T) {
+	f := setup(t)
+	caps := f.svc.Capabilities(f.alice)
+	if len(caps.Actions) != len(workflow.Actions) || slices.Contains(caps.Features, "batch_start") || !slices.Contains(caps.Features, "wait_timer") {
+		t.Fatalf("caps = %+v", caps)
+	}
+	f.svc.WithQueries(&fakeQuery{})
+	if !slices.Contains(f.svc.Capabilities(f.alice).Features, "batch_start") {
+		t.Fatal("batch_start missing with a matcher")
+	}
+}
+
+const coerceDoc = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dgu="https://dgu-development.github.io/schema/workflows" id="d">
+<bpmn:process id="typed" name="Typed">
+<bpmn:startEvent id="start"/>
+<bpmn:userTask id="fill" name="Fill" camunda:candidateGroups="role:steward" dgu:formFields="retention,contains_pii"/>
+<bpmn:serviceTask id="score" dgu:action="set_field" dgu:field="quality_score" dgu:value="0.5"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="fill"/>
+<bpmn:sequenceFlow id="f2" sourceRef="fill" targetRef="score"/>
+<bpmn:sequenceFlow id="f3" sourceRef="score" targetRef="ok"/>
+</bpmn:process></bpmn:definitions>`
+
+func TestTextIsCoercedByTheFieldTypeInsideTheWorkflow(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, coerceDoc)
+	if _, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); err != nil {
+		t.Fatal(err)
+	}
+	task := openTask(t, f, f.bob)
+	done, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "", "", map[string]any{"retention": "90", "contains_pii": "true"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Status != workflow.InstanceCompleted {
+		t.Fatalf("status = %s detail = %v", done.Status, done.FailureDetail)
+	}
+	if f.assets.patched["retention"] != 90.0 || f.assets.patched["contains_pii"] != true || f.assets.patched["quality_score"] != 0.5 {
+		t.Fatalf("patched = %#v", f.assets.patched)
+	}
+}
+
+func TestAFormValueThatDoesNotMatchTheFieldTypeIsRefusedAsFields(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, coerceDoc)
+	if _, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); err != nil {
+		t.Fatal(err)
+	}
+	task := openTask(t, f, f.bob)
+	_, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "", "", map[string]any{"retention": "many", "contains_pii": "true"})
+	var invalid *metamodel.ValidationError
+	if !errors.As(err, &invalid) || len(invalid.Fields) != 1 || invalid.Fields[0].Field != "retention" || invalid.Fields[0].Code != "type" {
+		t.Fatalf("err = %v", err)
+	}
+	if len(f.assets.patched) != 0 {
+		t.Fatalf("something was written: %#v", f.assets.patched)
+	}
+	if open := openTask(t, f, f.bob); open.ID != task.ID {
+		t.Fatalf("the task moved on: %+v", open)
+	}
+}
+
+func TestStartingNeedsItsOwnPermission(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, doc)
+	viewer := auth.NewUserPrincipal(&user.User{ID: f.carolID, Username: "carol", Active: true, Roles: []user.Role{{Name: "user", Permissions: []user.Permission{{ResourceType: "workflows", Action: "view"}}}}})
+
+	if _, err := f.svc.Start(ctx, viewer, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); !errors.Is(err, workflow.ErrForbidden) {
+		t.Fatalf("a viewer started a run: %v", err)
+	}
+	if _, err := f.svc.Start(ctx, f.admin, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); err != nil {
+		t.Fatalf("an admin could not start: %v", err)
+	}
+	if caps := f.svc.Capabilities(viewer); caps.CanStart || caps.CanManage {
+		t.Fatalf("viewer caps = %+v", caps)
+	}
+	if caps := f.svc.Capabilities(f.admin); !caps.CanStart || !caps.CanManage {
+		t.Fatalf("admin caps = %+v", caps)
+	}
+}
+
+func TestARejectionDoesNotWriteTheFormFields(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, formDoc)
+	if _, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); err != nil {
+		t.Fatal(err)
+	}
+	task := openTask(t, f, f.bob)
+
+	if _, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "rejected", "", map[string]any{"classification": "public", "lifecycle": "active"}); !errors.Is(err, workflow.ErrInvalidInput) {
+		t.Fatalf("fields with a rejection: %v", err)
+	}
+	if _, err := f.svc.CompleteTask(ctx, f.bob, task.ID, "Rejected", "", nil); err != nil {
+		t.Fatalf("a rejection needs no fields: %v", err)
+	}
+	if _, ok := f.assets.patched["classification"]; ok {
+		t.Fatalf("a rejected task wrote %#v", f.assets.patched)
+	}
+}
+
+func TestATaskKeepsItsFormFieldsWithoutReadingTheDiagram(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, formDoc)
+	in, _ := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if _, err := f.pool.Exec(ctx, `UPDATE workflow_definitions SET bpmn = 'not xml' WHERE id::text = $1`, def.ID); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := f.svc.MyTasks(ctx, f.bob)
+	if err != nil || len(tasks) != 1 || strings.Join(tasks[0].FormFields, ",") != "classification,lifecycle" {
+		t.Fatalf("tasks = %+v, %v (run %s)", tasks, err, in.ID)
+	}
+}
+
+func TestACandidateIsRemindedOnceBeforeTheTaskIsDue(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	remind := strings.Replace(doc, `<bpmn:boundaryEvent id="late" attachedToRef="review">`, `<bpmn:boundaryEvent id="late" attachedToRef="review" dgu:remind="PT12H">`, 1)
+	def := f.published(t, remind)
+	if _, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID}); err != nil {
+		t.Fatal(err)
+	}
+
+	*f.now = f.now.Add(35 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.notes.types(f.bobID); strings.Contains(strings.Join(got, ","), workflow.TypeTaskDue) {
+		t.Fatalf("reminded too early: %v", got)
+	}
+
+	*f.now = f.now.Add(2 * time.Hour)
+	for i := 0; i < 2; i++ {
+		if err := f.svc.RunTimers(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count := 0
+	for _, kind := range f.notes.types(f.bobID) {
+		if kind == workflow.TypeTaskDue {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("bob was reminded %d times", count)
+	}
+}
+
+const writeAfterWait = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:dgu="https://dgu-development.github.io/schema/workflows" id="d">
+<bpmn:process id="later" name="Later">
+<bpmn:startEvent id="start"/>
+<bpmn:intermediateCatchEvent id="pause"><bpmn:timerEventDefinition><bpmn:timeDuration>PT1H</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent>
+<bpmn:serviceTask id="mark" dgu:action="add_tag" dgu:tag="rechecked"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="pause"/>
+<bpmn:sequenceFlow id="f2" sourceRef="pause" targetRef="mark"/>
+<bpmn:sequenceFlow id="f3" sourceRef="mark" targetRef="ok"/>
+</bpmn:process></bpmn:definitions>`
+
+func TestAPathAfterATimerActsAsTheInitiator(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, writeAfterWait)
+	in, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	*f.now = f.now.Add(2 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := f.svc.GetInstance(ctx, f.alice, in.ID)
+	if err != nil || detail.Status != workflow.InstanceCompleted {
+		t.Fatalf("status = %v, %v", detail.Status, err)
+	}
+	if f.assets.addedTag != "rechecked" {
+		t.Fatalf("added tag = %q", f.assets.addedTag)
+	}
+}
+
+func TestAPathAfterATimerFailsVisiblyWhenTheInitiatorNoLongerMayWrite(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, writeAfterWait)
+	in, _ := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if _, err := f.pool.Exec(ctx, `UPDATE users SET active = false WHERE id::text = $1`, f.aliceID); err != nil {
+		t.Fatal(err)
+	}
+	f.setInactive(f.aliceID)
+	*f.now = f.now.Add(2 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	detail, _ := f.svc.GetInstance(ctx, f.admin, in.ID)
+	if detail.Status != workflow.InstanceFailed || detail.FailureCode == nil || *detail.FailureCode != "action_failed" || f.assets.addedTag != "" {
+		t.Fatalf("status = %v code = %v tag = %q", detail.Status, detail.FailureCode, f.assets.addedTag)
+	}
+}
+
+const scheduledDoc = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:dgu="https://dgu-development.github.io/schema/workflows" id="d">
+<bpmn:process id="recertify" name="Recertify">
+<bpmn:startEvent id="start" dgu:query="tag = &quot;pii&quot;"><bpmn:timerEventDefinition><bpmn:timeCycle>0 8 * * *</bpmn:timeCycle></bpmn:timerEventDefinition></bpmn:startEvent>
+<bpmn:serviceTask id="tell" dgu:action="notify" dgu:message="Recertify this asset"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="tell"/>
+<bpmn:sequenceFlow id="f2" sourceRef="tell" targetRef="ok"/>
+</bpmn:process></bpmn:definitions>`
+
+func runs(t *testing.T, f *fixture) []*workflow.Instance {
+	t.Helper()
+	out, err := f.svc.ListInstances(context.Background(), f.admin, workflow.InstanceFilter{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestAPublishedTimerStartRunsOnItsCycleAsThePublisher(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{assetID}, total: 1})
+	ctx := context.Background()
+	def := f.published(t, scheduledDoc)
+
+	got, err := f.svc.GetDefinition(ctx, def.ID)
+	if err != nil || got.Schedule == nil || !got.Schedule.Enabled || got.Schedule.Cycle != "0 8 * * *" ||
+		!got.Schedule.NextRunAt.Equal(time.Date(2026, 9, 30, 8, 0, 0, 0, time.UTC)) {
+		t.Fatalf("schedule = %+v, %v", got.Schedule, err)
+	}
+
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(runs(t, f)); n != 0 {
+		t.Fatalf("started %d runs before the cycle", n)
+	}
+
+	*f.now = time.Date(2026, 9, 30, 8, 1, 0, 0, time.UTC)
+	for i := 0; i < 2; i++ {
+		if err := f.svc.RunTimers(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	started := runs(t, f)
+	if len(started) != 1 || started[0].TargetID == nil || *started[0].TargetID != assetID || started[0].InitiatorID == nil || *started[0].InitiatorID != f.adminID {
+		t.Fatalf("runs = %+v", started)
+	}
+	got, _ = f.svc.GetDefinition(ctx, def.ID)
+	if got.Schedule.LastRunAt == nil || got.Schedule.LastError != "" || !got.Schedule.NextRunAt.Equal(time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)) {
+		t.Fatalf("after the run: %+v", got.Schedule)
+	}
+}
+
+func TestRetiringAScheduledDefinitionStopsItsRuns(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{assetID}, total: 1})
+	ctx := context.Background()
+	def := f.published(t, scheduledDoc)
+	if _, err := f.svc.Retire(ctx, f.admin, def.ID); err != nil {
+		t.Fatal(err)
+	}
+	*f.now = f.now.Add(48 * time.Hour)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(runs(t, f)); n != 0 {
+		t.Fatalf("a retired definition started %d runs", n)
+	}
+	if got, _ := f.svc.GetDefinition(ctx, def.ID); got.Schedule == nil || got.Schedule.Enabled {
+		t.Fatalf("schedule = %+v", got.Schedule)
+	}
+}
+
+func TestANewVersionReplacesTheScheduleOfTheOldOne(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{assetID}, total: 1})
+	ctx := context.Background()
+	first := f.published(t, scheduledDoc)
+	second := f.published(t, scheduledDoc)
+	if first.ID == second.ID {
+		t.Fatal("expected two versions")
+	}
+	if got, _ := f.svc.GetDefinition(ctx, first.ID); got.Schedule == nil || got.Schedule.Enabled {
+		t.Fatalf("the old version still runs: %+v", got.Schedule)
+	}
+	*f.now = time.Date(2026, 9, 30, 8, 1, 0, 0, time.UTC)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(runs(t, f)); n != 1 {
+		t.Fatalf("two versions started %d runs", n)
+	}
+}
+
+func TestAScheduleStopsVisiblyWhenThePublisherCanNoLongerAct(t *testing.T) {
+	f := setup(t)
+	f.svc.WithQueries(&fakeQuery{ids: []string{assetID}, total: 1})
+	ctx := context.Background()
+	def := f.published(t, scheduledDoc)
+	f.setInactive(f.adminID)
+
+	*f.now = time.Date(2026, 9, 30, 8, 1, 0, 0, time.UTC)
+	if err := f.svc.RunTimers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(runs(t, f)); n != 0 {
+		t.Fatalf("started %d runs with no one to act as", n)
+	}
+	got, _ := f.svc.GetDefinition(ctx, def.ID)
+	if got.Schedule == nil || !strings.Contains(got.Schedule.LastError, "can no longer act") {
+		t.Fatalf("schedule = %+v", got.Schedule)
+	}
+}
+
+const termDoc = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:dgu="https://dgu-development.github.io/schema/workflows" id="d">
+<bpmn:process id="terms" name="Terms">
+<bpmn:startEvent id="start"/>
+<bpmn:serviceTask id="link" dgu:action="link_term" dgu:term="%s"/>
+<bpmn:serviceTask id="unlink" dgu:action="unlink_term" dgu:term="Customer"/>
+<bpmn:endEvent id="ok"/>
+<bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="link"/>
+<bpmn:sequenceFlow id="f2" sourceRef="link" targetRef="unlink"/>
+<bpmn:sequenceFlow id="f3" sourceRef="unlink" targetRef="ok"/>
+</bpmn:process></bpmn:definitions>`
+
+func TestTermActionsResolveTheTermByNameAndActAsTheStarter(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	def := f.published(t, strings.Replace(termDoc, "%s", "Customer", 1))
+	in, err := f.svc.Start(ctx, f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if err != nil || in.Status != workflow.InstanceCompleted {
+		t.Fatalf("run = %+v, %v", in, err)
+	}
+	if strings.Join(f.assets.linked, ",") != "workflow:term-1" || f.assets.unlinked != "term-1" {
+		t.Fatalf("linked %v unlinked %q", f.assets.linked, f.assets.unlinked)
+	}
+}
+
+func TestAMissingTermFailsTheRunVisibly(t *testing.T) {
+	f := setup(t)
+	def := f.published(t, strings.Replace(termDoc, "%s", "Nope", 1))
+	in, err := f.svc.Start(context.Background(), f.alice, def.ID, &workflow.Target{Kind: "asset", ID: assetID})
+	if err != nil || in.Status != workflow.InstanceFailed || in.FailureCode == nil || *in.FailureCode != "action_failed" {
+		t.Fatalf("run = %+v, %v", in, err)
+	}
+	if len(f.assets.linked) != 0 {
+		t.Fatalf("linked %v", f.assets.linked)
+	}
+}
+
+func TestTermActionsAreOnlyOfferedWhenTheGlossaryIsWired(t *testing.T) {
+	f := setup(t)
+	ids := func() []string {
+		var out []string
+		for _, spec := range f.svc.Capabilities(f.alice).Actions {
+			out = append(out, spec.ID)
+		}
+		return out
+	}
+	if !slices.Contains(ids(), "link_term") {
+		t.Fatalf("actions = %v", ids())
+	}
+	f.svc.WithGlossary(nil)
+	if slices.Contains(ids(), "link_term") || slices.Contains(ids(), "unlink_term") {
+		t.Fatalf("actions = %v", ids())
 	}
 }

@@ -1,9 +1,9 @@
 package workflow
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/robfig/cron/v3"
 	"regexp"
 	"strconv"
 	"strings"
@@ -154,17 +154,107 @@ func ParseDuration(text string) (time.Duration, error) {
 	return total, nil
 }
 
+// MinCycle is the shortest gap between two scheduled starts: a start event that
+// fired every minute would flood the platform with runs.
+const MinCycle = 15 * time.Minute
+
+// ErrCycleTooFrequent means a cycle fires more often than MinCycle allows.
+var ErrCycleTooFrequent = errors.New("cycle fires too often")
+
+var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+
+// Cycle is when a timer start event fires: a five-field cron expression, or an
+// ISO 8601 interval (P1D, PT6H) counted from each start.
+type Cycle struct {
+	cron  cron.Schedule
+	every time.Duration
+}
+
+// ParseCycle reads a timeCycle. The interval between fires is at least MinCycle.
+func ParseCycle(text string) (*Cycle, error) {
+	text = strings.TrimSpace(text)
+	if d, err := ParseDuration(text); err == nil {
+		if d < MinCycle {
+			return nil, ErrCycleTooFrequent
+		}
+		return &Cycle{every: d}, nil
+	}
+	schedule, err := cronParser.Parse(text)
+	if err != nil {
+		return nil, fmt.Errorf("neither an ISO 8601 interval nor a five-field cron expression: %w", err)
+	}
+	c := &Cycle{cron: schedule}
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 8; i++ {
+		next := c.Next(at)
+		if next.Sub(at) < MinCycle {
+			return nil, ErrCycleTooFrequent
+		}
+		at = next
+	}
+	return c, nil
+}
+
+// Next is the first fire after from.
+func (c *Cycle) Next(from time.Time) time.Time {
+	if c.cron != nil {
+		return c.cron.Next(from)
+	}
+	return from.Add(c.every)
+}
+
 // Actions a service task may run. Each one is implemented by the platform.
 const (
-	// ActionNotify sends an in-app notification: dgu:message, and dgu:to set
-	// to "initiator" (default) or "participants".
+	// ActionNotify sends an in-app notification: dgu:message, and dgu:to, a
+	// comma-separated list of "initiator" (default), "participants" and the
+	// same team:/role: groups a user task accepts.
 	ActionNotify = "notify"
 	// ActionSetField writes a governed field of the target asset through the
-	// metamodel: dgu:field and dgu:value (a JSON literal or plain text).
+	// metamodel: dgu:field and dgu:value (raw text, coerced by the field's declared type).
 	ActionSetField = "set_field"
 	// ActionAddTag adds dgu:tag to the target asset.
 	ActionAddTag = "add_tag"
+	// ActionRemoveTag removes dgu:tag from the target asset.
+	ActionRemoveTag = "remove_tag"
+	// ActionClearField clears a governed field (PatchFields with null).
+	ActionClearField = "clear_field"
+	// ActionLinkTerm links the glossary term named dgu:term to the target asset.
+	ActionLinkTerm = "link_term"
+	// ActionUnlinkTerm removes that link.
+	ActionUnlinkTerm = "unlink_term"
 )
+
+// Recipients a notify action names besides team: and role: groups.
+const (
+	RecipientInitiator    = "initiator"
+	RecipientParticipants = "participants"
+)
+
+// ArgSpec is one dgu:<name> attribute of an action.
+type ArgSpec struct {
+	Name     string `json:"name"`
+	Required bool   `json:"required"`
+}
+
+// ActionSpec describes an action for clients, so an editor lists what the
+// engine runs instead of keeping its own copy. Writes marks the actions that
+// change the target asset and so need an acting user with assets:manage.
+type ActionSpec struct {
+	ID     string    `json:"id"`
+	Args   []ArgSpec `json:"args"`
+	Writes bool      `json:"writes"`
+}
+
+// Actions is the closed catalogue, in display order.
+var Actions = []ActionSpec{
+	{ID: ActionNotify, Args: []ArgSpec{{"message", true}, {"to", false}}},
+	{ID: ActionSetField, Args: []ArgSpec{{"field", true}, {"value", true}}, Writes: true},
+	{ID: ActionClearField, Args: []ArgSpec{{"field", true}}, Writes: true},
+	{ID: ActionAddTag, Args: []ArgSpec{{"tag", true}}, Writes: true},
+	{ID: ActionRemoveTag, Args: []ArgSpec{{"tag", true}}, Writes: true},
+	{ID: ActionLinkTerm, Args: []ArgSpec{{"term", true}}, Writes: true},
+	{ID: ActionUnlinkTerm, Args: []ArgSpec{{"term", true}}, Writes: true},
+}
 
 func validateAction(n *Node) string {
 	switch n.Action {
@@ -174,8 +264,13 @@ func validateAction(n *Node) string {
 		if strings.TrimSpace(n.Args["message"]) == "" {
 			return "action_needs_message"
 		}
-		if to := n.Args["to"]; to != "" && to != "initiator" && to != "participants" {
-			return "invalid_recipients"
+		for _, entry := range splitList(n.Args["to"]) {
+			if entry == RecipientInitiator || entry == RecipientParticipants {
+				continue
+			}
+			if _, err := ParseGroup(entry); err != nil {
+				return "invalid_recipients"
+			}
 		}
 	case ActionSetField:
 		if !identRE.MatchString(n.Args["field"]) {
@@ -184,25 +279,20 @@ func validateAction(n *Node) string {
 		if _, ok := n.Args["value"]; !ok {
 			return "action_needs_value"
 		}
-	case ActionAddTag:
+	case ActionClearField:
+		if !identRE.MatchString(n.Args["field"]) {
+			return "action_needs_field"
+		}
+	case ActionAddTag, ActionRemoveTag:
 		if strings.TrimSpace(n.Args["tag"]) == "" {
 			return "action_needs_tag"
+		}
+	case ActionLinkTerm, ActionUnlinkTerm:
+		if strings.TrimSpace(n.Args["term"]) == "" {
+			return "action_needs_term"
 		}
 	default:
 		return "unknown_action"
 	}
 	return ""
-}
-
-// FieldValue turns dgu:value into what the metamodel expects: a JSON literal
-// (number, boolean, null, array) when it parses as one, else the text itself.
-func FieldValue(raw string) any {
-	trimmed := strings.TrimSpace(raw)
-	var v any
-	if trimmed != "" && json.Unmarshal([]byte(trimmed), &v) == nil {
-		if _, isMap := v.(map[string]any); !isMap {
-			return v
-		}
-	}
-	return raw
 }
