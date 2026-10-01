@@ -67,6 +67,33 @@ Runs, results and findings have their own tables. Nothing of the audit is a cata
 
 The oldest are pruned when a run finishes. A value of `0` keeps nothing beyond the latest run, which is never left empty. The result of an asset outlives the asset.
 
+## Schedule
+
+`schedule` in the settings is a five-field cron expression; empty means runs are manual only. It is read as the ingestion schedules read theirs, so the same expression means the same hour in a pipeline and in the audit: the server's time zone, unless the expression names its own (`CRON_TZ=Europe/Madrid 0 3 * * *`).
+
+A check every 30 seconds, on a singleton task like the ingestion scheduler's, starts a run when the next slot after the later of the last run and the last change of the settings has passed:
+
+- A run that is already going, or a manual one that started after the slot, means the slot is met: it never starts two runs for one slot.
+- A slot missed while the server was down fires once, not once per missed slot.
+- A schedule that has just been saved waits for its next slot; it does not fire for one that passed before it existed.
+- With several replicas only one checks at a time, and the single-run guard backs it up.
+
+`GET`/`PUT /api/v1/quality/settings` add `next_run` when a schedule is set. Runs started by it have `trigger` `schedule` and no `triggered_by`.
+
+## Scores on the assets
+
+Each run writes the score it computed on the assets, as the platform: `quality_score` (a fraction between 0 and 1 with three decimals), `quality_dimensions` (the checks the asset meets: description, tags, ownership, classification, review, documentation, completeness and conformity) and `quality_evaluated_at` (the day it was judged). Each is written only when the profile has the field, so a profile without them audits and writes nothing.
+
+- Only what changed is written. An asset whose score and checks already say what the audit found is left alone, and the date alone never forces a write, so its version does not move run after run. `updated_at` and `version` do advance when a score changes: it is a real write.
+- The write is made against the version the audit read. An asset edited in between is skipped (`score_conflicts` in the run) and scored by the next run.
+- It does not notify whoever follows the asset, and it is not judged against the rest of the asset: an asset with an invalid value elsewhere is exactly the one the audit has to be able to score.
+- Placeholders created by lineage (stubs) are never written.
+- `scores_written`, `score_conflicts` and `score_failures` in the run say how it went.
+
+### System fields
+
+A field marked `system: true` in the metamodel profile is written only by the platform. It must be bound to `metadata.*`, apply to assets only and be neither required, derived nor defaulted. The API refuses a write to it with the code `system` (a `PATCH`, like a derived field's `derived`); a whole-asset update, a creation or a discovery run leaves it as it was whatever they send, so a client that sends back the asset it read changes nothing. The interface shows it read-only. Mark `quality_score`, `quality_dimensions` and `quality_evaluated_at` with it in the profile; a server that does not know the key refuses the profile, so the profile and the server version go together.
+
 ## Not included yet
 
-A schedule (the `schedule` setting is validated but nothing starts a run from it yet), writing `quality_score` into the assets, and rules declared in the profile are the next deliveries. Reads are open to anyone with `metadata_quality:view`: when domains whose content only their members can read exist, the results will follow the same restriction as search.
+Rules declared in the profile (the coherence rules are fixed in the server today) are the next delivery. Reads are open to anyone with `metadata_quality:view`: when domains whose content only their members can read exist, the results will follow the same restriction as search.

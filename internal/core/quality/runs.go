@@ -37,21 +37,26 @@ var (
 // Run is one pass of the audit over the catalog. Settings is the criterion it used and is only
 // filled when a single run is read.
 type Run struct {
-	ID               string     `json:"id"`
-	Trigger          string     `json:"trigger" enums:"manual,schedule"`
-	TriggeredBy      string     `json:"triggered_by,omitempty"`
-	Status           RunStatus  `json:"status" enums:"running,succeeded,failed"`
-	SettingsVersion  int64      `json:"settings_version"`
-	MetamodelProfile string     `json:"metamodel_profile,omitempty"`
-	MetamodelVersion int        `json:"metamodel_version,omitempty"`
-	MetamodelHash    string     `json:"metamodel_hash,omitempty"`
-	Processed        int        `json:"processed"`
-	Total            int        `json:"total"`
-	StartedAt        time.Time  `json:"started_at"`
-	FinishedAt       *time.Time `json:"finished_at,omitempty"`
-	Error            string     `json:"error,omitempty"`
-	Summary          *Summary   `json:"summary,omitempty"`
-	Settings         *Settings  `json:"settings,omitempty"`
+	ID               string    `json:"id"`
+	Trigger          string    `json:"trigger" enums:"manual,schedule"`
+	TriggeredBy      string    `json:"triggered_by,omitempty"`
+	Status           RunStatus `json:"status" enums:"running,succeeded,failed"`
+	SettingsVersion  int64     `json:"settings_version"`
+	MetamodelProfile string    `json:"metamodel_profile,omitempty"`
+	MetamodelVersion int       `json:"metamodel_version,omitempty"`
+	MetamodelHash    string    `json:"metamodel_hash,omitempty"`
+	Processed        int       `json:"processed"`
+	Total            int       `json:"total"`
+	// ScoresWritten, ScoreConflicts and ScoreFailures say how writing the scores on the assets
+	// went: written, skipped because the asset was edited after it was read, and failed.
+	ScoresWritten  int        `json:"scores_written"`
+	ScoreConflicts int        `json:"score_conflicts"`
+	ScoreFailures  int        `json:"score_failures"`
+	StartedAt      time.Time  `json:"started_at"`
+	FinishedAt     *time.Time `json:"finished_at,omitempty"`
+	Error          string     `json:"error,omitempty"`
+	Summary        *Summary   `json:"summary,omitempty"`
+	Settings       *Settings  `json:"settings,omitempty"`
 } // @name QualityRun
 
 // ResultFilter narrows and pages the results of a run. Sort is "quality" (weakest first, the default)
@@ -75,11 +80,15 @@ const (
 type RunRepository interface {
 	// Reap fails the runs that stopped reporting progress, so a crash never blocks the next run.
 	Reap(ctx context.Context, silentFor time.Duration) error
+	// LastStarted is when the latest run started, or the zero time when there has been none.
+	LastStarted(ctx context.Context) (time.Time, error)
 	// Start records a new run, or returns the one in progress with ErrRunInProgress.
 	Start(ctx context.Context, run Run, settings Settings) (*Run, error)
 	SetTotal(ctx context.Context, id string, total int) error
 	// SaveBatch stores the results of a batch and the progress, in one transaction.
 	SaveBatch(ctx context.Context, id string, results []AssetResult, lastAssetID string, processed int) error
+	// AddScoreCounts adds how a batch of score writes went to the run.
+	AddScoreCounts(ctx context.Context, id string, counts ScoreCounts) error
 	// Finish closes a successful run, keeps issue detail for it alone and prunes what retention drops.
 	Finish(ctx context.Context, id string, summary Summary, retention Retention) error
 	Fail(ctx context.Context, id string, reason string) error
@@ -112,6 +121,7 @@ type runService struct {
 	repo     RunRepository
 	assets   AssetSource
 	registry *metamodel.Registry
+	writer   ScoreWriter
 	now      func() time.Time
 
 	base   context.Context
@@ -119,9 +129,22 @@ type runService struct {
 	wg     sync.WaitGroup
 }
 
-func NewRunService(settings Service, repo RunRepository, assets AssetSource, registry *metamodel.Registry) RunService {
+// RunOption adjusts a run service.
+type RunOption func(*runService)
+
+// WithScoreWriter makes each run write the scores it computes on the assets. Without it a run only
+// records its results.
+func WithScoreWriter(writer ScoreWriter) RunOption {
+	return func(s *runService) { s.writer = writer }
+}
+
+func NewRunService(settings Service, repo RunRepository, assets AssetSource, registry *metamodel.Registry, options ...RunOption) RunService {
 	base, cancel := context.WithCancel(context.Background())
-	return &runService{settings: settings, repo: repo, assets: assets, registry: registry, now: time.Now, base: base, cancel: cancel}
+	s := &runService{settings: settings, repo: repo, assets: assets, registry: registry, now: time.Now, base: base, cancel: cancel}
+	for _, option := range options {
+		option(s)
+	}
+	return s
 }
 
 func (s *runService) StartRun(ctx context.Context, trigger, by string) (*Run, error) {
@@ -204,11 +227,13 @@ func (s *runService) audit(ctx context.Context, id string, settings Settings) er
 			return err
 		}
 		stored := make([]AssetResult, 0, len(batch))
-		for _, a := range batch {
+		results := make([]AssetResult, len(batch))
+		for i, a := range batch {
 			result := auditor.Audit(a)
 			if domain, ok := domains[a.ID]; ok {
 				result.DomainID = domain
 			}
+			results[i] = result
 			aggregate.Add(result)
 			if !result.Stub {
 				stored = append(stored, result)
@@ -219,8 +244,21 @@ func (s *runService) audit(ctx context.Context, id string, settings Settings) er
 		if err := s.repo.SaveBatch(ctx, id, stored, after, processed); err != nil {
 			return err
 		}
+		if s.writer != nil {
+			counts, err := publish(ctx, s.writer, auditor, batch, results)
+			if err := firstError(err, s.repo.AddScoreCounts(context.WithoutCancel(ctx), id, counts)); err != nil {
+				return err
+			}
+		}
 	}
 	return s.repo.Finish(ctx, id, aggregate.Summary(), settings.Retention)
+}
+
+func firstError(first, second error) error {
+	if first != nil {
+		return first
+	}
+	return second
 }
 
 func (s *runService) Runs(ctx context.Context, limit, offset int) ([]Run, int, error) {

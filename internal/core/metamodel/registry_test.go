@@ -572,3 +572,28 @@ fields:
 		t.Fatalf("valid derivation rejected: %v", err)
 	}
 }
+
+func TestSystemFieldDefinitions(t *testing.T) {
+	profile := func(field string) string {
+		return exampleProfile + field + "\n"
+	}
+	ok := `  - {id: score, type: number, core: true, nullable: true, system: true, storage: metadata.example.score, presentation: {labelKey: example.score}}`
+	r, err := Load(strings.NewReader(profile(ok)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, _ := r.Field("score"); !f.System {
+		t.Fatal("system flag lost")
+	}
+
+	for name, field := range map[string]string{
+		"native storage":    `  - {id: score, type: number, core: true, nullable: true, system: true, storage: marmot.name, presentation: {labelKey: example.score}}`,
+		"required":          `  - {id: score, type: number, core: true, required: true, system: true, storage: metadata.example.score, presentation: {labelKey: example.score}}`,
+		"another kind":      `  - {id: score, type: number, core: true, nullable: true, system: true, appliesTo: {kinds: [glossary_term]}, storage: metadata.example.score, presentation: {labelKey: example.score}}`,
+		"asset and another": `  - {id: score, type: number, core: true, nullable: true, system: true, appliesTo: {kinds: [asset, data_product]}, storage: metadata.example.score, presentation: {labelKey: example.score}}`,
+	} {
+		if _, err := Load(strings.NewReader(profile(field))); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}

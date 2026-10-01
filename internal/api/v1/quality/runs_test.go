@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/marmotdata/marmot/internal/core/quality"
 )
@@ -131,5 +132,32 @@ func TestEveryRunRouteIsGuardedByItsPermission(t *testing.T) {
 		if got[key] != 2 {
 			t.Errorf("%s has %d middleware, want authentication and a permission", key, got[key])
 		}
+	}
+}
+
+type fixedNext struct{ at time.Time }
+
+func (f fixedNext) Next(context.Context, *quality.Stored) *time.Time { return &f.at }
+
+func TestSettingsSayWhenTheScheduleRunsNextOnlyWhenThereIsOne(t *testing.T) {
+	when := time.Date(2026, 10, 2, 3, 0, 0, 0, time.UTC)
+	stored := quality.Stored{Settings: quality.DefaultSettings(), Version: 2}
+	h := &Handler{service: &fakeService{stored: &stored}, schedule: fixedNext{when}}
+
+	w := httptest.NewRecorder()
+	h.getSettings(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	var body map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if _, ok := body["next_run"]; ok {
+		t.Fatalf("without a schedule there is no next run: %v", body["next_run"])
+	}
+
+	stored.Schedule = "0 3 * * *"
+	w = httptest.NewRecorder()
+	h.getSettings(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	body = nil
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if body["next_run"] != "2026-10-02T03:00:00Z" || body["schedule"] != "0 3 * * *" || body["version"] != float64(2) {
+		t.Fatalf("%v", body)
 	}
 }

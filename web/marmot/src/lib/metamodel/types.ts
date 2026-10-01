@@ -55,6 +55,8 @@ export interface MetamodelField {
 	derive?: MetamodelDerivation;
 	/** Filled from the asset's native type while the field has no value. */
 	default?: MetamodelDerivation;
+	/** Written only by the platform, such as the quality score; clients show it read-only. */
+	system?: boolean;
 }
 
 export interface MetamodelSchema {

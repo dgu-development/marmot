@@ -51,16 +51,18 @@ func (m *memorySource) ListAfter(ctx context.Context, after string, limit int) (
 }
 
 type memoryRuns struct {
-	mu        sync.Mutex
-	running   *quality.Run
-	batches   [][]quality.AssetResult
-	progress  []int
-	total     int
-	summary   *quality.Summary
-	retention quality.Retention
-	failure   string
-	done      chan struct{}
-	domains   map[string]string
+	mu          sync.Mutex
+	running     *quality.Run
+	batches     [][]quality.AssetResult
+	progress    []int
+	total       int
+	summary     *quality.Summary
+	retention   quality.Retention
+	failure     string
+	done        chan struct{}
+	domains     map[string]string
+	lastStarted time.Time
+	counts      quality.ScoreCounts
 }
 
 func newMemoryRuns() *memoryRuns {
@@ -68,6 +70,8 @@ func newMemoryRuns() *memoryRuns {
 }
 
 func (m *memoryRuns) Reap(context.Context, time.Duration) error { return nil }
+
+func (m *memoryRuns) LastStarted(context.Context) (time.Time, error) { return m.lastStarted, nil }
 
 func (m *memoryRuns) Start(_ context.Context, run quality.Run, _ quality.Settings) (*quality.Run, error) {
 	m.mu.Lock()
@@ -90,6 +94,15 @@ func (m *memoryRuns) SaveBatch(_ context.Context, _ string, results []quality.As
 	defer m.mu.Unlock()
 	m.batches = append(m.batches, results)
 	m.progress = append(m.progress, processed)
+	return nil
+}
+
+func (m *memoryRuns) AddScoreCounts(_ context.Context, _ string, counts quality.ScoreCounts) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.counts.Written += counts.Written
+	m.counts.Conflicts += counts.Conflicts
+	m.counts.Failed += counts.Failed
 	return nil
 }
 

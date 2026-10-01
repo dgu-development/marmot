@@ -102,6 +102,10 @@ type UpdateInput struct {
 	Query            *string                `json:"query,omitempty"`
 	QueryLanguage    *string                `json:"query_language,omitempty"`
 	SkipNotification bool                   `json:"-"`
+	// SystemWrite lets the platform set the fields only it writes (metamodel `system: true`), such
+	// as the quality score. Nothing it writes is judged against the rest of the asset: an asset with
+	// an invalid value elsewhere is exactly the one the audit has to be able to score.
+	SystemWrite bool `json:"-"`
 	// FromSync marks a discovery run: the source fills governed fields that are still
 	// empty but never overwrites a value already set, so it needs no expected version.
 	FromSync bool `json:"-"`
@@ -484,6 +488,7 @@ func (s *service) Create(ctx context.Context, input CreateInput) (*Asset, error)
 	if asset.Tags == nil {
 		asset.Tags = []string{}
 	}
+	s.dropSystemValues(asset)
 	if err := s.derive(asset); err != nil {
 		return nil, err
 	}
@@ -657,7 +662,7 @@ func (s *service) Update(ctx context.Context, id string, input UpdateInput) (*As
 			return nil, err
 		}
 		asset.Metadata = metadata
-		if err := applyFields(s.registry(), asset, input.GovernedFields); err != nil {
+		if err := applyFields(s.registry(), asset, input.GovernedFields, input.SystemWrite); err != nil {
 			return nil, err
 		}
 		before := MetamodelValues(s.registry(), &oldAsset)
@@ -681,12 +686,14 @@ func (s *service) Update(ctx context.Context, id string, input UpdateInput) (*As
 	if !updated {
 		return asset, nil
 	}
-	if err := s.derive(asset); err != nil {
-		return nil, err
-	}
+	if !input.SystemWrite {
+		if err := s.derive(asset); err != nil {
+			return nil, err
+		}
 
-	if err := s.validateAsset(asset); err != nil {
-		return nil, err
+		if err := s.validateAsset(asset); err != nil {
+			return nil, err
+		}
 	}
 
 	asset.UpdatedAt = time.Now()
