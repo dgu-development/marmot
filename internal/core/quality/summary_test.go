@@ -10,15 +10,18 @@ import (
 func TestSummaryCountsStubsApartAndAveragesTheRest(t *testing.T) {
 	agg := quality.NewAggregator(quality.DefaultSettings().Weights)
 	agg.Add(quality.AssetResult{Stub: true, Quality: 0, Type: "table"})
-	agg.Add(quality.AssetResult{Quality: 100, Completeness: 100, Conformity: 100, Status: quality.StatusCompliant, Type: "table", DomainID: "d1",
+	agg.Add(quality.AssetResult{Quality: 100, Scores: map[string]float64{"completeness": 100, "validity": 100}, Status: quality.StatusCompliant, Type: "table", DomainID: "d1",
 		Sections: map[string]quality.SectionStat{"general": {Total: 2, Filled: 2, Valid: 2}}})
-	agg.Add(quality.AssetResult{Quality: 50, Completeness: 40, Conformity: 60, Status: quality.StatusNoncompliant, Type: "topic", DomainID: quality.UnassignedDomain, IssueCount: 2,
+	agg.Add(quality.AssetResult{Quality: 50, Scores: map[string]float64{"completeness": 40, "validity": 60}, Status: quality.StatusNoncompliant, Type: "topic", DomainID: quality.UnassignedDomain, IssueCount: 2,
 		Issues:   []quality.Issue{{FieldID: "a"}, {FieldID: "a"}},
 		Sections: map[string]quality.SectionStat{"general": {Total: 2, Filled: 0, Valid: 0}}})
 
 	s := agg.Summary()
-	if s.TotalAssets != 2 || s.Stubs != 1 || s.Quality != 75 || s.Completeness != 70 || s.Conformity != 80 || s.TotalIssues != 2 {
+	if s.TotalAssets != 2 || s.Stubs != 1 || s.Quality != 75 || s.TotalIssues != 2 {
 		t.Fatalf("%+v", s)
+	}
+	if len(s.ByDimension) != 2 || s.ByDimension[0] != (quality.GroupStat{Key: "completeness", Value: 70, Count: 2}) || s.ByDimension[1].Value != 80 {
+		t.Fatalf("by dimension: %+v", s.ByDimension)
 	}
 	if s.StatusCounts[quality.StatusCompliant] != 1 || s.StatusCounts[quality.StatusNoncompliant] != 1 || s.StatusCounts[quality.StatusWarning] != 0 {
 		t.Fatalf("status = %v", s.StatusCounts)
@@ -29,8 +32,8 @@ func TestSummaryCountsStubsApartAndAveragesTheRest(t *testing.T) {
 	if len(s.ByDomain) != 2 || s.ByDomain[0].Key != quality.UnassignedDomain {
 		t.Fatalf("by domain: %+v", s.ByDomain)
 	}
-	// An asset with nothing filled has full conformity by default, so its section scores 100*0.6 + 0*0.4 = 60.
-	if len(s.BySection) != 1 || s.BySection[0].Value != 80 || s.BySection[0].Count != 2 {
+	// An asset with nothing filled has full validity by default, so its section scores (0+100)/2 = 50.
+	if len(s.BySection) != 1 || s.BySection[0].Value != 75 || s.BySection[0].Count != 2 {
 		t.Fatalf("by section: %+v", s.BySection)
 	}
 	if len(s.TopFields) != 1 || s.TopFields[0] != (quality.FieldCount{FieldID: "a", Count: 2}) {

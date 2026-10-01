@@ -18,6 +18,27 @@ import (
 // itself defines (required fields, valid values) and the structure of the external links.
 var BuiltinQualityRules = []string{"required", "validation", "externalLinkInvalid", "externalLinkEmpty"}
 
+// Quality dimensions group the checks of the audit by what they measure. Each has a score of its
+// own and a weight in the overall one. Uniqueness and accuracy are not here: the first compares
+// assets with each other and the second needs a truth outside the catalog, and a rule judges one
+// asset on its metadata.
+const (
+	DimensionCompleteness = "completeness" // the values that should be there are
+	DimensionValidity     = "validity"     // the values there are well formed and allowed
+	DimensionConsistency  = "consistency"  // the values agree with each other
+	DimensionTimeliness   = "timeliness"   // the values are current
+)
+
+var QualityDimensions = []string{DimensionCompleteness, DimensionValidity, DimensionConsistency, DimensionTimeliness}
+
+// BuiltinRuleDimension is the dimension each built-in rule counts under.
+var BuiltinRuleDimension = map[string]string{
+	"required":            DimensionCompleteness,
+	"validation":          DimensionValidity,
+	"externalLinkInvalid": DimensionValidity,
+	"externalLinkEmpty":   DimensionCompleteness,
+}
+
 // Operators of a condition, by the value they take.
 const (
 	OpSet         = "set"         // the field has a value
@@ -72,6 +93,8 @@ type QualityRule struct {
 	Description    string `json:"description,omitempty"`
 	LabelKey       string `json:"labelKey,omitempty"`
 	DescriptionKey string `json:"descriptionKey,omitempty"`
+	// Dimension is the quality dimension whose score the rule's checks feed.
+	Dimension string `json:"dimension" enums:"completeness,validity,consistency,timeliness"`
 	// Severity is what a finding of the rule counts as: error or warning.
 	Severity string             `json:"severity"`
 	When     []QualityCondition `json:"when,omitempty"`
@@ -257,6 +280,9 @@ func ValidateQualityRule(rule QualityRule, fields map[string]Field, custom bool)
 	}
 	if rule.Code != "" && !ruleCodePattern.MatchString(rule.Code) {
 		add("code", "invalid_code")
+	}
+	if !slices.Contains(QualityDimensions, rule.Dimension) {
+		add("dimension", "invalid_dimension")
 	}
 	if rule.Severity != "error" && rule.Severity != "warning" {
 		add("severity", "invalid_severity")

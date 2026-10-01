@@ -41,6 +41,7 @@ func TestAProfileDeclaresQualityRules(t *testing.T) {
   - id: piiCoherence
     code: pii_coherence
     labelKey: r.rule.pii
+    dimension: validity
     severity: warning
     when:
       - {field: pii, op: equals, value: true}
@@ -50,6 +51,7 @@ func TestAProfileDeclaresQualityRules(t *testing.T) {
   - id: reviewExpired
     code: review_expired
     labelKey: r.rule.review
+    dimension: validity
     severity: warning
     checks:
       - {field: review, op: notBefore, value: today, optional: true}
@@ -65,6 +67,7 @@ func TestAProfileDeclaresQualityRules(t *testing.T) {
 	other, _ := profileWithRules(t, `
   - id: reviewExpired
     labelKey: r.rule.review
+    dimension: validity
     severity: error
     checks:
       - {field: review, op: notBefore, value: today}
@@ -87,6 +90,8 @@ func TestRejectInvalidProfileRules(t *testing.T) {
 		"another kind":     `  - {id: a, labelKey: k, severity: warning, checks: [{field: glossary_only, op: set}]}`,
 		"no checks":        `  - {id: a, labelKey: k, severity: warning, checks: []}`,
 		"reserved id":      `  - {id: required, labelKey: k, severity: warning, checks: [{field: steward, op: set}]}`,
+		"no dimension":     `  - {id: a, labelKey: k, severity: warning, checks: [{field: steward, op: set}]}`,
+		"bad dimension":    `  - {id: a, labelKey: k, dimension: accuracy, severity: warning, checks: [{field: steward, op: set}]}`,
 		"bad severity":     `  - {id: a, labelKey: k, severity: info, checks: [{field: steward, op: set}]}`,
 		"no label":         `  - {id: a, severity: warning, checks: [{field: steward, op: set}]}`,
 		"unknown operator": `  - {id: a, labelKey: k, severity: warning, checks: [{field: steward, op: starts}]}`,
@@ -104,7 +109,7 @@ func TestRejectInvalidProfileRules(t *testing.T) {
 func TestConditionsAreCheckedAgainstTheFieldsTheyName(t *testing.T) {
 	fields := fieldsOf(t)
 	rule := func(c QualityCondition) QualityRule {
-		return QualityRule{ID: "custom1", Name: "A rule", Severity: "warning", Checks: []QualityCondition{c}}
+		return QualityRule{ID: "custom1", Name: "A rule", Dimension: "validity", Severity: "warning", Checks: []QualityCondition{c}}
 	}
 	problem := func(c QualityCondition) string {
 		err := ValidateQualityRule(rule(c), fields, true)
@@ -157,7 +162,7 @@ func TestConditionsAreCheckedAgainstTheFieldsTheyName(t *testing.T) {
 
 func TestACustomRuleNeedsANameAndWhenCannotBeOptional(t *testing.T) {
 	fields := fieldsOf(t)
-	rule := QualityRule{ID: "custom1", Severity: "warning", When: []QualityCondition{{Field: "pii", Op: OpEquals, Value: true, Optional: true}}, Checks: []QualityCondition{{Field: "steward", Op: OpSet}}}
+	rule := QualityRule{ID: "custom1", Dimension: "validity", Severity: "warning", When: []QualityCondition{{Field: "pii", Op: OpEquals, Value: true, Optional: true}}, Checks: []QualityCondition{{Field: "steward", Op: OpSet}}}
 	var invalid *QualityRuleError
 	if err := ValidateQualityRule(rule, fields, true); !errors.As(err, &invalid) || len(invalid.Problems) != 2 {
 		t.Fatalf("%v", err)

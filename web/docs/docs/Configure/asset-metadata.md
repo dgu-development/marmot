@@ -265,7 +265,7 @@ profile.
 
 ### qualityRules
 
-The profile can declare `qualityRules`, the checks the [quality audit](quality.md#rules-and-findings) applies on top of the fields' own validation: conditions over the fields above, with a closed set of operators and never code. Their text goes through `labelKey` and `descriptionKey` like any other message. A rule that names an unknown field, operator or key, or reuses a built-in id (`required`, `validation`, `externalLinkInvalid`, `externalLinkEmpty`), keeps the profile from loading. They are part of the profile's hash and of `GET /api/v1/metamodel`.
+The profile can declare `qualityRules`, the checks the [quality audit](quality.md#rules-and-findings) applies on top of the fields' own validation: conditions over the fields above, with a closed set of operators and never code. Each belongs to a quality `dimension` (`completeness`, `validity`, `consistency` or `timeliness`). Their text goes through `labelKey` and `descriptionKey` like any other message. A rule that names an unknown field, operator or key, or reuses a built-in id (`required`, `validation`, `externalLinkInvalid`, `externalLinkEmpty`), keeps the profile from loading. They are part of the profile's hash and of `GET /api/v1/metamodel`.
 
 ## Read the effective schema
 

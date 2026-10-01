@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/robfig/cron/v3"
 )
 
@@ -38,11 +39,48 @@ type RuleSetting struct {
 	Severity Severity `json:"severity" enums:"error,warning"`
 } // @name QualityRuleSetting
 
-// Weights are percentages of the overall score and add up to 100.
+// Weights are the percentages each quality dimension has in the overall score and add up to 100.
+// An asset to which a dimension does not apply (no rule of it is evaluated) is scored over the
+// others, their weights taken in proportion.
 type Weights struct {
 	Completeness float64 `json:"completeness"`
-	Conformity   float64 `json:"conformity"`
+	Validity     float64 `json:"validity"`
+	Consistency  float64 `json:"consistency"`
+	Timeliness   float64 `json:"timeliness"`
 } // @name QualityWeights
+
+func (w Weights) of(dimension string) float64 {
+	switch dimension {
+	case metamodel.DimensionCompleteness:
+		return w.Completeness
+	case metamodel.DimensionValidity:
+		return w.Validity
+	case metamodel.DimensionConsistency:
+		return w.Consistency
+	case metamodel.DimensionTimeliness:
+		return w.Timeliness
+	}
+	return 0
+}
+
+// mix is the weighted mean of the scores of the dimensions that apply.
+func (w Weights) mix(scores map[string]float64) float64 {
+	sum, total := 0.0, 0.0
+	for dimension, score := range scores {
+		sum += score * w.of(dimension)
+		total += w.of(dimension)
+	}
+	if total > 0 {
+		return sum / total
+	}
+	if len(scores) == 0 {
+		return 0
+	}
+	for _, score := range scores {
+		sum += score
+	}
+	return sum / float64(len(scores))
+}
 
 // Thresholds are the scores, out of 100, from which an asset is compliant or
 // only warned about.
@@ -94,7 +132,7 @@ func DefaultSettings() Settings {
 	rules[RuleRequired] = RuleSetting{Enabled: true, Severity: SeverityError}
 	rules[RuleValidation] = RuleSetting{Enabled: true, Severity: SeverityError}
 	return Settings{
-		Weights:       Weights{Completeness: 40, Conformity: 60},
+		Weights:       Weights{Completeness: 30, Validity: 30, Consistency: 20, Timeliness: 20},
 		Thresholds:    Thresholds{Compliant: 90, Warning: 70},
 		Rules:         rules,
 		Retention:     Retention{RunDays: 730, ResultDays: 90},
@@ -139,9 +177,14 @@ func (s Settings) ValidateWith(profileRules []RuleID) error {
 	var problems []FieldError
 	add := func(field, code string) { problems = append(problems, FieldError{field, code}) }
 
-	if !inPercent(s.Weights.Completeness) || !inPercent(s.Weights.Conformity) {
+	total, inRange := 0.0, true
+	for _, dimension := range metamodel.QualityDimensions {
+		inRange = inRange && inPercent(s.Weights.of(dimension))
+		total += s.Weights.of(dimension)
+	}
+	if !inRange {
 		add("weights", "range")
-	} else if math.Abs(s.Weights.Completeness+s.Weights.Conformity-100) > 0.01 {
+	} else if math.Abs(total-100) > 0.01 {
 		add("weights", "total")
 	}
 	if !inPercent(s.Thresholds.Compliant) || !inPercent(s.Thresholds.Warning) {

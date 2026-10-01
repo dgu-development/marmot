@@ -112,14 +112,18 @@ func (r *PostgresRepository) SaveBatch(ctx context.Context, id string, results [
 	rows := make([][]any, len(results))
 	var issues [][]any
 	for i, res := range results {
+		scores, err := json.Marshal(res.Scores)
+		if err != nil {
+			return fmt.Errorf("encoding quality scores: %w", err)
+		}
 		rows[i] = []any{id, res.AssetID, res.MRN, res.Name, res.Type, res.DomainID,
-			res.Completeness, res.Conformity, res.Quality, string(res.Status), res.IssueCount}
+			scores, res.Quality, string(res.Status), res.IssueCount}
 		for _, issue := range res.Issues {
 			issues = append(issues, []any{id, res.AssetID, issue.FieldID, issue.Code, string(issue.RuleID), string(issue.Severity), issue.Section, issue.Item})
 		}
 	}
 	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"quality_results"},
-		[]string{"run_id", "asset_id", "asset_mrn", "asset_name", "asset_type", "domain_id", "completeness", "conformity", "quality", "status", "issue_count"},
+		[]string{"run_id", "asset_id", "asset_mrn", "asset_name", "asset_type", "domain_id", "scores", "quality", "status", "issue_count"},
 		pgx.CopyFromRows(rows)); err != nil {
 		return fmt.Errorf("storing quality results: %w", err)
 	}
@@ -238,7 +242,7 @@ func (r *PostgresRepository) Results(ctx context.Context, id string, f ResultFil
 	}
 	args = append(args, f.Limit, f.Offset)
 	rows, err := r.db.Query(ctx, fmt.Sprintf(`
-		SELECT asset_id, asset_mrn, asset_name, asset_type, domain_id, completeness, conformity, quality, status, issue_count
+		SELECT asset_id, asset_mrn, asset_name, asset_type, domain_id, scores, quality, status, issue_count
 		  FROM quality_results WHERE %s ORDER BY %s LIMIT $%d OFFSET $%d`, clause, order, len(args)-1, len(args)), args...)
 	if err != nil {
 		return nil, 0, err
@@ -248,8 +252,12 @@ func (r *PostgresRepository) Results(ctx context.Context, id string, f ResultFil
 	index := map[string]int{}
 	for rows.Next() {
 		var res AssetResult
-		if err := rows.Scan(&res.AssetID, &res.MRN, &res.Name, &res.Type, &res.DomainID, &res.Completeness, &res.Conformity, &res.Quality, &res.Status, &res.IssueCount); err != nil {
+		var scores []byte
+		if err := rows.Scan(&res.AssetID, &res.MRN, &res.Name, &res.Type, &res.DomainID, &scores, &res.Quality, &res.Status, &res.IssueCount); err != nil {
 			return nil, 0, err
+		}
+		if err := json.Unmarshal(scores, &res.Scores); err != nil {
+			return nil, 0, fmt.Errorf("decoding quality scores: %w", err)
 		}
 		index[res.AssetID] = len(results)
 		results = append(results, res)

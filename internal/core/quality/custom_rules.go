@@ -55,13 +55,15 @@ type RuleInfo struct {
 	// Name and Description are literal text, of a custom rule; LabelKey and DescriptionKey resolve
 	// through the profile's messages, for a profile rule; a built-in rule has neither and the
 	// client names it by its id.
-	Name           string   `json:"name,omitempty"`
-	Description    string   `json:"description,omitempty"`
-	LabelKey       string   `json:"label_key,omitempty"`
-	DescriptionKey string   `json:"description_key,omitempty"`
-	Code           string   `json:"code,omitempty"`
-	Severity       Severity `json:"severity" enums:"error,warning"`
-	Enabled        bool     `json:"enabled"`
+	Name           string `json:"name,omitempty"`
+	Description    string `json:"description,omitempty"`
+	LabelKey       string `json:"label_key,omitempty"`
+	DescriptionKey string `json:"description_key,omitempty"`
+	Code           string `json:"code,omitempty"`
+	// Dimension is the quality dimension the rule feeds.
+	Dimension string   `json:"dimension" enums:"completeness,validity,consistency,timeliness"`
+	Severity  Severity `json:"severity" enums:"error,warning"`
+	Enabled   bool     `json:"enabled"`
 	// Definition is what the rule checks, for the rules that declare it.
 	Definition *metamodel.QualityRule `json:"definition,omitempty"`
 	// Version, for a custom rule, is what to send back with If-Match.
@@ -105,13 +107,13 @@ func (s *ruleService) Rules(ctx context.Context) ([]RuleInfo, error) {
 	var out []RuleInfo
 	for _, id := range Rules {
 		setting := stored.Rules[id]
-		out = append(out, RuleInfo{ID: id, Source: SourceBuiltin, Severity: setting.Severity, Enabled: setting.Enabled})
+		out = append(out, RuleInfo{ID: id, Source: SourceBuiltin, Dimension: metamodel.BuiltinRuleDimension[string(id)], Severity: setting.Severity, Enabled: setting.Enabled})
 	}
 	for _, rule := range s.registry.QualityRules() {
 		setting := stored.Rules[RuleID(rule.ID)]
 		definition := rule
 		out = append(out, RuleInfo{
-			ID: RuleID(rule.ID), Source: SourceProfile, LabelKey: rule.LabelKey, DescriptionKey: rule.DescriptionKey,
+			ID: RuleID(rule.ID), Source: SourceProfile, Dimension: rule.Dimension, LabelKey: rule.LabelKey, DescriptionKey: rule.DescriptionKey,
 			Code: ruleCode(rule), Severity: setting.Severity, Enabled: setting.Enabled, Definition: &definition,
 		})
 	}
@@ -123,7 +125,7 @@ func (s *ruleService) Rules(ctx context.Context) ([]RuleInfo, error) {
 	for _, c := range custom {
 		definition := c.QualityRule
 		info := RuleInfo{
-			ID: RuleID(c.ID), Source: SourceCustom, Name: c.Name, Description: c.Description, Code: ruleCode(c.QualityRule),
+			ID: RuleID(c.ID), Source: SourceCustom, Dimension: c.Dimension, Name: c.Name, Description: c.Description, Code: ruleCode(c.QualityRule),
 			Severity: Severity(c.Severity), Enabled: c.Enabled, Definition: &definition, Version: c.Version,
 		}
 		if err := metamodel.ValidateQualityRule(c.QualityRule, fields, true); err != nil {
