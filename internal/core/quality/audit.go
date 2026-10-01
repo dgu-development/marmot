@@ -54,11 +54,12 @@ type AssetResult struct {
 	Issues []Issue `json:"issues,omitempty"`
 
 	// Stub marks a placeholder created by lineage: it is counted apart and never stored or scored.
-	Stub     bool                   `json:"-"`
+	Stub     bool                   `json:"stub,omitempty"`
 	Sections map[string]SectionStat `json:"-"`
 	// Dimensions are the checks the asset meets, in the order of dimensionOrder; they are written
-	// to the asset with its score and are not stored with the results.
-	Dimensions []string `json:"-"`
+	// to the asset with its score and are not stored with the results, so only an evaluation of
+	// an asset carries them.
+	Dimensions []string `json:"dimensions,omitempty"`
 } // @name QualityAssetResult
 
 // Auditor scores assets against the effective metamodel with the settings of one run.
@@ -66,18 +67,35 @@ type Auditor struct {
 	registry *metamodel.Registry
 	settings Settings
 	today    string
+	day      time.Time
+	rules    []*compiledRule
 	fields   []metamodel.Field
 	byID     map[string]metamodel.Field
 }
 
-func NewAuditor(registry *metamodel.Registry, settings Settings, now time.Time) *Auditor {
+// AuditorOption adjusts an Auditor.
+type AuditorOption func(*Auditor, *[]CustomRule)
+
+// WithCustomRules adds the rules people wrote in the interface to the ones the profile declares.
+func WithCustomRules(rules []CustomRule) AuditorOption {
+	return func(_ *Auditor, custom *[]CustomRule) { *custom = rules }
+}
+
+func NewAuditor(registry *metamodel.Registry, settings Settings, now time.Time, options ...AuditorOption) *Auditor {
 	all := registry.Fields("asset")
+	day := now.UTC().Truncate(24 * time.Hour)
 	a := &Auditor{
 		registry: registry,
 		settings: settings,
-		today:    now.UTC().Format(time.DateOnly),
+		today:    day.Format(time.DateOnly),
+		day:      day,
 		byID:     make(map[string]metamodel.Field, len(all)),
 	}
+	var custom []CustomRule
+	for _, option := range options {
+		option(a, &custom)
+	}
+	a.rules = activeRules(registry, settings, custom)
 	for _, f := range all {
 		a.byID[f.ID] = f
 		if !slices.Contains(outputFields, f.ID) {
@@ -107,16 +125,17 @@ func unset(value any) bool {
 type finding struct {
 	fieldID, code string
 	item          *int
+	// A finding of a declared rule (profile or custom) carries its rule and severity; the others
+	// are the built-in ones, judged by their code and the settings.
+	dsl      bool
+	rule     RuleID
+	severity Severity
 }
 
 func ruleOf(code string) RuleID {
 	switch code {
 	case "required":
 		return RuleRequired
-	case "pii_coherence":
-		return RulePIICoherence
-	case "review_expired":
-		return RuleReviewExpired
 	case "external_link_invalid":
 		return RuleExternalLinkInvalid
 	case "external_link_empty":
@@ -132,18 +151,9 @@ func validDate(value string) bool {
 
 func round(value float64) float64 { return math.Round(value*10) / 10 }
 
-func (a *Auditor) coherence(values map[string]any, links []asset.ExternalLink) []finding {
+// linkFindings are the built-in judgement of the external links, which are not a profile field.
+func (a *Auditor) linkFindings(links []asset.ExternalLink) []finding {
 	var out []finding
-	if pii, _ := values["contains_pii"].(bool); pii {
-		for _, id := range []string{"classification", "data_steward"} {
-			if _, ok := a.byID[id]; ok && unset(values[id]) {
-				out = append(out, finding{fieldID: id, code: "pii_coherence"})
-			}
-		}
-	}
-	if review, ok := values["next_review"].(string); ok && validDate(review) && review < a.today {
-		out = append(out, finding{fieldID: "next_review", code: "review_expired"})
-	}
 	for i, link := range links {
 		if strings.TrimSpace(link.Name) == "" && strings.TrimSpace(link.URL) == "" {
 			item := i
@@ -200,19 +210,26 @@ func (a *Auditor) AuditWithDocs(as *asset.Asset, hasPages bool) AssetResult {
 		result.Sections[f.Presentation.Section] = stat
 	}
 	if !as.IsStub {
-		findings = append(findings, a.coherence(values, as.ExternalLinks)...)
+		findings = append(findings, a.linkFindings(as.ExternalLinks)...)
+		for _, rule := range a.rules {
+			findings = append(findings, rule.apply(values, a.day)...)
+		}
 	}
 
 	hasError := false
 	for _, found := range findings {
-		id := ruleOf(found.code)
-		rule := a.settings.Rules[id]
-		if !rule.Enabled {
-			continue
+		id, severity := found.rule, found.severity
+		if !found.dsl {
+			id = ruleOf(found.code)
+			rule := a.settings.Rules[id]
+			if !rule.Enabled {
+				continue
+			}
+			severity = rule.Severity
 		}
-		hasError = hasError || rule.Severity == SeverityError
+		hasError = hasError || severity == SeverityError
 		result.Issues = append(result.Issues, Issue{
-			FieldID: found.fieldID, Code: found.code, RuleID: id, Severity: rule.Severity,
+			FieldID: found.fieldID, Code: found.code, RuleID: id, Severity: severity,
 			Section: a.byID[found.fieldID].Presentation.Section, Item: found.item,
 		})
 	}
@@ -297,6 +314,9 @@ func (a *Auditor) dimensions(as *asset.Asset, values map[string]any, findings []
 		}
 	}
 	for _, found := range findings {
+		if found.dsl {
+			continue
+		}
 		if found.code == "required" {
 			met["completeness"] = false
 		}

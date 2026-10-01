@@ -18,15 +18,16 @@ const runColumns = `id, trigger, COALESCE(triggered_by, ''), status, settings_ve
 
 func scanRun(row pgx.Row, withSettings bool) (*Run, error) {
 	var (
-		run     Run
-		summary []byte
-		raw     []byte
+		run      Run
+		summary  []byte
+		raw      []byte
+		rulesRaw []byte
 	)
 	dest := []any{&run.ID, &run.Trigger, &run.TriggeredBy, &run.Status, &run.SettingsVersion, &run.MetamodelProfile,
 		&run.MetamodelVersion, &run.MetamodelHash, &run.Processed, &run.Total,
 		&run.ScoresWritten, &run.ScoreConflicts, &run.ScoreFailures, &run.StartedAt, &run.FinishedAt, &run.Error, &summary}
 	if withSettings {
-		dest = append(dest, &raw)
+		dest = append(dest, &raw, &rulesRaw)
 	}
 	if err := row.Scan(dest...); err != nil {
 		return nil, err
@@ -41,6 +42,11 @@ func scanRun(row pgx.Row, withSettings bool) (*Run, error) {
 		run.Settings = new(Settings)
 		if err := json.Unmarshal(raw, run.Settings); err != nil {
 			return nil, fmt.Errorf("decoding quality run settings: %w", err)
+		}
+	}
+	if withSettings && len(rulesRaw) > 0 {
+		if err := json.Unmarshal(rulesRaw, &run.CustomRules); err != nil {
+			return nil, fmt.Errorf("decoding quality run rules: %w", err)
 		}
 	}
 	return &run, nil
@@ -64,15 +70,21 @@ func (r *PostgresRepository) LastStarted(ctx context.Context) (time.Time, error)
 	return *started, nil
 }
 
-func (r *PostgresRepository) Start(ctx context.Context, run Run, settings Settings) (*Run, error) {
+func (r *PostgresRepository) Start(ctx context.Context, run Run, settings Settings, rules []CustomRule) (*Run, error) {
 	raw, err := json.Marshal(settings)
 	if err != nil {
 		return nil, fmt.Errorf("encoding quality run settings: %w", err)
 	}
+	var rulesRaw []byte
+	if len(rules) > 0 {
+		if rulesRaw, err = json.Marshal(rules); err != nil {
+			return nil, fmt.Errorf("encoding quality run rules: %w", err)
+		}
+	}
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO quality_runs (trigger, triggered_by, settings_version, settings, metamodel_profile, metamodel_version, metamodel_hash)
-		VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6, $7)
-		RETURNING `+runColumns, run.Trigger, run.TriggeredBy, run.SettingsVersion, raw, run.MetamodelProfile, run.MetamodelVersion, run.MetamodelHash)
+		INSERT INTO quality_runs (trigger, triggered_by, settings_version, settings, custom_rules, metamodel_profile, metamodel_version, metamodel_hash)
+		VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6, $7, $8)
+		RETURNING `+runColumns, run.Trigger, run.TriggeredBy, run.SettingsVersion, raw, rulesRaw, run.MetamodelProfile, run.MetamodelVersion, run.MetamodelHash)
 	started, err := scanRun(row, false)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -189,7 +201,7 @@ func (r *PostgresRepository) Runs(ctx context.Context, limit, offset int) ([]Run
 }
 
 func (r *PostgresRepository) Run(ctx context.Context, id string) (*Run, error) {
-	run, err := scanRun(r.db.QueryRow(ctx, `SELECT `+runColumns+`, settings FROM quality_runs WHERE id::text = $1`, id), true)
+	run, err := scanRun(r.db.QueryRow(ctx, `SELECT `+runColumns+`, settings, custom_rules FROM quality_runs WHERE id::text = $1`, id), true)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrRunNotFound
 	}

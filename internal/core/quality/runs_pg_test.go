@@ -2,6 +2,7 @@ package quality_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -165,7 +166,7 @@ func TestOnlyOneRunRunsAtATimeAndAStaleOneIsReaped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := e.repo.Start(ctx, quality.Run{Trigger: quality.TriggerManual}, quality.DefaultSettings())
+	got, err := e.repo.Start(ctx, quality.Run{Trigger: quality.TriggerManual}, quality.DefaultSettings(), nil)
 	if err != quality.ErrRunInProgress || got == nil || got.Status != quality.RunRunning {
 		t.Fatalf("got %+v, %v", got, err)
 	}
@@ -173,7 +174,7 @@ func TestOnlyOneRunRunsAtATimeAndAStaleOneIsReaped(t *testing.T) {
 	if err := e.repo.Reap(ctx, time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.repo.Start(ctx, quality.Run{Trigger: quality.TriggerManual}, quality.DefaultSettings()); err != quality.ErrRunInProgress {
+	if _, err := e.repo.Start(ctx, quality.Run{Trigger: quality.TriggerManual}, quality.DefaultSettings(), nil); err != quality.ErrRunInProgress {
 		t.Fatalf("a run that is alive was reaped: %v", err)
 	}
 	if err := e.repo.Reap(ctx, 0); err != nil {
@@ -247,7 +248,7 @@ func TestRetentionZeroKeepsOnlyTheLatestRun(t *testing.T) {
 func TestAFailedRunKeepsWhatEarlierBatchesStored(t *testing.T) {
 	e := pgEnv(t, quality.DefaultSettings())
 	ctx := context.Background()
-	run, err := e.repo.Start(ctx, quality.Run{Trigger: quality.TriggerSchedule}, quality.DefaultSettings())
+	run, err := e.repo.Start(ctx, quality.Run{Trigger: quality.TriggerSchedule}, quality.DefaultSettings(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,5 +365,138 @@ func TestDocumentationPagesAndLegacyDocumentationCountAsDocumentationAvailable(t
 	}
 	if none, err := e.repo.DocumentedAssets(ctx, nil); err != nil || len(none) != 0 {
 		t.Fatalf("nothing asked: %v %v", none, err)
+	}
+}
+
+func TestCustomRulesAreStoredWithCompareAndSet(t *testing.T) {
+	pool := pgtest.TempDB(t)
+	repo := quality.NewPostgresRuleRepository(pool)
+	ctx := context.Background()
+	rule := quality.CustomRule{
+		QualityRule: metamodel.QualityRule{ID: "rule_a", Name: "Steward", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "data_steward", Op: metamodel.OpSet}}},
+		Enabled:     true, CreatedBy: "", UpdatedBy: "",
+	}
+
+	created, err := repo.Create(ctx, rule)
+	if err != nil || created.Version != 1 || !created.Enabled || created.Checks[0].Op != metamodel.OpSet {
+		t.Fatalf("%+v %v", created, err)
+	}
+	if _, err := repo.Create(ctx, rule); !errors.Is(err, quality.ErrRuleExists) {
+		t.Fatalf("a taken id: %v", err)
+	}
+
+	rule.Name = "Steward is mandatory"
+	rule.Enabled = false
+	updated, err := repo.Update(ctx, rule, 1)
+	if err != nil || updated.Version != 2 || updated.Enabled || updated.Name != "Steward is mandatory" {
+		t.Fatalf("%+v %v", updated, err)
+	}
+	if _, err := repo.Update(ctx, rule, 1); !errors.Is(err, quality.ErrRuleVersion) {
+		t.Fatalf("stale: %v", err)
+	}
+	rule.ID = "rule_gone"
+	if _, err := repo.Update(ctx, rule, 1); !errors.Is(err, quality.ErrRuleNotFound) {
+		t.Fatalf("unknown: %v", err)
+	}
+
+	list, err := repo.List(ctx)
+	if err != nil || len(list) != 1 || list[0].ID != "rule_a" {
+		t.Fatalf("%+v %v", list, err)
+	}
+	if n, _ := repo.Count(ctx); n != 1 {
+		t.Fatalf("count %d", n)
+	}
+	if err := repo.Delete(ctx, "rule_a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Delete(ctx, "rule_a"); !errors.Is(err, quality.ErrRuleNotFound) {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestARunAppliesTheCustomRulesAndKeepsTheOnesItUsed(t *testing.T) {
+	e := pgEnvWith(t, quality.DefaultSettings(), registry(t), false)
+	ctx := context.Background()
+	rules := quality.NewPostgresRuleRepository(e.pool)
+	if _, err := rules.Create(ctx, quality.CustomRule{
+		QualityRule: metamodel.QualityRule{ID: "rule_a", Name: "Retention present", Severity: "error", Checks: []metamodel.QualityCondition{{Field: "retention", Op: metamodel.OpAtLeast, Value: 100.0}}},
+		Enabled:     true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	svc := quality.NewRunService(fixedSettings{quality.DefaultSettings()}, e.repo, asset.NewPostgresRepository(e.pool, dbRecorder{}), registry(t), quality.WithRuleStore(rules))
+	t.Cleanup(svc.Shutdown)
+
+	run, err := svc.StartRun(ctx, quality.TriggerManual, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var done *quality.Run
+	for i := 0; i < 500 && (done == nil || done.Status == quality.RunRunning); i++ {
+		done, _ = svc.Run(ctx, run.ID)
+		time.Sleep(20 * time.Millisecond)
+	}
+	if done.Status != quality.RunSucceeded {
+		t.Fatalf("%+v", done)
+	}
+	if len(done.CustomRules) != 1 || done.CustomRules[0].ID != "rule_a" {
+		t.Fatalf("the run keeps the rules it applied: %+v", done.CustomRules)
+	}
+	results, _, err := svc.Results(ctx, run.ID, quality.ResultFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hits := 0
+	for _, r := range results {
+		for _, i := range r.Issues {
+			if i.RuleID == "rule_a" {
+				hits++
+			}
+		}
+	}
+	if hits != 4 || done.Summary.TotalIssues < 5 {
+		t.Fatalf("every asset keeps its data less than 100 days: %d findings of the rule, summary %+v", hits, done.Summary)
+	}
+
+	// Changing the rule afterwards does not rewrite what the run says it applied.
+	if _, err := rules.Update(ctx, quality.CustomRule{QualityRule: metamodel.QualityRule{ID: "rule_a", Name: "Other", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "retention", Op: metamodel.OpUnset}}}, Enabled: false}, 1); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := svc.Run(ctx, run.ID)
+	if again.CustomRules[0].Name != "Retention present" || !again.CustomRules[0].Enabled {
+		t.Fatalf("%+v", again.CustomRules)
+	}
+}
+
+func TestEvaluateReadsTheAssetsFromTheDatabase(t *testing.T) {
+	e := pgEnvWith(t, quality.DefaultSettings(), scoreRegistry(t), false)
+	ctx := context.Background()
+	if _, err := e.pool.Exec(ctx, `INSERT INTO doc_pages (entity_type, entity_id, title, content) VALUES ('asset', 'mrn://table/test/pg0', 'Notes', 'x')`); err != nil {
+		t.Fatal(err)
+	}
+	results, err := e.svc.Evaluate(ctx, []string{"id-pg1", "id-pg0", "id-nope", "id-pg4"})
+	if err != nil || len(results) != 3 {
+		t.Fatalf("%d %v", len(results), err)
+	}
+	if results[0].AssetID != "id-pg1" || results[1].AssetID != "id-pg0" || !results[2].Stub {
+		t.Fatalf("in the order asked, stubs included and flagged: %+v", results)
+	}
+	has := func(r quality.AssetResult, dim string) bool {
+		for _, d := range r.Dimensions {
+			if d == dim {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(results[1], "documentation") || has(results[0], "documentation") {
+		t.Fatalf("documentation pages are looked up: %v %v", results[1].Dimensions, results[0].Dimensions)
+	}
+	if results[0].IssueCount != 1 || results[0].Issues[0].FieldID != "classification" {
+		t.Fatalf("%+v", results[0].Issues)
+	}
+	var recorded int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM quality_runs`).Scan(&recorded); err != nil || recorded != 0 {
+		t.Fatalf("an evaluation records nothing: %d %v", recorded, err)
 	}
 }

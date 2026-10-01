@@ -38,6 +38,10 @@ func (f *fakeRuns) Results(_ context.Context, _ string, filter quality.ResultFil
 	return []quality.AssetResult{{AssetID: "a"}}, 1, f.err
 }
 
+func (f *fakeRuns) Evaluate(context.Context, []string) ([]quality.AssetResult, error) {
+	return nil, f.err
+}
+
 func (f *fakeRuns) Shutdown() {}
 
 func do(handler http.HandlerFunc, method, target string) *httptest.ResponseRecorder {

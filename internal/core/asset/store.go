@@ -169,6 +169,14 @@ func (r *PostgresRepository) ListAfter(ctx context.Context, afterID string, limi
 	return r.scanMultipleAssets(ctx, baseSelectAsset+" WHERE id > $1 ORDER BY id LIMIT $2", afterID, limit)
 }
 
+// ListByIDs returns the assets that exist among the ids, in no particular order.
+func (r *PostgresRepository) ListByIDs(ctx context.Context, ids []string) ([]*Asset, error) {
+	if len(ids) == 0 {
+		return []*Asset{}, nil
+	}
+	return r.scanMultipleAssets(ctx, baseSelectAsset+" WHERE id = ANY($1)", ids)
+}
+
 // Count returns how many assets there are, stubs included.
 func (r *PostgresRepository) Count(ctx context.Context) (int, error) {
 	var n int

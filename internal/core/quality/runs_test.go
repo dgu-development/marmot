@@ -32,6 +32,18 @@ type memorySource struct {
 
 func (m *memorySource) Count(context.Context) (int, error) { return len(m.assets), nil }
 
+func (m *memorySource) ListByIDs(_ context.Context, ids []string) ([]*asset.Asset, error) {
+	var out []*asset.Asset
+	for _, a := range m.assets {
+		for _, id := range ids {
+			if a.ID == id {
+				out = append(out, a)
+			}
+		}
+	}
+	return out, nil
+}
+
 func (m *memorySource) ListAfter(ctx context.Context, after string, limit int) ([]*asset.Asset, error) {
 	m.limits = append(m.limits, limit)
 	if m.block != nil {
@@ -73,7 +85,7 @@ func (m *memoryRuns) Reap(context.Context, time.Duration) error { return nil }
 
 func (m *memoryRuns) LastStarted(context.Context) (time.Time, error) { return m.lastStarted, nil }
 
-func (m *memoryRuns) Start(_ context.Context, run quality.Run, _ quality.Settings) (*quality.Run, error) {
+func (m *memoryRuns) Start(_ context.Context, run quality.Run, _ quality.Settings, _ []quality.CustomRule) (*quality.Run, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.running != nil {

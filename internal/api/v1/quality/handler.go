@@ -30,14 +30,15 @@ type NextRunner interface {
 type Handler struct {
 	service     quality.Service
 	runs        quality.RunService
+	rules       quality.RuleService
 	schedule    NextRunner
 	userService user.Service
 	authService auth.Service
 	config      *config.Config
 }
 
-func NewHandler(service quality.Service, runs quality.RunService, schedule NextRunner, userService user.Service, authService auth.Service, config *config.Config) *Handler {
-	return &Handler{service: service, runs: runs, schedule: schedule, userService: userService, authService: authService, config: config}
+func NewHandler(service quality.Service, runs quality.RunService, rules quality.RuleService, schedule NextRunner, userService user.Service, authService auth.Service, config *config.Config) *Handler {
+	return &Handler{service: service, runs: runs, rules: rules, schedule: schedule, userService: userService, authService: authService, config: config}
 }
 
 // SettingsResponse is the settings with, when a schedule is set, when it will next start a run.
@@ -64,6 +65,11 @@ func (h *Handler) Routes() []common.Route {
 	return []common.Route{
 		{Path: "/api/v1/quality/settings", Method: http.MethodGet, Handler: h.getSettings, Middleware: guarded("view")},
 		{Path: "/api/v1/quality/settings", Method: http.MethodPut, Handler: h.putSettings, Middleware: guarded("manage")},
+		{Path: "/api/v1/quality/rules", Method: http.MethodGet, Handler: h.listRules, Middleware: guarded("view")},
+		{Path: "/api/v1/quality/rules", Method: http.MethodPost, Handler: h.createRule, Middleware: guarded("manage")},
+		{Path: "/api/v1/quality/rules/{id}", Method: http.MethodPut, Handler: h.updateRule, Middleware: guarded("manage")},
+		{Path: "/api/v1/quality/rules/{id}", Method: http.MethodDelete, Handler: h.deleteRule, Middleware: guarded("manage")},
+		{Path: "/api/v1/quality/evaluate", Method: http.MethodPost, Handler: h.evaluate, Middleware: guarded("view")},
 		{Path: "/api/v1/quality/runs", Method: http.MethodPost, Handler: h.startRun, Middleware: guarded("run")},
 		{Path: "/api/v1/quality/runs", Method: http.MethodGet, Handler: h.listRuns, Middleware: guarded("view")},
 		{Path: "/api/v1/quality/runs/{id}", Method: http.MethodGet, Handler: h.getRun, Middleware: guarded("view")},
