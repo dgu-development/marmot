@@ -573,6 +573,149 @@ fields:
 	}
 }
 
+func TestAssetTypesScopeValidationAndCompleteness(t *testing.T) {
+	profile := `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: asset_type
+    type: enum
+    core: true
+    nullable: true
+    storage: metadata.example.asset_type
+    values: [policy, table]
+    presentation:
+      labelKey: example.asset_type.label
+  - id: policy_status
+    type: enum
+    core: true
+    required: true
+    storage: metadata.example.policy_status
+    values: [draft, approved]
+    appliesTo:
+      assetTypes: [policy]
+    presentation:
+      labelKey: example.policy_status.label
+`
+	r, err := Load(strings.NewReader(profile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	table := map[string]any{"name": "t", "asset_type": "table", "policy_status": "bogus"}
+	if err := r.Validate(table, "asset", true); err != nil {
+		t.Fatalf("a field scoped to another type must not validate: %v", err)
+	}
+	if got := r.Missing(map[string]any{"name": "t", "asset_type": "table"}, "asset", true); len(got) != 0 {
+		t.Fatalf("a field scoped to another type is never missing: %v", got)
+	}
+	if got := r.Missing(map[string]any{"name": "t"}, "asset", true); len(got) != 0 {
+		t.Fatalf("an untyped asset has no scoped fields: %v", got)
+	}
+	policy := map[string]any{"name": "p", "asset_type": "policy"}
+	if got := r.Missing(policy, "asset", true); len(got) != 1 || got[0].Field != "policy_status" {
+		t.Fatalf("a scoped required field is missing on its own type: %v", got)
+	}
+	policy["policy_status"] = "bogus"
+	if err := r.Validate(policy, "asset", true); err == nil {
+		t.Fatal("a scoped field must validate on its own type")
+	}
+}
+
+func TestAssetTypesMustBeKnown(t *testing.T) {
+	profile := `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: asset_type
+    type: enum
+    core: true
+    nullable: true
+    storage: metadata.example.asset_type
+    values: [policy]
+    presentation:
+      labelKey: example.asset_type.label
+  - id: status
+    type: string
+    core: true
+    storage: metadata.example.status
+    appliesTo:
+      assetTypes: [polcy]
+    presentation:
+      labelKey: example.status.label
+`
+	if _, err := Load(strings.NewReader(profile)); err == nil {
+		t.Fatal("an assetType outside the asset_type enum must be rejected")
+	}
+}
+
+func TestAssetControlRules(t *testing.T) {
+	field := func(kinds, typ string) string {
+		return `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: applies_to
+    type: ` + typ + `
+    itemType: string
+    core: true
+    nullable: true
+    storage: metadata.example.applies_to
+    appliesTo:
+      kinds: [` + kinds + `]
+    presentation:
+      labelKey: example.applies_to.label
+      control: asset
+      inverseLabelKey: example.applies_to.inverse
+`
+	}
+	if _, err := Load(strings.NewReader(field("asset", "list"))); err != nil {
+		t.Fatalf("asset control on an asset list: %v", err)
+	}
+	if _, err := Load(strings.NewReader(field("data_product", "list"))); err == nil {
+		t.Fatal("the asset control must be limited to asset fields")
+	}
+	if _, err := Load(strings.NewReader(field("asset", "integer"))); err == nil {
+		t.Fatal("the asset control needs a string or a list of strings")
+	}
+}
+
+func TestManualAssetTypes(t *testing.T) {
+	profile := func(manual string) string {
+		return `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: asset_type
+    type: enum
+    core: true
+    nullable: true
+    storage: metadata.example.asset_type
+    values: [policy, table]
+    presentation:
+      labelKey: example.asset_type.label
+` + manual
+	}
+	ok := "      manual: {type: BusinessAsset, provider: DGU, values: [policy]}\n"
+	if r, err := Load(strings.NewReader(profile(ok))); err != nil {
+		t.Fatal(err)
+	} else if f, _ := r.Field("asset_type"); f.Presentation.Manual == nil || f.Presentation.Manual.Provider != "DGU" {
+		t.Fatal("manual is not served")
+	}
+	for _, bad := range []string{
+		"      manual: {type: BusinessAsset, provider: DGU, values: [kpi]}\n",
+		"      manual: {type: BusinessAsset, provider: \"\", values: [policy]}\n",
+		"      manual: {type: BusinessAsset, provider: DGU, values: []}\n",
+	} {
+		if _, err := Load(strings.NewReader(profile(bad))); err == nil {
+			t.Fatalf("accepted an invalid manual: %s", bad)
+		}
+	}
+}
+
 func TestSystemFieldDefinitions(t *testing.T) {
 	profile := func(field string) string {
 		return exampleProfile + field + "\n"

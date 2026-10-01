@@ -17,6 +17,8 @@ export interface MetamodelPresentation {
 	valueLabelKeys?: Record<string, string>;
 	/** Show an enum field's value as a chip next to the entity's name. */
 	badge?: boolean;
+	/** Asset types people create by hand, with the native type and provider they are given. */
+	manual?: { type: string; provider: string; values: string[] };
 }
 
 export interface MetamodelConstraints {

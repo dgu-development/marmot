@@ -2,15 +2,19 @@
 	import SearchLinks from '$components/metamodel/SearchLinks.svelte';
 	import IconifyIcon from '@iconify/svelte';
 	import Avatar from '$components/user/Avatar.svelte';
+	import AssetLinks from '$components/asset/AssetLinks.svelte';
+	import AssetReferences from '$components/asset/AssetReferences.svelte';
+	import { ASSET_CONTROL, assetLinkIds } from '$lib/assets/links';
 	import { locale } from '$lib/i18n';
 	import { m } from '$lib/paraglide/messages';
 	import type { Asset } from '$lib/assets/types';
-	import type { MetamodelField } from '$lib/metamodel/types';
+	import type { MetamodelField, MetamodelSchema } from '$lib/metamodel/types';
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import { nativeMessage } from '$lib/metamodel/i18n';
 	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
 	import { lookupOwnerById, type OwnerResult } from '$lib/metamodel/owners';
 	import {
+		fieldsForAssetType,
 		governedFields,
 		isUnset,
 		readMetadataValue,
@@ -22,7 +26,9 @@
 	let { asset }: { asset: Asset } = $props();
 
 	// GET /api/v1/metamodel is cached by fetchMetamodel; every blade instance shares one request.
-	let fields = $state<MetamodelField[]>([]);
+	let allFields = $state<MetamodelField[]>([]);
+	const fields = $derived(fieldsForAssetType(allFields, asset.metadata));
+	let schema = $state<MetamodelSchema | undefined>();
 	let schemaMessages = $state<Record<string, Record<string, string>> | undefined>();
 	let defaultLocale = $state('en');
 	let resolvedOwners = $state<Record<string, OwnerResult | null>>({});
@@ -31,14 +37,15 @@
 	$effect(() => {
 		let cancelled = false;
 		fetchMetamodel()
-			.then((schema) => {
+			.then((loaded) => {
 				if (cancelled) return;
-				fields = schema.enabled ? governedFields(schema.fields) : [];
-				schemaMessages = schema.messages;
-				defaultLocale = schema.defaultLocale;
+				schema = loaded;
+				allFields = loaded.enabled ? governedFields(loaded.fields) : [];
+				schemaMessages = loaded.messages;
+				defaultLocale = loaded.defaultLocale;
 			})
 			.catch(() => {
-				if (!cancelled) fields = [];
+				if (!cancelled) allFields = [];
 			});
 		return () => {
 			cancelled = true;
@@ -171,6 +178,8 @@
 									{owner?.name ?? value}
 								</span>
 							{/if}
+						{:else if field.presentation?.control === ASSET_CONTROL}
+							<AssetLinks ids={assetLinkIds(value)} />
 						{:else if field.presentation?.control === 'search'}
 							<SearchLinks values={Array.isArray(value) ? value.map(String) : [String(value)]} />
 						{:else if Array.isArray(value)}
@@ -197,4 +206,8 @@
 			{/each}
 		</dl>
 	</div>
+{/if}
+
+{#if schema?.enabled}
+	<AssetReferences assetId={asset.id} {schema} />
 {/if}

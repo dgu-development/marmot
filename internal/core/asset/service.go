@@ -214,6 +214,8 @@ type Service interface {
 	RemoveTag(ctx context.Context, id string, tag string) (*Asset, error)
 	ListByPattern(ctx context.Context, pattern string, assetType string) ([]*Asset, error)
 	GetByMRNs(ctx context.Context, mrns []string) (map[string]*Asset, error)
+	References(ctx context.Context, id string) ([]AssetReferences, error)
+	RefsByID(ctx context.Context, ids []string) ([]AssetRef, error)
 	GetByTypeAndName(ctx context.Context, assetType, name string) (*Asset, error)
 	GetMetadataFields(ctx context.Context, queryContext *MetadataContext) ([]MetadataFieldSuggestion, error)
 	GetMetadataValues(ctx context.Context, field string, prefix string, limit int, queryContext *MetadataContext) ([]MetadataValueSuggestion, error)
@@ -496,6 +498,9 @@ func (s *service) Create(ctx context.Context, input CreateInput) (*Asset, error)
 	if err := s.validateAsset(asset); err != nil {
 		return nil, err
 	}
+	if err := s.checkLinks(ctx, asset.ID, asset.Metadata, nil); err != nil {
+		return nil, err
+	}
 	if err := s.repo.Create(ctx, asset); err != nil {
 		if errors.Is(err, ErrConflict) {
 			return nil, ErrAlreadyExists
@@ -694,6 +699,9 @@ func (s *service) Update(ctx context.Context, id string, input UpdateInput) (*As
 		if err := s.validateAsset(asset); err != nil {
 			return nil, err
 		}
+	}
+	if err := s.checkLinks(ctx, asset.ID, asset.Metadata, oldAsset.Metadata); err != nil {
+		return nil, err
 	}
 
 	asset.UpdatedAt = time.Now()
