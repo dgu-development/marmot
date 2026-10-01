@@ -82,11 +82,12 @@ A check every 30 seconds, on a singleton task like the ingestion scheduler's, st
 
 ## Scores on the assets
 
-Each run writes the score it computed on the assets, as the platform: `quality_score` (a fraction between 0 and 1 with three decimals), `quality_dimensions` (the checks the asset meets: description, tags, ownership, classification, review, documentation, completeness and conformity) and `quality_evaluated_at` (the day it was judged). Each is written only when the profile has the field, so a profile without them audits and writes nothing.
+Each run writes the score it computed on the assets, as the platform: `quality_score` (a fraction between 0 and 1 with three decimals), `quality_dimensions` (the checks the asset meets: description, tags, ownership, classification, review, documentation, resource, completeness and conformity) and `quality_evaluated_at` (the day it was judged). Each is written only when the profile has the field, so a profile without them audits and writes nothing.
 
 - Only what changed is written. An asset whose score and checks already say what the audit found is left alone, and the date alone never forces a write, so its version does not move run after run. `updated_at` and `version` do advance when a score changes: it is a real write.
 - The write is made against the version the audit read. An asset edited in between is skipped (`score_conflicts` in the run) and scored by the next run.
 - It does not notify whoever follows the asset, and it is not judged against the rest of the asset: an asset with an invalid value elsewhere is exactly the one the audit has to be able to score.
+- `documentation` means there is something to read in the first tab of the asset: a page written in the platform, the older per-source documentation, or a markdown body that a source ingested (`metadata.dgu.body`). `resource` means the asset links out to a resource, an external link with a URL. They are separate checks; a check the profile's `quality_dimensions` does not list yet is left out of the write instead of failing it.
 - Placeholders created by lineage (stubs) are never written.
 - `scores_written`, `score_conflicts` and `score_failures` in the run say how it went.
 

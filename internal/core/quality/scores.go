@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"reflect"
+	"slices"
 
 	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/metamodel"
@@ -41,8 +42,11 @@ func (a *Auditor) ScoreChanges(as *asset.Asset, result AssetResult) map[string]a
 	}
 	if field, ok := a.byID[fieldDimensions]; ok {
 		stored, _ := metamodel.ValueAt(as.Metadata, field.Storage)
-		if !sameList(stored, result.Dimensions) {
-			changes[fieldDimensions] = result.Dimensions
+		// A profile that does not list a check yet (an older one) cannot hold it: leave it out
+		// instead of failing the whole write.
+		dimensions := knownValues(field.Values, result.Dimensions)
+		if !sameList(stored, dimensions) {
+			changes[fieldDimensions] = dimensions
 		}
 	}
 	if _, ok := a.byID[fieldEvaluated]; ok && len(changes) > 0 {
@@ -52,6 +56,19 @@ func (a *Auditor) ScoreChanges(as *asset.Asset, result AssetResult) map[string]a
 		return nil
 	}
 	return changes
+}
+
+func knownValues(allowed, values []string) []string {
+	if len(allowed) == 0 {
+		return values
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if slices.Contains(allowed, value) {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func sameList(stored any, want []string) bool {

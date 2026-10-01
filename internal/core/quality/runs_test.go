@@ -126,6 +126,10 @@ func (m *memoryRuns) Results(context.Context, string, quality.ResultFilter) ([]q
 	return nil, 0, nil
 }
 
+func (m *memoryRuns) DocumentedAssets(context.Context, []string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
 func (m *memoryRuns) AssetDomains(_ context.Context, ids []string) (map[string]string, error) {
 	out := map[string]string{}
 	for _, id := range ids {
