@@ -924,6 +924,8 @@
 	"metamodel_derived_from": "Computed from {field}",
 	"metamodel_error_date": "Use a valid date (YYYY-MM-DD).",
 	"metamodel_error_derived": "This value is computed from another field.",
+	"metamodel_error_system": "Only the platform writes this field.",
+	"metamodel_system_field": "Written by the platform",
 	"metamodel_error_enum": "Choose one of the allowed values.",
 	"metamodel_error_items": "The number of items is not allowed.",
 	"metamodel_error_length": "The text length is not allowed.",

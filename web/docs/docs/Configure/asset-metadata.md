@@ -99,6 +99,7 @@ rejected at startup.
 | `presentation` | no | UI/message hints (see below) |
 | `default` | no | Fills an empty asset field from the asset's native type (see below) |
 | `derive` | no | Computes an asset field from another field (see below) |
+| `system` | no | Marks a field only the platform writes, such as the quality score (see [Metadata quality](quality.md#system-fields)). The API refuses it with `system` |
 
 Stub creation is an internal ingestion step, not an HTTP exemption — see
 [Write metadata](#write-metadata) for how stubs affect completeness.

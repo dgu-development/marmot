@@ -33,6 +33,8 @@ export function violationMessage(code: string): string {
 			return m.metamodel_error_term_not_found();
 		case 'derived':
 			return m.metamodel_error_derived();
+		case 'system':
+			return m.metamodel_error_system();
 		case 'self_reference':
 			return m.metamodel_error_self_reference();
 		default:

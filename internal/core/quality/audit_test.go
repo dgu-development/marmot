@@ -212,3 +212,42 @@ func TestStatusFollowsTheThresholds(t *testing.T) {
 		t.Fatalf("95.6 with only warnings is compliant: %+v", r)
 	}
 }
+
+func dimensionsOf(t *testing.T, a *asset.Asset) []string {
+	t.Helper()
+	return audit(t, quality.DefaultSettings(), a).Dimensions
+}
+
+func TestDimensionsListTheChecksAnAssetMeetsInOrder(t *testing.T) {
+	a := newAsset("a", complete())
+	a.ExternalLinks = []asset.ExternalLink{{Name: "docs", URL: "https://x"}}
+	if got := strings.Join(dimensionsOf(t, a), ","); got != "description,tags,ownership,classification,review,documentation,completeness,conformity" {
+		t.Fatalf("%s", got)
+	}
+
+	values := complete()
+	delete(values, "classification")
+	values["next_review"] = "2026-01-01"
+	bare := newAsset("b", values)
+	bare.Description, bare.UserDescription, bare.Tags = nil, nil, nil
+	if got := strings.Join(dimensionsOf(t, bare), ","); got != "ownership,conformity" {
+		t.Fatalf("a missing required field fails completeness; no links, tags or description; overdue review: %s", got)
+	}
+
+	invalid := complete()
+	invalid["classification"] = "secret"
+	if got := strings.Join(dimensionsOf(t, newAsset("c", invalid)), ","); strings.Contains(got, "conformity") || !strings.Contains(got, "completeness") {
+		t.Fatalf("an invalid value fails conformity only: %s", got)
+	}
+	if audit(t, quality.DefaultSettings(), func() *asset.Asset { s := newAsset("s", nil); s.IsStub = true; return s }()).Dimensions != nil {
+		t.Fatal("a stub has no dimensions")
+	}
+}
+
+func TestScoreValueIsAFractionWithThreeDecimals(t *testing.T) {
+	for in, want := range map[float64]float64{74: 0.74, 100: 1, 74.26: 0.743, 150: 1, -3: 0, 0: 0} {
+		if got := quality.ScoreValue(in); got != want {
+			t.Errorf("%v -> %v, want %v", in, got, want)
+		}
+	}
+}
