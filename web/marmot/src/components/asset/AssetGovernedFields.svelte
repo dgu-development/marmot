@@ -11,6 +11,7 @@
 	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
 	import { lookupOwnerById, type OwnerResult } from '$lib/metamodel/owners';
 	import {
+		fieldsForAssetType,
 		governedFields,
 		isUnset,
 		readMetadataValue,
@@ -22,7 +23,8 @@
 	let { asset }: { asset: Asset } = $props();
 
 	// GET /api/v1/metamodel is cached by fetchMetamodel; every blade instance shares one request.
-	let fields = $state<MetamodelField[]>([]);
+	let allFields = $state<MetamodelField[]>([]);
+	const fields = $derived(fieldsForAssetType(allFields, asset.metadata));
 	let schemaMessages = $state<Record<string, Record<string, string>> | undefined>();
 	let defaultLocale = $state('en');
 	let resolvedOwners = $state<Record<string, OwnerResult | null>>({});
@@ -33,12 +35,12 @@
 		fetchMetamodel()
 			.then((schema) => {
 				if (cancelled) return;
-				fields = schema.enabled ? governedFields(schema.fields) : [];
+				allFields = schema.enabled ? governedFields(schema.fields) : [];
 				schemaMessages = schema.messages;
 				defaultLocale = schema.defaultLocale;
 			})
 			.catch(() => {
-				if (!cancelled) fields = [];
+				if (!cancelled) allFields = [];
 			});
 		return () => {
 			cancelled = true;

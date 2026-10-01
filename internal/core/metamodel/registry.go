@@ -259,6 +259,9 @@ func New(profile *Profile) (*Registry, error) {
 	if err := validateDerivations(schema.Fields); err != nil {
 		return nil, err
 	}
+	if err := validateAssetTypeScopes(schema.Fields); err != nil {
+		return nil, err
+	}
 	// Unique per kind, not globally: different kinds never share a row.
 	storageByKind := make(map[string]map[string]bool)
 	for _, f := range schema.Fields {
@@ -520,6 +523,31 @@ func kindNativeFields(kind string) []Field {
 	return fields
 }
 
+// validateAssetTypeScopes rejects an assetTypes entry the asset_type enum cannot hold: such a
+// field would silently never apply.
+func validateAssetTypeScopes(fields []Field) error {
+	var known []string
+	for _, f := range fields {
+		if f.ID == assetTypeField && f.Type == "enum" {
+			known = f.Values
+		}
+	}
+	for _, f := range fields {
+		if len(f.AppliesTo.AssetTypes) == 0 {
+			continue
+		}
+		if known == nil {
+			return fmt.Errorf("field %q: appliesTo assetTypes requires an %s enum field", f.ID, assetTypeField)
+		}
+		for _, t := range f.AppliesTo.AssetTypes {
+			if !slices.Contains(known, t) {
+				return fmt.Errorf("field %q: assetType %q is not a value of %s", f.ID, t, assetTypeField)
+			}
+		}
+	}
+	return nil
+}
+
 func validateDerivations(fields []Field) error {
 	byID := make(map[string]Field, len(fields))
 	for _, f := range fields {
@@ -684,6 +712,19 @@ func (r *Registry) Fields(kind string) []Field {
 	return out
 }
 
+// assetTypeField is the enum whose value selects the fields scoped by appliesTo.assetTypes.
+const assetTypeField = "asset_type"
+
+// InScope reports whether f applies to the asset type held in values. A field without assetTypes
+// always applies; a scoped one drops out of an asset that is untyped or of another type.
+func (f Field) InScope(values map[string]any) bool {
+	if len(f.AppliesTo.AssetTypes) == 0 {
+		return true
+	}
+	assetType, _ := values[assetTypeField].(string)
+	return slices.Contains(f.AppliesTo.AssetTypes, assetType)
+}
+
 func isGoverned(f Field) bool {
 	return strings.HasPrefix(f.Storage, "metadata.")
 }
@@ -691,7 +732,7 @@ func isGoverned(f Field) bool {
 func (r *Registry) Validate(values map[string]any, kind string, governed bool) error {
 	var violations []Violation
 	for _, f := range r.Fields(kind) {
-		if isGoverned(f) && !governed {
+		if (isGoverned(f) && !governed) || !f.InScope(values) {
 			continue
 		}
 		value, present := values[f.ID]
@@ -721,7 +762,7 @@ func (r *Registry) Missing(values map[string]any, kind string, governed bool) []
 	}
 	var violations []Violation
 	for _, f := range r.Fields(kind) {
-		if !f.Required {
+		if !f.Required || !f.InScope(values) {
 			continue
 		}
 		if value, present := values[f.ID]; !present || value == nil {

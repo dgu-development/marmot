@@ -168,7 +168,7 @@ func (a *Auditor) Audit(as *asset.Asset) AssetResult {
 	var findings []finding
 	total, filled, valid, anyRequired := 0, 0, 0, false
 	for _, f := range a.fields {
-		if as.IsStub && governed(f) {
+		if (as.IsStub && governed(f)) || !f.InScope(values) {
 			continue
 		}
 		total++

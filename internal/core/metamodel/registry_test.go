@@ -573,6 +573,83 @@ fields:
 	}
 }
 
+func TestAssetTypesScopeValidationAndCompleteness(t *testing.T) {
+	profile := `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: asset_type
+    type: enum
+    core: true
+    nullable: true
+    storage: metadata.example.asset_type
+    values: [policy, table]
+    presentation:
+      labelKey: example.asset_type.label
+  - id: policy_status
+    type: enum
+    core: true
+    required: true
+    storage: metadata.example.policy_status
+    values: [draft, approved]
+    appliesTo:
+      assetTypes: [policy]
+    presentation:
+      labelKey: example.policy_status.label
+`
+	r, err := Load(strings.NewReader(profile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	table := map[string]any{"name": "t", "asset_type": "table", "policy_status": "bogus"}
+	if err := r.Validate(table, "asset", true); err != nil {
+		t.Fatalf("a field scoped to another type must not validate: %v", err)
+	}
+	if got := r.Missing(map[string]any{"name": "t", "asset_type": "table"}, "asset", true); len(got) != 0 {
+		t.Fatalf("a field scoped to another type is never missing: %v", got)
+	}
+	if got := r.Missing(map[string]any{"name": "t"}, "asset", true); len(got) != 0 {
+		t.Fatalf("an untyped asset has no scoped fields: %v", got)
+	}
+	policy := map[string]any{"name": "p", "asset_type": "policy"}
+	if got := r.Missing(policy, "asset", true); len(got) != 1 || got[0].Field != "policy_status" {
+		t.Fatalf("a scoped required field is missing on its own type: %v", got)
+	}
+	policy["policy_status"] = "bogus"
+	if err := r.Validate(policy, "asset", true); err == nil {
+		t.Fatal("a scoped field must validate on its own type")
+	}
+}
+
+func TestAssetTypesMustBeKnown(t *testing.T) {
+	profile := `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: asset_type
+    type: enum
+    core: true
+    nullable: true
+    storage: metadata.example.asset_type
+    values: [policy]
+    presentation:
+      labelKey: example.asset_type.label
+  - id: status
+    type: string
+    core: true
+    storage: metadata.example.status
+    appliesTo:
+      assetTypes: [polcy]
+    presentation:
+      labelKey: example.status.label
+`
+	if _, err := Load(strings.NewReader(profile)); err == nil {
+		t.Fatal("an assetType outside the asset_type enum must be rejected")
+	}
+}
+
 func TestSystemFieldDefinitions(t *testing.T) {
 	profile := func(field string) string {
 		return exampleProfile + field + "\n"

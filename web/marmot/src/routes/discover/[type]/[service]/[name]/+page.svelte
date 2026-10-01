@@ -12,7 +12,7 @@
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import type { MetamodelSchema } from '$lib/metamodel/types';
 	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
-	import { governedFields, governedPaths } from '$lib/metamodel/values';
+	import { fieldsForAssetType, governedFields, governedPaths } from '$lib/metamodel/values';
 	import Lineage from '$components/lineage/Lineage.svelte';
 	import EntityPanels from '$components/extensions/EntityPanels.svelte';
 	import EntityTab from '$components/extensions/EntityTab.svelte';
@@ -70,8 +70,9 @@
 	const domainWrite = $derived(entityWritable('asset', asset?.id));
 	let canManageAssets = $derived(auth.hasPermission('assets', 'manage') && $domainWrite);
 	let metamodel = $state<MetamodelSchema | null>(null);
-	let governed = $derived(metamodel?.enabled ? governedFields(metamodel.fields) : []);
-	let governedHidePaths = $derived(governedPaths(governed));
+	let allGoverned = $derived(metamodel?.enabled ? governedFields(metamodel.fields) : []);
+	let governed = $derived(fieldsForAssetType(allGoverned, asset?.metadata));
+	let governedHidePaths = $derived(governedPaths(allGoverned));
 
 	let activeTab = $derived($page.url.searchParams.get('tab') || 'metadata');
 	let assetType = $derived($page.params.type);
