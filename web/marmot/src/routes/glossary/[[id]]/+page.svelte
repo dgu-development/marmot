@@ -48,6 +48,10 @@
 
 	let searchQuery = $page.url.searchParams.get('q') || '';
 	let searchTimeout: ReturnType<typeof setTimeout>;
+	// The URL is the search's persisted copy. It only overwrites the box when it changes on its own
+	// (back, a link, the global search): its echo of what was just typed would undo later keystrokes.
+	let urlQuery = searchQuery;
+	let pushedQuery: string | null = null;
 
 	let selectedTerm: GlossaryTerm | null = null;
 	let showCreateModal = false;
@@ -102,8 +106,9 @@
 
 	$: {
 		const query = $page.url.searchParams.get('q') || '';
-		if (query !== searchQuery) {
-			searchQuery = query;
+		if (query !== urlQuery) {
+			urlQuery = query;
+			if (query !== pushedQuery) searchQuery = query;
 		}
 
 		const termId = $page.params.id;
@@ -165,6 +170,7 @@
 		searchQuery = query;
 
 		searchTimeout = setTimeout(() => {
+			pushedQuery = query;
 			const url = new URL(window.location.href);
 			if (query) {
 				url.searchParams.set('q', query);
@@ -181,6 +187,7 @@
 
 	function handleSearchSubmit() {
 		clearTimeout(searchTimeout);
+		pushedQuery = searchQuery;
 		const url = new URL(window.location.href);
 		if (searchQuery) {
 			url.searchParams.set('q', searchQuery);
