@@ -273,6 +273,31 @@ func (r *PostgresRepository) Results(ctx context.Context, id string, f ResultFil
 	return results, total, detail.Err()
 }
 
+// DocumentedAssets says which of the assets, by MRN, have a documentation page of their own or the
+// older per-source documentation.
+func (r *PostgresRepository) DocumentedAssets(ctx context.Context, mrns []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(mrns))
+	if len(mrns) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT entity_id FROM doc_pages WHERE entity_type = 'asset' AND entity_id = ANY($1)
+		UNION
+		SELECT mrn FROM documentation WHERE mrn = ANY($1) AND btrim(content) <> ''`, mrns)
+	if err != nil {
+		return nil, fmt.Errorf("reading documentation: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var mrn string
+		if err := rows.Scan(&mrn); err != nil {
+			return nil, err
+		}
+		out[mrn] = true
+	}
+	return out, rows.Err()
+}
+
 // unassignedDomainID is the row of the domain that holds what has no explicit domain.
 const unassignedDomainID = "00000000-0000-4000-8000-000000000001"
 

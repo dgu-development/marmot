@@ -96,6 +96,8 @@ type RunRepository interface {
 	Run(ctx context.Context, id string) (*Run, error)
 	Results(ctx context.Context, id string, filter ResultFilter) ([]AssetResult, int, error)
 	AssetDomains(ctx context.Context, assetIDs []string) (map[string]string, error)
+	// DocumentedAssets says which of the assets, by MRN, have documentation pages of their own.
+	DocumentedAssets(ctx context.Context, mrns []string) (map[string]bool, error)
 }
 
 // AssetSource reads the catalog by key, a batch at a time.
@@ -226,10 +228,20 @@ func (s *runService) audit(ctx context.Context, id string, settings Settings) er
 		if err != nil {
 			return err
 		}
+		mrns := make([]string, 0, len(batch))
+		for _, a := range batch {
+			if a.MRN != nil {
+				mrns = append(mrns, *a.MRN)
+			}
+		}
+		documented, err := s.repo.DocumentedAssets(ctx, mrns)
+		if err != nil {
+			return err
+		}
 		stored := make([]AssetResult, 0, len(batch))
 		results := make([]AssetResult, len(batch))
 		for i, a := range batch {
-			result := auditor.Audit(a)
+			result := auditor.AuditWithDocs(a, a.MRN != nil && documented[*a.MRN])
 			if domain, ok := domains[a.ID]; ok {
 				result.DomainID = domain
 			}

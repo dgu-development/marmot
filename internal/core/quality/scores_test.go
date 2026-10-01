@@ -14,7 +14,7 @@ import (
 const scoreProfile = auditProfile + `  - id: quality_dimensions
     type: list
     itemType: enum
-    values: [description, tags, ownership, classification, review, documentation, completeness, conformity]
+    values: [description, tags, ownership, classification, review, documentation, resource, completeness, conformity]
     core: true
     nullable: true
     system: true
@@ -162,5 +162,27 @@ func TestARunWithoutAWriterOnlyRecords(t *testing.T) {
 	wait(t, repo)
 	if repo.counts != (quality.ScoreCounts{}) {
 		t.Fatalf("counts = %+v", repo.counts)
+	}
+}
+
+func TestAProfileThatDoesNotListACheckYetNeverReceivesIt(t *testing.T) {
+	older := strings.Replace(scoreProfile, "documentation, resource, completeness", "documentation, completeness", 1)
+	older = strings.Replace(older, "    required: true\n    storage: metadata.dgu.quality_score", "    nullable: true\n    system: true\n    storage: metadata.dgu.quality_score", 1)
+	registry, err := metamodel.Load(strings.NewReader(older))
+	if err != nil {
+		t.Fatal(err)
+	}
+	auditor := quality.NewAuditor(registry, quality.DefaultSettings(), now)
+	a := newAsset("a", complete())
+	a.ExternalLinks = []asset.ExternalLink{{Name: "wiki", URL: "https://wiki"}}
+	changes := auditor.ScoreChanges(a, auditor.AuditWithDocs(a, true))
+	dims, _ := changes["quality_dimensions"].([]string)
+	for _, d := range dims {
+		if d == "resource" {
+			t.Fatalf("a value the profile does not have would fail the write: %v", dims)
+		}
+	}
+	if len(dims) == 0 {
+		t.Fatal("the others are still written")
 	}
 }
