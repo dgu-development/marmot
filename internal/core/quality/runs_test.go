@@ -51,16 +51,17 @@ func (m *memorySource) ListAfter(ctx context.Context, after string, limit int) (
 }
 
 type memoryRuns struct {
-	mu        sync.Mutex
-	running   *quality.Run
-	batches   [][]quality.AssetResult
-	progress  []int
-	total     int
-	summary   *quality.Summary
-	retention quality.Retention
-	failure   string
-	done      chan struct{}
-	domains   map[string]string
+	mu          sync.Mutex
+	running     *quality.Run
+	batches     [][]quality.AssetResult
+	progress    []int
+	total       int
+	summary     *quality.Summary
+	retention   quality.Retention
+	failure     string
+	done        chan struct{}
+	domains     map[string]string
+	lastStarted time.Time
 }
 
 func newMemoryRuns() *memoryRuns {
@@ -68,6 +69,8 @@ func newMemoryRuns() *memoryRuns {
 }
 
 func (m *memoryRuns) Reap(context.Context, time.Duration) error { return nil }
+
+func (m *memoryRuns) LastStarted(context.Context) (time.Time, error) { return m.lastStarted, nil }
 
 func (m *memoryRuns) Start(_ context.Context, run quality.Run, _ quality.Settings) (*quality.Run, error) {
 	m.mu.Lock()

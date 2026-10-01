@@ -51,6 +51,17 @@ func (r *PostgresRepository) Reap(ctx context.Context, silentFor time.Duration) 
 	return err
 }
 
+func (r *PostgresRepository) LastStarted(ctx context.Context) (time.Time, error) {
+	var started *time.Time
+	if err := r.db.QueryRow(ctx, `SELECT max(started_at) FROM quality_runs`).Scan(&started); err != nil {
+		return time.Time{}, err
+	}
+	if started == nil {
+		return time.Time{}, nil
+	}
+	return *started, nil
+}
+
 func (r *PostgresRepository) Start(ctx context.Context, run Run, settings Settings) (*Run, error) {
 	raw, err := json.Marshal(settings)
 	if err != nil {

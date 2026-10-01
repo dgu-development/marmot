@@ -75,6 +75,8 @@ const (
 type RunRepository interface {
 	// Reap fails the runs that stopped reporting progress, so a crash never blocks the next run.
 	Reap(ctx context.Context, silentFor time.Duration) error
+	// LastStarted is when the latest run started, or the zero time when there has been none.
+	LastStarted(ctx context.Context) (time.Time, error)
 	// Start records a new run, or returns the one in progress with ErrRunInProgress.
 	Start(ctx context.Context, run Run, settings Settings) (*Run, error)
 	SetTotal(ctx context.Context, id string, total int) error

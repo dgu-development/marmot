@@ -67,6 +67,19 @@ Runs, results and findings have their own tables. Nothing of the audit is a cata
 
 The oldest are pruned when a run finishes. A value of `0` keeps nothing beyond the latest run, which is never left empty. The result of an asset outlives the asset.
 
+## Schedule
+
+`schedule` in the settings is a five-field cron expression; empty means runs are manual only. It is read as the ingestion schedules read theirs, so the same expression means the same hour in a pipeline and in the audit: the server's time zone, unless the expression names its own (`CRON_TZ=Europe/Madrid 0 3 * * *`).
+
+A check every 30 seconds, on a singleton task like the ingestion scheduler's, starts a run when the next slot after the later of the last run and the last change of the settings has passed:
+
+- A run that is already going, or a manual one that started after the slot, means the slot is met: it never starts two runs for one slot.
+- A slot missed while the server was down fires once, not once per missed slot.
+- A schedule that has just been saved waits for its next slot; it does not fire for one that passed before it existed.
+- With several replicas only one checks at a time, and the single-run guard backs it up.
+
+`GET`/`PUT /api/v1/quality/settings` add `next_run` when a schedule is set. Runs started by it have `trigger` `schedule` and no `triggered_by`.
+
 ## Not included yet
 
-A schedule (the `schedule` setting is validated but nothing starts a run from it yet), writing `quality_score` into the assets, and rules declared in the profile are the next deliveries. Reads are open to anyone with `metadata_quality:view`: when domains whose content only their members can read exist, the results will follow the same restriction as search.
+Writing `quality_score` into the assets, with the system fields that carry it, and rules declared in the profile are the next deliveries. Reads are open to anyone with `metadata_quality:view`: when domains whose content only their members can read exist, the results will follow the same restriction as search.

@@ -255,3 +255,16 @@ func TestAFailedRunKeepsWhatEarlierBatchesStored(t *testing.T) {
 		t.Fatalf("results of the batches that finished: %d", n)
 	}
 }
+
+func TestTheLastRunStartedIsKnownToTheScheduler(t *testing.T) {
+	e := pgEnv(t, quality.DefaultSettings())
+	ctx := context.Background()
+	if at, err := e.repo.LastStarted(ctx); err != nil || !at.IsZero() {
+		t.Fatalf("before any run: %v %v", at, err)
+	}
+	run := e.runToEnd(t)
+	at, err := e.repo.LastStarted(ctx)
+	if err != nil || !at.Equal(run.StartedAt) {
+		t.Fatalf("last started %v, run started %v (%v)", at, run.StartedAt, err)
+	}
+}

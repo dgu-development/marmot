@@ -125,10 +125,7 @@ var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month 
 
 // ParseSchedule validates a cron expression. Empty is valid and means manual only.
 func ParseSchedule(expression string) (cron.Schedule, error) {
-	if strings.TrimSpace(expression) == "" {
-		return nil, nil
-	}
-	return cronParser.Parse(expression)
+	return parseSchedule(expression)
 }
 
 func inPercent(value float64) bool {
