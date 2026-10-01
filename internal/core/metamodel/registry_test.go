@@ -647,6 +647,8 @@ fields:
 `
 	if _, err := Load(strings.NewReader(profile)); err == nil {
 		t.Fatal("an assetType outside the asset_type enum must be rejected")
+	}
+}
 
 func TestSystemFieldDefinitions(t *testing.T) {
 	profile := func(field string) string {
