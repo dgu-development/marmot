@@ -56,6 +56,9 @@ type AssetResult struct {
 	// Stub marks a placeholder created by lineage: it is counted apart and never stored or scored.
 	Stub     bool                   `json:"-"`
 	Sections map[string]SectionStat `json:"-"`
+	// Dimensions are the checks the asset meets, in the order of dimensionOrder; they are written
+	// to the asset with its score and are not stored with the results.
+	Dimensions []string `json:"-"`
 } // @name QualityAssetResult
 
 // Auditor scores assets against the effective metamodel with the settings of one run.
@@ -208,6 +211,9 @@ func (a *Auditor) Audit(as *asset.Asset) AssetResult {
 		})
 	}
 	result.IssueCount = len(result.Issues)
+	if !as.IsStub {
+		result.Dimensions = a.dimensions(as, values, findings)
+	}
 
 	completeness := 100.0
 	if total > 0 {
@@ -239,4 +245,54 @@ func (w Weights) score(completeness, conformity float64) float64 {
 		total = 1
 	}
 	return (completeness*w.Completeness + conformity*w.Conformity) / total
+}
+
+// dimensionOrder is the order the checks are listed and written in.
+var dimensionOrder = []string{"description", "tags", "ownership", "classification", "review", "documentation", "completeness", "conformity"}
+
+// valueCodes are the findings about a value, as opposed to the coherence rules and the gaps.
+func valueCode(code string) bool {
+	switch code {
+	case "required", "pii_coherence", "review_expired", "external_link_invalid", "external_link_empty":
+		return false
+	}
+	return true
+}
+
+// dimensions lists the checks an asset meets. A check about a field the profile does not have does
+// not apply and is left out, so a profile without a steward never fails ownership.
+func (a *Auditor) dimensions(as *asset.Asset, values map[string]any, findings []finding) []string {
+	has := func(id string) bool { _, ok := a.byID[id]; return ok }
+	met := map[string]bool{
+		"description":    (as.UserDescription != nil && strings.TrimSpace(*as.UserDescription) != "") || (as.Description != nil && strings.TrimSpace(*as.Description) != ""),
+		"tags":           !unset(as.Tags),
+		"ownership":      has("data_steward") && !unset(values["data_steward"]),
+		"classification": has("classification") && !unset(values["classification"]),
+		"documentation":  false,
+		"completeness":   true,
+		"conformity":     true,
+	}
+	review, _ := values["next_review"].(string)
+	met["review"] = has("next_review") && validDate(review) && review >= a.today
+	for _, link := range as.ExternalLinks {
+		if strings.TrimSpace(link.URL) != "" {
+			met["documentation"] = true
+			break
+		}
+	}
+	for _, found := range findings {
+		if found.code == "required" {
+			met["completeness"] = false
+		}
+		if valueCode(found.code) {
+			met["conformity"] = false
+		}
+	}
+	out := []string{}
+	for _, id := range dimensionOrder {
+		if met[id] {
+			out = append(out, id)
+		}
+	}
+	return out
 }

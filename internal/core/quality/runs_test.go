@@ -62,6 +62,7 @@ type memoryRuns struct {
 	done        chan struct{}
 	domains     map[string]string
 	lastStarted time.Time
+	counts      quality.ScoreCounts
 }
 
 func newMemoryRuns() *memoryRuns {
@@ -93,6 +94,15 @@ func (m *memoryRuns) SaveBatch(_ context.Context, _ string, results []quality.As
 	defer m.mu.Unlock()
 	m.batches = append(m.batches, results)
 	m.progress = append(m.progress, processed)
+	return nil
+}
+
+func (m *memoryRuns) AddScoreCounts(_ context.Context, _ string, counts quality.ScoreCounts) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.counts.Written += counts.Written
+	m.counts.Conflicts += counts.Conflicts
+	m.counts.Failed += counts.Failed
 	return nil
 }
 

@@ -668,7 +668,7 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	if config.Quality.Enabled {
 		qualityRepo := quality.NewPostgresRepository(db)
 		qualitySvc := quality.NewService(qualityRepo)
-		server.qualityRuns = quality.NewRunService(qualitySvc, qualityRepo, assetRepo, metamodelRegistry)
+		server.qualityRuns = quality.NewRunService(qualitySvc, qualityRepo, assetRepo, metamodelRegistry, quality.WithScoreWriter(assetSvc))
 		qualityScheduler := quality.NewScheduler(qualitySvc, server.qualityRuns, qualityRepo)
 		server.qualitySchedule = background.NewSingletonTask(background.SingletonConfig{
 			Name:     "quality-schedule",

@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/marmotdata/marmot/internal/core/asset"
+	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/quality"
 	"github.com/marmotdata/marmot/internal/metrics"
 	"github.com/marmotdata/marmot/internal/store/postgres/pgtest"
@@ -26,6 +27,11 @@ type env struct {
 }
 
 func pgEnv(t *testing.T, settings quality.Settings) *env {
+	t.Helper()
+	return pgEnvWith(t, settings, registry(t), false)
+}
+
+func pgEnvWith(t *testing.T, settings quality.Settings, reg *metamodel.Registry, write bool) *env {
 	t.Helper()
 	pool := pgtest.TempDB(t)
 	ctx := context.Background()
@@ -56,7 +62,11 @@ func pgEnv(t *testing.T, settings quality.Settings) *env {
 	}
 
 	repo := quality.NewPostgresRepository(pool)
-	svc := quality.NewRunService(fixedSettings{settings}, repo, assets, registry(t))
+	var options []quality.RunOption
+	if write {
+		options = append(options, quality.WithScoreWriter(asset.NewService(assets, asset.WithMetamodel(reg))))
+	}
+	svc := quality.NewRunService(fixedSettings{settings}, repo, assets, reg, options...)
 	t.Cleanup(svc.Shutdown)
 	return &env{pool: pool, repo: repo, svc: svc}
 }
@@ -266,5 +276,71 @@ func TestTheLastRunStartedIsKnownToTheScheduler(t *testing.T) {
 	at, err := e.repo.LastStarted(ctx)
 	if err != nil || !at.Equal(run.StartedAt) {
 		t.Fatalf("last started %v, run started %v (%v)", at, run.StartedAt, err)
+	}
+}
+
+func storedAt(t *testing.T, e *env, id, key string) any {
+	t.Helper()
+	var value any
+	if err := e.pool.QueryRow(context.Background(), `SELECT metadata->'dgu'->$2 FROM assets WHERE id = $1`, id, key).Scan(&value); err != nil {
+		t.Fatal(err)
+	}
+	return value
+}
+
+func versionOf(t *testing.T, e *env, id string) int {
+	t.Helper()
+	var version int
+	if err := e.pool.QueryRow(context.Background(), `SELECT version FROM assets WHERE id = $1`, id).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	return version
+}
+
+func TestARunWritesTheScoresOnTheAssetsAndAnUnchangedAssetIsLeftAlone(t *testing.T) {
+	e := pgEnvWith(t, quality.DefaultSettings(), scoreRegistry(t), true)
+	// id-pg1 has no classification (a required field missing); make id-pg2 invalid as well, to
+	// show that an asset with a bad value is still scored.
+	if _, err := e.pool.Exec(context.Background(), `UPDATE assets SET metadata = jsonb_set(metadata, '{dgu,classification}', '"secret"') WHERE id = 'id-pg2'`); err != nil {
+		t.Fatal(err)
+	}
+
+	first := e.runToEnd(t)
+	if first.Status != quality.RunSucceeded || first.ScoresWritten != 4 || first.ScoreConflicts != 0 || first.ScoreFailures != 0 {
+		t.Fatalf("run = %+v", first)
+	}
+	for _, id := range []string{"id-pg0", "id-pg1", "id-pg2", "id-pg3"} {
+		if storedAt(t, e, id, "quality_score") == nil || storedAt(t, e, id, "quality_dimensions") == nil || storedAt(t, e, id, "quality_evaluated_at") == nil {
+			t.Fatalf("%s was not scored", id)
+		}
+	}
+	if storedAt(t, e, "id-pg0", "quality_score") != 1.0 {
+		t.Fatalf("score of a complete asset: %v", storedAt(t, e, "id-pg0", "quality_score"))
+	}
+	if storedAt(t, e, "id-pg4", "quality_score") != nil {
+		t.Fatal("a stub was scored")
+	}
+
+	versions := map[string]int{}
+	for _, id := range []string{"id-pg0", "id-pg1", "id-pg2", "id-pg3"} {
+		versions[id] = versionOf(t, e, id)
+	}
+	second := e.runToEnd(t)
+	if second.ScoresWritten != 0 || second.ScoreFailures != 0 {
+		t.Fatalf("an unchanged asset is not written again: %+v", second)
+	}
+	for id, version := range versions {
+		if versionOf(t, e, id) != version {
+			t.Errorf("%s changed version without changing its score", id)
+		}
+	}
+
+	// Editing a field changes the score, and the next run says so.
+	if _, err := e.pool.Exec(context.Background(), `UPDATE assets SET metadata = metadata #- '{dgu,data_steward}' WHERE id = 'id-pg0'`); err != nil {
+		t.Fatal(err)
+	}
+	third := e.runToEnd(t)
+	if third.ScoresWritten != 1 || storedAt(t, e, "id-pg0", "quality_score") == 1.0 {
+		t.Fatalf("run = %+v, score %v", third, storedAt(t, e, "id-pg0", "quality_score"))
 	}
 }

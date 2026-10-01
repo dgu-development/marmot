@@ -13,7 +13,8 @@ import (
 )
 
 const runColumns = `id, trigger, COALESCE(triggered_by, ''), status, settings_version, metamodel_profile,
-	metamodel_version, metamodel_hash, processed, total, started_at, finished_at, COALESCE(error, ''), summary`
+	metamodel_version, metamodel_hash, processed, total, scores_written, score_conflicts, score_failures,
+	started_at, finished_at, COALESCE(error, ''), summary`
 
 func scanRun(row pgx.Row, withSettings bool) (*Run, error) {
 	var (
@@ -22,7 +23,8 @@ func scanRun(row pgx.Row, withSettings bool) (*Run, error) {
 		raw     []byte
 	)
 	dest := []any{&run.ID, &run.Trigger, &run.TriggeredBy, &run.Status, &run.SettingsVersion, &run.MetamodelProfile,
-		&run.MetamodelVersion, &run.MetamodelHash, &run.Processed, &run.Total, &run.StartedAt, &run.FinishedAt, &run.Error, &summary}
+		&run.MetamodelVersion, &run.MetamodelHash, &run.Processed, &run.Total,
+		&run.ScoresWritten, &run.ScoreConflicts, &run.ScoreFailures, &run.StartedAt, &run.FinishedAt, &run.Error, &summary}
 	if withSettings {
 		dest = append(dest, &raw)
 	}
@@ -118,6 +120,15 @@ func (r *PostgresRepository) SaveBatch(ctx context.Context, id string, results [
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func (r *PostgresRepository) AddScoreCounts(ctx context.Context, id string, counts ScoreCounts) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE quality_runs
+		   SET scores_written = scores_written + $2, score_conflicts = score_conflicts + $3,
+		       score_failures = score_failures + $4, heartbeat_at = now()
+		 WHERE id = $1`, id, counts.Written, counts.Conflicts, counts.Failed)
+	return err
 }
 
 func (r *PostgresRepository) Finish(ctx context.Context, id string, summary Summary, retention Retention) error {

@@ -924,6 +924,8 @@
 	"metamodel_derived_from": "Se calcula a partir de {field}",
 	"metamodel_error_date": "Usa una fecha válida (AAAA-MM-DD).",
 	"metamodel_error_derived": "Este valor se calcula a partir de otro campo.",
+	"metamodel_error_system": "Solo la plataforma escribe este campo.",
+	"metamodel_system_field": "La escribe la plataforma",
 	"metamodel_error_enum": "Elige uno de los valores permitidos.",
 	"metamodel_error_items": "El número de elementos no está permitido.",
 	"metamodel_error_length": "La longitud del texto no está permitida.",

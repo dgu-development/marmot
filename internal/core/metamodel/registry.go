@@ -107,6 +107,10 @@ type Field struct {
 	// Default fills an asset field that has no value from the asset's native
 	// type, so every discovery plugin is classified by one table.
 	Default *Derivation `json:"default,omitempty"`
+	// System marks a field only the platform writes, such as the quality score the audit
+	// computes. The API refuses it with the code `system`, ingestion and whole-asset updates
+	// leave it as it was, and the interface shows it read-only. An asset field bound to metadata.
+	System bool `json:"system,omitempty"`
 }
 
 type Profile struct {
@@ -422,6 +426,14 @@ func validateDefinition(f Field) error {
 	}
 	if err := validateValueLabelKeys(f); err != nil {
 		return err
+	}
+	if f.System {
+		if !strings.HasPrefix(f.Storage, "metadata.") || f.Required || f.Derive != nil || f.Default != nil {
+			return errors.New("a system field is bound to metadata and is neither required, derived nor defaulted")
+		}
+		if kinds := f.AppliesTo.EffectiveKinds(); len(kinds) != 1 || kinds[0] != "asset" {
+			return errors.New("a system field applies to assets only")
+		}
 	}
 	v := f.Validation
 	valueType := f.Type
