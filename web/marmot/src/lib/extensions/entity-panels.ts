@@ -10,8 +10,11 @@ export interface EntityRef {
 	mrn?: string;
 }
 
-/** Where a panel renders: a card in the side column, or a tab of the page. */
-export type PanelPlacement = 'side' | 'tab';
+/**
+ * Where a panel renders: a card in the side column, a tab of the page, or the right end of the
+ * page header, which suits a compact indicator.
+ */
+export type PanelPlacement = 'side' | 'tab' | 'header';
 
 /**
  * A view a distribution adds to asset, data product and glossary term pages.

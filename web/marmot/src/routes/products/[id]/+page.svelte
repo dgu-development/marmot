@@ -25,6 +25,7 @@
 	import AssetIcon from '$components/ui/Icon.svelte';
 	import DocumentationSystem from '$components/docs/DocumentationSystem.svelte';
 	import Tabs, { type Tab } from '$components/ui/Tabs.svelte';
+	import EntityPanels from '$components/extensions/EntityPanels.svelte';
 	import EntityTab from '$components/extensions/EntityTab.svelte';
 	import { entityPanels, panelTabs } from '$lib/extensions/entity-panels';
 	import QueryBuilder from '$components/query/QueryBuilder.svelte';
@@ -792,6 +793,9 @@
 							</div>
 							<DomainChip kind="data_product" entityId={product.id} canEdit={canManage} />
 						</div>
+					</div>
+					<div class="hidden w-72 flex-shrink-0 lg:block">
+						<EntityPanels entity={{ kind: 'data_product', id: product.id }} placement="header" />
 					</div>
 				</div>
 

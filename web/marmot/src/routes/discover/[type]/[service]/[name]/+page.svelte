@@ -14,6 +14,7 @@
 	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
 	import { governedFields, governedPaths } from '$lib/metamodel/values';
 	import Lineage from '$components/lineage/Lineage.svelte';
+	import EntityPanels from '$components/extensions/EntityPanels.svelte';
 	import EntityTab from '$components/extensions/EntityTab.svelte';
 	import { entityPanels, panelTabs } from '$lib/extensions/entity-panels';
 	import AssetContents from '$components/asset/AssetContents.svelte';
@@ -539,6 +540,12 @@
 									</div>
 								{/if}
 							</div>
+						</div>
+						<div class="hidden w-72 flex-shrink-0 lg:block">
+							<EntityPanels
+								entity={{ kind: 'asset', id: asset.id, mrn: asset.mrn }}
+								placement="header"
+							/>
 						</div>
 					</div>
 
