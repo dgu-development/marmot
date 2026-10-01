@@ -319,3 +319,22 @@ export function assetETag(version: number): string {
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
+
+/** From this many values a controlled list is long enough to hunt through, so it is shown by label. */
+export const ALPHABETICAL_FROM = 8;
+
+/**
+ * The values of an enum in the order to offer them. A long list (asset types) is alphabetical by
+ * the label a person reads, in their language; a short one (levels, states) keeps the profile's
+ * order, which often means something: public before restricted is not alphabetical.
+ */
+export function orderedValues(
+	values: string[] | undefined,
+	label: (value: string) => string,
+	locale: string
+): string[] {
+	const list = values ?? [];
+	if (list.length < ALPHABETICAL_FROM) return list;
+	const collator = new Intl.Collator(locale || undefined, { sensitivity: 'base', numeric: true });
+	return [...list].sort((a, b) => collator.compare(label(a), label(b)));
+}
