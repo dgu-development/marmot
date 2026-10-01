@@ -3,12 +3,14 @@
 package quality
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/marmotdata/marmot/internal/api/v1/common"
 	"github.com/marmotdata/marmot/internal/core/auth"
@@ -20,16 +22,36 @@ import (
 
 const maxBodyBytes = 64 << 10
 
+// NextRunner tells when the schedule will next start a run.
+type NextRunner interface {
+	Next(ctx context.Context, stored *quality.Stored) *time.Time
+}
+
 type Handler struct {
 	service     quality.Service
 	runs        quality.RunService
+	schedule    NextRunner
 	userService user.Service
 	authService auth.Service
 	config      *config.Config
 }
 
-func NewHandler(service quality.Service, runs quality.RunService, userService user.Service, authService auth.Service, config *config.Config) *Handler {
-	return &Handler{service: service, runs: runs, userService: userService, authService: authService, config: config}
+func NewHandler(service quality.Service, runs quality.RunService, schedule NextRunner, userService user.Service, authService auth.Service, config *config.Config) *Handler {
+	return &Handler{service: service, runs: runs, schedule: schedule, userService: userService, authService: authService, config: config}
+}
+
+// SettingsResponse is the settings with, when a schedule is set, when it will next start a run.
+type SettingsResponse struct {
+	quality.Stored
+	NextRun *time.Time `json:"next_run,omitempty"`
+} // @name QualitySettingsResponse
+
+func (h *Handler) withNextRun(ctx context.Context, stored *quality.Stored) SettingsResponse {
+	response := SettingsResponse{Stored: *stored}
+	if h.schedule != nil && stored.Schedule != "" {
+		response.NextRun = h.schedule.Next(ctx, stored)
+	}
+	return response
 }
 
 func (h *Handler) Routes() []common.Route {
@@ -68,7 +90,7 @@ func parseIfMatch(header string) (int64, bool) {
 // @Produce json
 // @Security ApiKeyAuth
 // @Security BearerAuth
-// @Success 200 {object} quality.Stored
+// @Success 200 {object} QualitySettingsResponse
 // @Failure 401 {object} common.ErrorResponse
 // @Failure 403 {object} common.ErrorResponse
 // @ID getQualitySettings
@@ -81,7 +103,7 @@ func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("ETag", etag(stored.Version))
-	common.RespondJSON(w, http.StatusOK, stored)
+	common.RespondJSON(w, http.StatusOK, h.withNextRun(r.Context(), stored))
 }
 
 // @Summary Change the quality audit settings
@@ -93,7 +115,7 @@ func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
 // @Param settings body quality.Settings true "Settings"
 // @Security ApiKeyAuth
 // @Security BearerAuth
-// @Success 200 {object} quality.Stored
+// @Success 200 {object} QualitySettingsResponse
 // @Failure 400 {object} quality.ValidationError
 // @Failure 401 {object} common.ErrorResponse
 // @Failure 403 {object} common.ErrorResponse
@@ -146,5 +168,5 @@ func (h *Handler) putSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("ETag", etag(stored.Version))
-	common.RespondJSON(w, http.StatusOK, stored)
+	common.RespondJSON(w, http.StatusOK, h.withNextRun(r.Context(), stored))
 }

@@ -752,6 +752,13 @@
 						>
 							<IconifyIcon icon="material-symbols:function" class="h-4 w-4" />
 						</span>
+					{:else if field.system}
+						<span
+							class="flex-shrink-0 text-gray-400 dark:text-gray-500"
+							title={m.metamodel_system_field()}
+						>
+							<IconifyIcon icon="material-symbols:smart-toy-outline-rounded" class="h-4 w-4" />
+						</span>
 					{:else if editable}
 						<button
 							type="button"

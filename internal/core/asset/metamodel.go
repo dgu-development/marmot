@@ -73,7 +73,7 @@ func (s *service) derive(a *Asset) error {
 	return nil
 }
 
-func applyFields(registry *metamodel.Registry, asset *Asset, fields map[string]any) error {
+func applyFields(registry *metamodel.Registry, asset *Asset, fields map[string]any, system bool) error {
 	if asset.Metadata == nil {
 		asset.Metadata = make(map[string]any)
 	}
@@ -84,6 +84,9 @@ func applyFields(registry *metamodel.Registry, asset *Asset, fields map[string]a
 		}
 		if field.Derive != nil {
 			return &metamodel.ValidationError{Fields: []metamodel.Violation{{Field: id, Code: "derived"}}}
+		}
+		if field.System && !system {
+			return &metamodel.ValidationError{Fields: []metamodel.Violation{{Field: id, Code: "system"}}}
 		}
 		if value == nil && (!field.Nullable || field.Required) {
 			return &metamodel.ValidationError{Fields: []metamodel.Violation{{Field: id, Code: "not_nullable"}}}
@@ -122,7 +125,38 @@ func applyFields(registry *metamodel.Registry, asset *Asset, fields map[string]a
 			}
 		}
 	}
+	if system {
+		return validateSystemFields(registry, fields)
+	}
 	return registry.Validate(MetamodelValues(registry, asset), "asset", !asset.IsStub)
+}
+
+// validateSystemFields checks the values a system write sets, and only those.
+func validateSystemFields(registry *metamodel.Registry, fields map[string]any) error {
+	var violations []metamodel.Violation
+	for id, value := range fields {
+		field, _ := registry.Field(id)
+		if code := metamodel.ValidateValue(field, value); code != "" {
+			violations = append(violations, metamodel.Violation{Field: id, Code: code})
+		}
+	}
+	if len(violations) > 0 {
+		return &metamodel.ValidationError{Fields: violations}
+	}
+	return nil
+}
+
+// dropSystemValues removes what a creation carries for the fields only the platform writes.
+func (s *service) dropSystemValues(asset *Asset) {
+	registry := s.registry()
+	if !registry.Enabled() || asset.Metadata == nil {
+		return
+	}
+	for _, field := range registry.Fields("asset") {
+		if field.System {
+			_ = setMetadataValue(asset.Metadata, strings.Split(strings.TrimPrefix(field.Storage, "metadata."), "."), nil)
+		}
+	}
 }
 
 func fieldTypeError(id string) error {
@@ -235,6 +269,18 @@ func (s *service) preserveGoverned(current *Asset, input *UpdateInput) error {
 			continue
 		}
 		previous, existed := metamodel.ValueAt(current.Metadata, field.Storage)
+		if field.System && !input.SystemWrite {
+			// Whatever the caller sent, a field only the platform writes stays as it was.
+			parts := strings.Split(strings.TrimPrefix(field.Storage, "metadata."), ".")
+			var keep any
+			if existed {
+				keep = previous
+			}
+			if err := setMetadataValue(metadata, parts, keep); err != nil {
+				return err
+			}
+			continue
+		}
 		next, supplied := metamodel.ValueAt(metadata, field.Storage)
 		if input.FromSync {
 			// Curated values win over the source, as for glossary terms (keepGoverned).
