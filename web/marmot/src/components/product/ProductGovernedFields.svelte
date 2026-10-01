@@ -30,7 +30,8 @@
 		typeLabel,
 		valueClass,
 		writeMetadataValue,
-		type Draft
+		type Draft,
+		orderedValues
 	} from '$lib/metamodel/values';
 
 	// Data products have no PATCH/ETag yet (see the C1 plan): every governed edit replaces the
@@ -194,7 +195,10 @@
 		}
 		return [
 			...options,
-			...(field.values ?? []).map((value) => ({ value, label: shown(field, value) }))
+			...orderedValues(field.values, (value) => shown(field, value), $locale).map((value) => ({
+				value,
+				label: shown(field, value)
+			}))
 		];
 	}
 
@@ -577,7 +581,7 @@
 					aria-describedby={described}
 					class="flex flex-wrap gap-x-4 gap-y-1"
 				>
-					{#each field.values ?? [] as option, i (option)}
+					{#each orderedValues(field.values, (value) => shown(field, value), $locale) as option, i (option)}
 						<label class="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300">
 							<input
 								type="checkbox"
