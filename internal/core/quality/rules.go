@@ -30,11 +30,12 @@ type compiledCondition struct {
 }
 
 type compiledRule struct {
-	id       RuleID
-	code     string
-	severity Severity
-	when     []compiledCondition
-	checks   []compiledCondition
+	id        RuleID
+	code      string
+	dimension string
+	severity  Severity
+	when      []compiledCondition
+	checks    []compiledCondition
 }
 
 func snakeCode(id string) string {
@@ -70,8 +71,12 @@ func compileRule(rule metamodel.QualityRule, severity Severity) *compiledRule {
 	if code == "" {
 		code = snakeCode(rule.ID)
 	}
+	dimension := rule.Dimension
+	if dimension == "" {
+		dimension = metamodel.DimensionValidity
+	}
 	return &compiledRule{
-		id: RuleID(rule.ID), code: code, severity: severity,
+		id: RuleID(rule.ID), code: code, dimension: dimension, severity: severity,
 		when: compileConditions(rule.When), checks: compileConditions(rule.Checks),
 	}
 }
@@ -204,19 +209,22 @@ func (c compiledCondition) holds(values map[string]any, today time.Time) bool {
 }
 
 // apply returns the findings of a rule on an asset: none when it does not apply to it, otherwise
-// one for each check that fails, at most one per field.
-func (r *compiledRule) apply(values map[string]any, today time.Time) []finding {
+// one for each check that fails, at most one per field. It also says how many checks it judged
+// and how many held, which feed the score of its dimension; an optional check on an empty field
+// judges nothing.
+func (r *compiledRule) apply(values map[string]any, today time.Time) (out []finding, judged, held int) {
 	for _, c := range r.when {
 		if !c.holds(values, today) {
-			return nil
+			return nil, 0, 0
 		}
 	}
-	var out []finding
 	for _, c := range r.checks {
 		if c.Optional && unset(values[c.Field]) {
 			continue
 		}
+		judged++
 		if c.holds(values, today) {
+			held++
 			continue
 		}
 		if slices.ContainsFunc(out, func(f finding) bool { return f.fieldID == c.Field }) {
@@ -224,5 +232,5 @@ func (r *compiledRule) apply(values map[string]any, today time.Time) []finding {
 		}
 		out = append(out, finding{fieldID: c.Field, code: r.code, rule: r.id, severity: r.severity, dsl: true})
 	}
-	return out
+	return out, judged, held
 }

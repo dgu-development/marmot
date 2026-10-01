@@ -27,7 +27,7 @@ func TestDefaultsAreValid(t *testing.T) {
 
 func TestInvalidSettingsAreReportedTogether(t *testing.T) {
 	s := DefaultSettings()
-	s.Weights = Weights{Completeness: 50, Conformity: 60}
+	s.Weights = Weights{Completeness: 50, Validity: 60}
 	s.Thresholds = Thresholds{Compliant: 60, Warning: 70}
 	s.Schedule = "not a cron"
 	s.Retention = Retention{RunDays: 30, ResultDays: 90}
@@ -51,7 +51,7 @@ func TestInvalidSettingsAreReportedTogether(t *testing.T) {
 
 func TestRangesAndSchedules(t *testing.T) {
 	for name, mutate := range map[string]func(*Settings){
-		"weights range":     func(s *Settings) { s.Weights = Weights{Completeness: -1, Conformity: 101} },
+		"weights range":     func(s *Settings) { s.Weights = Weights{Completeness: -1, Validity: 101} },
 		"thresholds range":  func(s *Settings) { s.Thresholds = Thresholds{Compliant: 120, Warning: 10} },
 		"retention range":   func(s *Settings) { s.Retention.RunDays = MaxRetentionDays + 1 },
 		"batch too large":   func(s *Settings) { s.BatchSize = MaxBatchSize + 1 },

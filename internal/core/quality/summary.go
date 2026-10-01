@@ -3,6 +3,8 @@ package quality
 import (
 	"cmp"
 	"slices"
+
+	"github.com/marmotdata/marmot/internal/core/metamodel"
 )
 
 const topFields = 8
@@ -23,11 +25,11 @@ type GroupStat struct {
 // Summary is what a run concluded overall. Stubs are counted apart: they are placeholders created
 // by lineage, not catalogued assets, so they would only drag the averages down.
 type Summary struct {
-	TotalAssets  int            `json:"total_assets"`
-	Stubs        int            `json:"stubs"`
-	Quality      float64        `json:"quality"`
-	Completeness float64        `json:"completeness"`
-	Conformity   float64        `json:"conformity"`
+	TotalAssets int     `json:"total_assets"`
+	Stubs       int     `json:"stubs"`
+	Quality     float64 `json:"quality"`
+	// ByDimension is the mean score of each quality dimension, over the assets it applies to.
+	ByDimension  []GroupStat    `json:"by_dimension"`
 	TotalIssues  int            `json:"total_issues"`
 	StatusCounts map[Status]int `json:"status_counts"`
 	TopFields    []FieldCount   `json:"top_fields"`
@@ -54,22 +56,24 @@ func (m mean) value() float64 {
 
 // Aggregator folds results into a Summary one batch at a time, so a run never holds the catalog.
 type Aggregator struct {
-	weights                           Weights
-	stubs, issues                     int
-	quality, completeness, conformity mean
-	status                            map[Status]int
-	fields                            map[string]int
-	sections, types, domains          map[string]*mean
+	weights                  Weights
+	stubs, issues            int
+	quality                  mean
+	dimensions               map[string]*mean
+	status                   map[Status]int
+	fields                   map[string]int
+	sections, types, domains map[string]*mean
 }
 
 func NewAggregator(weights Weights) *Aggregator {
 	return &Aggregator{
-		weights:  weights,
-		status:   map[Status]int{StatusCompliant: 0, StatusWarning: 0, StatusNoncompliant: 0},
-		fields:   map[string]int{},
-		sections: map[string]*mean{},
-		types:    map[string]*mean{},
-		domains:  map[string]*mean{},
+		weights:    weights,
+		status:     map[Status]int{StatusCompliant: 0, StatusWarning: 0, StatusNoncompliant: 0},
+		dimensions: map[string]*mean{},
+		fields:     map[string]int{},
+		sections:   map[string]*mean{},
+		types:      map[string]*mean{},
+		domains:    map[string]*mean{},
 	}
 }
 
@@ -89,24 +93,36 @@ func (a *Aggregator) Add(r AssetResult) {
 	}
 	a.status[r.Status]++
 	a.quality.add(r.Quality)
-	a.completeness.add(r.Completeness)
-	a.conformity.add(r.Conformity)
+	for dimension, score := range r.Scores {
+		bump(a.dimensions, dimension, score)
+	}
 	a.issues += r.IssueCount
 	for _, issue := range r.Issues {
 		a.fields[issue.FieldID]++
 	}
 	for key, stat := range r.Sections {
-		completeness, conformity := 100.0, 100.0
+		scores := map[string]float64{metamodel.DimensionCompleteness: 100, metamodel.DimensionValidity: 100}
 		if stat.Total > 0 {
-			completeness = float64(stat.Filled) / float64(stat.Total) * 100
+			scores[metamodel.DimensionCompleteness] = float64(stat.Filled) / float64(stat.Total) * 100
 		}
 		if stat.Filled > 0 {
-			conformity = float64(stat.Valid) / float64(stat.Filled) * 100
+			scores[metamodel.DimensionValidity] = float64(stat.Valid) / float64(stat.Filled) * 100
 		}
-		bump(a.sections, key, a.weights.score(completeness, conformity))
+		bump(a.sections, key, a.weights.mix(scores))
 	}
 	bump(a.types, r.Type, r.Quality)
 	bump(a.domains, r.DomainID, r.Quality)
+}
+
+// dimensionRanking lists the dimensions that applied to some asset, in the order of the metamodel.
+func dimensionRanking(groups map[string]*mean) []GroupStat {
+	out := []GroupStat{}
+	for _, dimension := range metamodel.QualityDimensions {
+		if m := groups[dimension]; m != nil {
+			out = append(out, GroupStat{Key: dimension, Value: m.value(), Count: m.count})
+		}
+	}
+	return out
 }
 
 func ranked(groups map[string]*mean) []GroupStat {
@@ -139,8 +155,7 @@ func (a *Aggregator) Summary() Summary {
 		TotalAssets:  a.quality.count,
 		Stubs:        a.stubs,
 		Quality:      a.quality.value(),
-		Completeness: a.completeness.value(),
-		Conformity:   a.conformity.value(),
+		ByDimension:  dimensionRanking(a.dimensions),
 		TotalIssues:  a.issues,
 		StatusCounts: status,
 		TopFields:    top,

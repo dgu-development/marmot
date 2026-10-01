@@ -6,7 +6,7 @@ description: Audit how complete and valid the metadata of every asset is, on dem
 
 # Metadata quality
 
-The audit scores every asset in the catalog against the effective [metamodel](asset-metadata.md): how many of its fields are filled (completeness) and how many of those hold a valid value (conformity). It runs on the server, with the same field checks the API applies to writes, so a value the server would reject is a finding here.
+The audit scores every asset in the catalog against the effective [metamodel](asset-metadata.md): how many of its fields are filled and how many of those hold a valid value, plus the rules that check its values against each other and in time. Each of those is a [quality dimension](#quality-dimensions). It runs on the server, with the same field checks the API applies to writes, so a value the server would reject is a finding here.
 
 It is off by default.
 
@@ -33,7 +33,7 @@ Without a metamodel profile there is nothing to audit against: starting a run an
 
 ## Settings
 
-`GET`/`PUT /api/v1/quality/settings` read and replace one versioned row, with `If-Match`: a stale version answers `412`. They hold the weights of completeness and conformity, the thresholds of a compliant and a warned asset, which rules apply and with what severity, the retention, the batch size and the time limit of a run.
+`GET`/`PUT /api/v1/quality/settings` read and replace one versioned row, with `If-Match`: a stale version answers `412`. They hold the weight of each quality dimension, the thresholds of a compliant and a warned asset, which rules apply and with what severity, the retention, the batch size and the time limit of a run.
 
 ## Runs
 
@@ -47,11 +47,28 @@ A run walks the catalog by key in batches (`batch_size`, 500 by default), so mem
 | `GET /api/v1/quality/runs/{id}` | The run, the settings it used and the metamodel version and hash |
 | `GET /api/v1/quality/runs/{id}/results` | One entry per asset, weakest first; filters `status`, `domain` (an id, or `unassigned`), `type`, `q`; `sort=name`; `limit` (up to 500) and `offset` |
 
-The summary has the totals, the status counts, the fields with most findings and the mean quality by section, asset type and domain. Domains are one more aggregate of the run, not a filter of it. Stubs, the placeholders lineage creates, are counted apart and never scored.
+The summary has the totals, the status counts, the fields with most findings and the mean score of each quality dimension and the mean quality by section, asset type and domain. Domains are one more aggregate of the run, not a filter of it. Stubs, the placeholders lineage creates, are counted apart and never scored.
+
+### Quality dimensions
+
+Every check of the audit counts under one dimension, and an asset has a score, out of 100, for each dimension that applies to it: the checks it passed over the checks judged.
+
+| Dimension | What it measures | Counts |
+| --- | --- | --- |
+| `completeness` | The values that should be there are | Fields filled over fields in scope; the checks of its rules |
+| `validity` | The values there are are well formed and allowed | Fields valid over fields filled; the checks of its rules |
+| `consistency` | The values agree with each other | The checks of its rules |
+| `timeliness` | The values are current | The checks of its rules |
+
+Completeness and validity always apply. Consistency and timeliness exist only through rules, so an asset has them when a rule of that dimension applies to it (its `when` holds and a check judges something) and has no score for them otherwise. The overall quality is the mean of the scores of the dimensions that apply, weighted by `weights` in the settings (30, 30, 20 and 20 by default); a dimension that does not apply leaves its weight to the others in proportion, so an asset is never penalised for a dimension nothing judged. Changing the weights, or the dimensions that apply, changes the scores: a run is only comparable with the runs made with the same weights and rules.
+
+Uniqueness and accuracy are not dimensions here. The first compares assets with each other and the second needs a source of truth outside the catalog, and a rule judges one asset on its metadata.
+
+The `dimensions` of an evaluated asset, and the `quality_dimensions` field, are something else: the checks of the card of the asset (description, tags, ownership...). Their scores by dimension are `scores`.
 
 ### Rules and findings
 
-A finding has a field, a code and the rule it belongs to. The audit applies three kinds of rule:
+A finding has a field, a code and the rule it belongs to. A rule belongs to a dimension (the built-in `required` and `externalLinkEmpty` to completeness, `validation` and `externalLinkInvalid` to validity). The audit applies three kinds of rule:
 
 | Source | What it judges | Who changes it |
 | --- | --- | --- |
@@ -70,6 +87,7 @@ qualityRules:
   - id: piiCoherence
     code: pii_coherence          # the finding code clients translate; defaults to the id in snake_case
     labelKey: metamodel.rule.pii
+    dimension: consistency       # completeness, validity, consistency or timeliness
     severity: warning            # what a finding counts as by default: error or warning
     when:
       - { field: contains_pii, op: equals, value: true }
@@ -79,6 +97,7 @@ qualityRules:
   - id: reviewExpired
     code: review_expired
     labelKey: metamodel.rule.review
+    dimension: timeliness
     severity: warning
     checks:
       - { field: next_review, op: notBefore, value: today, optional: true }
@@ -99,15 +118,16 @@ A condition is `field`, `op` and, for most operators, `value`:
 
 Apart from the operators about absence, a condition on a field with no value is false. On a `check`, `optional: true` makes an empty field pass instead: there is nothing to judge, as with an optional review date. `optional` is not allowed in `when`. A rule names asset fields, native ones (`name`, `description`, `tags`) included; a profile with a rule that names a field it does not have, an unknown operator or key, a value of the wrong type or a reserved id does not load.
 
-A finding of a declared rule counts for the status of the asset (an `error` keeps it from being compliant) but not for the score or the checks it meets.
+A finding of a declared rule counts for the status of the asset (an `error` keeps it from being compliant), and each check it judges counts in the score of its dimension. It does not change the checks of the card the asset meets.
 
 #### Custom rules
 
-`GET /api/v1/quality/rules` lists every rule with its source, severity and whether it applies. `POST /api/v1/quality/rules` creates a custom rule, `PUT /api/v1/quality/rules/{id}` replaces it (with `If-Match`, like the settings; `412` when someone changed it first) and `DELETE` removes it. The body is the same declaration as above with literal `name` and `description` instead of message keys, plus `enabled` and `severity`:
+`GET /api/v1/quality/rules` lists every rule with its source, severity and whether it applies. `POST /api/v1/quality/rules` creates a custom rule, `PUT /api/v1/quality/rules/{id}` replaces it (with `If-Match`, like the settings; `412` when someone changed it first) and `DELETE` removes it. The body is the same declaration as above with literal `name` and `description` instead of message keys, plus `enabled`, `dimension` and `severity`:
 
 ```json
 {
   "name": "Tables with personal data need a steward",
+  "dimension": "consistency",
   "severity": "warning",
   "enabled": true,
   "when": [{ "field": "contains_pii", "op": "equals", "value": true }],

@@ -100,7 +100,7 @@ func TestEveryOperatorJudgesTheFieldItNames(t *testing.T) {
 		{"notBefore a date", "{field: review, op: notBefore, value: '2026-01-01'}", map[string]any{"review": "2025-12-31"}, true},
 	}
 	for _, c := range cases {
-		reg := rulesRegistry(t, "  - {id: r1, labelKey: k, severity: warning, checks: ["+c.cond+"]}\n")
+		reg := rulesRegistry(t, "  - {id: r1, labelKey: k, dimension: validity, severity: warning, checks: ["+c.cond+"]}\n")
 		got := judge(t, reg, quality.DefaultSettings(), ruleAsset(c.value))
 		if failed := strings.Contains(issuesOf(got), "r1:"); failed != c.fails {
 			t.Errorf("%s: failed=%v, want %v (%s)", c.name, failed, c.fails, issuesOf(got))
@@ -112,11 +112,13 @@ func TestAnOptionalCheckPassesWhenThereIsNothingToJudgeAndWhenSkipsTheRule(t *te
 	reg := rulesRegistry(t, `
   - id: reviewed
     labelKey: k
+    dimension: validity
     severity: warning
     checks:
       - {field: review, op: notBefore, value: today, optional: true}
   - id: piiNeedsSteward
     labelKey: k
+    dimension: validity
     severity: error
     when:
       - {field: pii, op: equals, value: true}
@@ -141,7 +143,7 @@ func TestAnOptionalCheckPassesWhenThereIsNothingToJudgeAndWhenSkipsTheRule(t *te
 }
 
 func TestTheSettingsDecideWhetherAProfileRuleAppliesAndHowSevere(t *testing.T) {
-	reg := rulesRegistry(t, "  - {id: stewardSet, code: steward_missing, labelKey: k, severity: warning, checks: [{field: steward, op: set}]}\n")
+	reg := rulesRegistry(t, "  - {id: stewardSet, code: steward_missing, labelKey: k, dimension: validity, severity: warning, checks: [{field: steward, op: set}]}\n")
 	settings := quality.DefaultSettings()
 
 	// A rule the settings have never seen applies at the severity its declaration gives.
@@ -156,7 +158,7 @@ func TestTheSettingsDecideWhetherAProfileRuleAppliesAndHowSevere(t *testing.T) {
 	if got := issuesOf(judge(t, reg, settings, ruleAsset(nil))); got != "" {
 		t.Fatalf("disabled: %s", got)
 	}
-	issue := judge(t, rulesRegistry(t, "  - {id: stewardSet, code: steward_missing, labelKey: k, severity: warning, checks: [{field: steward, op: set}]}\n"), quality.DefaultSettings(), ruleAsset(nil)).Issues[0]
+	issue := judge(t, rulesRegistry(t, "  - {id: stewardSet, code: steward_missing, labelKey: k, dimension: validity, severity: warning, checks: [{field: steward, op: set}]}\n"), quality.DefaultSettings(), ruleAsset(nil)).Issues[0]
 	if issue.Code != "steward_missing" {
 		t.Fatalf("the finding carries the rule's code: %+v", issue)
 	}
@@ -164,7 +166,7 @@ func TestTheSettingsDecideWhetherAProfileRuleAppliesAndHowSevere(t *testing.T) {
 
 func custom(id string, enabled bool, severity string, checks ...metamodel.QualityCondition) quality.CustomRule {
 	return quality.CustomRule{
-		QualityRule: metamodel.QualityRule{ID: id, Name: "Mine", Severity: severity, Checks: checks},
+		QualityRule: metamodel.QualityRule{ID: id, Name: "Mine", Dimension: metamodel.DimensionValidity, Severity: severity, Checks: checks},
 		Enabled:     enabled, Version: 1,
 	}
 }
@@ -185,12 +187,32 @@ func TestCustomRulesApplyLikeTheProfilesAndAnInvalidOrDisabledOneIsSkipped(t *te
 	}
 }
 
-func TestADeclaredRuleDoesNotChangeTheDimensionsOrTheScore(t *testing.T) {
-	reg := rulesRegistry(t, "  - {id: r1, labelKey: k, severity: error, checks: [{field: steward, op: set}]}\n")
+func TestTheChecksOfARuleFeedTheScoreOfItsDimensionAndNotTheCardChecks(t *testing.T) {
+	reg := rulesRegistry(t, "  - {id: r1, labelKey: k, dimension: validity, severity: error, checks: [{field: steward, op: set}]}\n")
 	with := judge(t, reg, quality.DefaultSettings(), ruleAsset(nil))
 	without := judge(t, rulesRegistry(t, ""), quality.DefaultSettings(), ruleAsset(nil))
-	if with.Quality != without.Quality || strings.Join(with.Dimensions, ",") != strings.Join(without.Dimensions, ",") {
-		t.Fatalf("a finding of a rule counts for the status, not for the score or the checks: %v vs %v", with, without)
+	if strings.Join(with.Dimensions, ",") != strings.Join(without.Dimensions, ",") {
+		t.Fatalf("the card checks are the same: %v vs %v", with.Dimensions, without.Dimensions)
+	}
+	if with.Scores["validity"] >= without.Scores["validity"] || with.Scores["completeness"] != without.Scores["completeness"] || with.Quality >= without.Quality {
+		t.Fatalf("a failed check lowers its own dimension and the total only: %v vs %v", with.Scores, without.Scores)
+	}
+}
+
+func TestADimensionNoRuleAppliedToHasNoScoreAndTheWeightsGoToTheOthers(t *testing.T) {
+	reg := rulesRegistry(t, `  - {id: fresh, labelKey: k, dimension: timeliness, severity: warning, when: [{field: steward, op: set}], checks: [{field: steward, op: set}]}
+  - {id: agree, labelKey: k, dimension: consistency, severity: warning, checks: [{field: steward, op: unset}]}
+`)
+	got := judge(t, reg, quality.DefaultSettings(), ruleAsset(nil))
+	if _, ok := got.Scores["timeliness"]; ok {
+		t.Fatalf("a rule whose condition does not hold judges nothing: %v", got.Scores)
+	}
+	if got.Scores["consistency"] != 100 {
+		t.Fatalf("consistency = %v", got.Scores)
+	}
+	want := (got.Scores["completeness"]*30 + got.Scores["validity"]*30 + 100*20) / 80
+	if diff := got.Quality - want; diff > 0.1 || diff < -0.1 {
+		t.Fatalf("quality %v, want %v over the dimensions that apply: %v", got.Quality, want, got.Scores)
 	}
 }
 
@@ -272,7 +294,7 @@ func (m *memorySettings) Save(_ context.Context, s quality.Settings, expected in
 func TestPeopleCreateChangeAndDeleteCustomRulesWithTheSameValidation(t *testing.T) {
 	svc, store, _ := ruleServiceFor(t, "")
 	ctx := context.Background()
-	rule := metamodel.QualityRule{Name: "Steward needed", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "steward", Op: metamodel.OpSet}}}
+	rule := metamodel.QualityRule{Name: "Steward needed", Dimension: "validity", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "steward", Op: metamodel.OpSet}}}
 
 	created, err := svc.Create(ctx, rule, true, "u1")
 	if err != nil || !strings.HasPrefix(created.ID, "rule_") || created.Version != 1 || created.CreatedBy != "u1" {
@@ -316,9 +338,9 @@ func TestPeopleCreateChangeAndDeleteCustomRulesWithTheSameValidation(t *testing.
 }
 
 func TestACustomRuleCannotTakeTheIdOfAProfileRuleOrExceedTheLimit(t *testing.T) {
-	svc, store, _ := ruleServiceFor(t, "  - {id: stewardSet, labelKey: k, severity: warning, checks: [{field: steward, op: set}]}\n")
+	svc, store, _ := ruleServiceFor(t, "  - {id: stewardSet, labelKey: k, dimension: validity, severity: warning, checks: [{field: steward, op: set}]}\n")
 	ctx := context.Background()
-	rule := metamodel.QualityRule{ID: "stewardSet", Name: "Mine", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "steward", Op: metamodel.OpSet}}}
+	rule := metamodel.QualityRule{ID: "stewardSet", Name: "Mine", Dimension: "validity", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "steward", Op: metamodel.OpSet}}}
 	if _, err := svc.Create(ctx, rule, true, ""); !errors.Is(err, quality.ErrRuleExists) {
 		t.Fatalf("%v", err)
 	}
@@ -339,8 +361,8 @@ func TestACustomRuleCannotTakeTheIdOfAProfileRuleOrExceedTheLimit(t *testing.T) 
 }
 
 func TestRulesListsEveryRuleWithItsSourceAndAProblemForOneThatNoLongerFits(t *testing.T) {
-	svc, store, _ := ruleServiceFor(t, "  - {id: stewardSet, labelKey: r.steward, descriptionKey: r.steward.help, severity: error, checks: [{field: steward, op: set}]}\n")
-	store.rules["rule_old"] = quality.CustomRule{QualityRule: metamodel.QualityRule{ID: "rule_old", Name: "Old", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "gone", Op: metamodel.OpSet}}}, Enabled: true, Version: 3}
+	svc, store, _ := ruleServiceFor(t, "  - {id: stewardSet, labelKey: r.steward, descriptionKey: r.steward.help, dimension: validity, severity: error, checks: [{field: steward, op: set}]}\n")
+	store.rules["rule_old"] = quality.CustomRule{QualityRule: metamodel.QualityRule{ID: "rule_old", Name: "Old", Dimension: "validity", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "gone", Op: metamodel.OpSet}}}, Enabled: true, Version: 3}
 	rules, err := svc.Rules(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -364,7 +386,7 @@ func TestRulesListsEveryRuleWithItsSourceAndAProblemForOneThatNoLongerFits(t *te
 
 func TestSettingsGainTheProfilesRulesAndLoseTheOnesThatNoLongerExist(t *testing.T) {
 	repo := &memorySettings{}
-	reg := rulesRegistry(t, "  - {id: stewardSet, labelKey: k, severity: error, checks: [{field: steward, op: set}]}\n")
+	reg := rulesRegistry(t, "  - {id: stewardSet, labelKey: k, dimension: validity, severity: error, checks: [{field: steward, op: set}]}\n")
 	svc := quality.NewService(repo, quality.WithRegistry(reg))
 	ctx := context.Background()
 

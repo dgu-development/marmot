@@ -73,6 +73,7 @@ const auditRules = `qualityRules:
   - id: piiCoherence
     code: pii_coherence
     labelKey: audit.rule.pii
+    dimension: consistency
     severity: warning
     when:
       - {field: contains_pii, op: equals, value: true}
@@ -82,6 +83,7 @@ const auditRules = `qualityRules:
   - id: reviewExpired
     code: review_expired
     labelKey: audit.rule.review
+    dimension: timeliness
     severity: warning
     checks:
       - {field: next_review, op: notBefore, value: today, optional: true}
@@ -151,16 +153,19 @@ func TestAMissingRequiredFieldIsAnErrorThatBlocksCompliance(t *testing.T) {
 	if r.Issues[0].Severity != quality.SeverityError || r.Issues[0].Section != "governance" || r.Issues[0].RuleID != quality.RuleRequired {
 		t.Fatalf("issue = %+v", r.Issues[0])
 	}
-	if r.Completeness != 88.9 || r.Conformity != 100 || r.Quality != 95.6 {
-		t.Fatalf("scores = %v %v %v", r.Completeness, r.Conformity, r.Quality)
+	if r.Scores[metamodel.DimensionCompleteness] != 88.9 || r.Scores[metamodel.DimensionValidity] != 100 || r.Scores[metamodel.DimensionTimeliness] != 100 || r.Quality != 95.8 {
+		t.Fatalf("scores = %v, quality %v", r.Scores, r.Quality)
 	}
-	// 95.6 is over the compliant threshold, but an error-severity finding keeps it at warning.
+	if _, ok := r.Scores[metamodel.DimensionConsistency]; ok {
+		t.Fatalf("a dimension no rule applied to has no score: %v", r.Scores)
+	}
+	// 95.8 is over the compliant threshold, but an error-severity finding keeps it at warning.
 	if r.Status != quality.StatusWarning {
 		t.Fatalf("status = %s", r.Status)
 	}
 }
 
-func TestAnInvalidValueUsesTheServersCodeAndCostsConformity(t *testing.T) {
+func TestAnInvalidValueUsesTheServersCodeAndCostsValidity(t *testing.T) {
 	values := complete()
 	values["classification"] = "secret"
 	values["retention"] = float64(0)
@@ -169,8 +174,8 @@ func TestAnInvalidValueUsesTheServersCodeAndCostsConformity(t *testing.T) {
 	if got != "classification:enum,retention:range" {
 		t.Fatalf("issues = %s", got)
 	}
-	if r.Completeness != 100 || r.Conformity != 77.8 {
-		t.Fatalf("scores = %v %v", r.Completeness, r.Conformity)
+	if r.Scores[metamodel.DimensionCompleteness] != 100 || r.Scores[metamodel.DimensionValidity] != 77.8 {
+		t.Fatalf("scores = %v", r.Scores)
 	}
 }
 

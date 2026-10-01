@@ -40,16 +40,16 @@ type SectionStat struct{ Total, Filled, Valid int }
 
 // AssetResult is what the audit concluded about one asset.
 type AssetResult struct {
-	AssetID      string  `json:"asset_id"`
-	MRN          string  `json:"mrn"`
-	Name         string  `json:"name"`
-	Type         string  `json:"type"`
-	DomainID     string  `json:"domain_id"`
-	Completeness float64 `json:"completeness"`
-	Conformity   float64 `json:"conformity"`
-	Quality      float64 `json:"quality"`
-	Status       Status  `json:"status" enums:"compliant,warning,noncompliant"`
-	IssueCount   int     `json:"issue_count"`
+	AssetID  string `json:"asset_id"`
+	MRN      string `json:"mrn"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	DomainID string `json:"domain_id"`
+	// Scores are the score of each quality dimension that applies to the asset, out of 100.
+	Scores     map[string]float64 `json:"scores"`
+	Quality    float64            `json:"quality"`
+	Status     Status             `json:"status" enums:"compliant,warning,noncompliant"`
+	IssueCount int                `json:"issue_count"`
 	// Issues is filled for the last successful run only.
 	Issues []Issue `json:"issues,omitempty"`
 
@@ -209,10 +209,15 @@ func (a *Auditor) AuditWithDocs(as *asset.Asset, hasPages bool) AssetResult {
 		}
 		result.Sections[f.Presentation.Section] = stat
 	}
+	judged := map[string]int{metamodel.DimensionCompleteness: total, metamodel.DimensionValidity: filled}
+	held := map[string]int{metamodel.DimensionCompleteness: filled, metamodel.DimensionValidity: valid}
 	if !as.IsStub {
 		findings = append(findings, a.linkFindings(as.ExternalLinks)...)
 		for _, rule := range a.rules {
-			findings = append(findings, rule.apply(values, a.day)...)
+			found, n, ok := rule.apply(values, a.day)
+			findings = append(findings, found...)
+			judged[rule.dimension] += n
+			held[rule.dimension] += ok
 		}
 	}
 
@@ -238,19 +243,21 @@ func (a *Auditor) AuditWithDocs(as *asset.Asset, hasPages bool) AssetResult {
 		result.Dimensions = a.dimensions(as, values, findings, hasPages || ingestedBody(as))
 	}
 
-	completeness := 100.0
-	if total > 0 {
-		completeness = float64(filled) / float64(total) * 100
+	result.Scores = map[string]float64{}
+	for _, dimension := range metamodel.QualityDimensions {
+		switch {
+		case judged[dimension] > 0:
+			result.Scores[dimension] = round(float64(held[dimension]) / float64(judged[dimension]) * 100)
+		case dimension == metamodel.DimensionCompleteness:
+			result.Scores[dimension] = 100
+		case dimension == metamodel.DimensionValidity && anyRequired:
+			result.Scores[dimension] = 0
+		case dimension == metamodel.DimensionValidity:
+			result.Scores[dimension] = 100
+		}
 	}
-	conformity := 100.0
-	switch {
-	case filled > 0:
-		conformity = float64(valid) / float64(filled) * 100
-	case anyRequired:
-		conformity = 0
-	}
-	quality := a.settings.Weights.score(completeness, conformity)
-	result.Completeness, result.Conformity, result.Quality = round(completeness), round(conformity), round(quality)
+	quality := a.settings.Weights.mix(result.Scores)
+	result.Quality = round(quality)
 	switch {
 	case quality >= a.settings.Thresholds.Compliant && !hasError:
 		result.Status = StatusCompliant
@@ -260,14 +267,6 @@ func (a *Auditor) AuditWithDocs(as *asset.Asset, hasPages bool) AssetResult {
 		result.Status = StatusNoncompliant
 	}
 	return result
-}
-
-func (w Weights) score(completeness, conformity float64) float64 {
-	total := w.Completeness + w.Conformity
-	if total == 0 {
-		total = 1
-	}
-	return (completeness*w.Completeness + conformity*w.Conformity) / total
 }
 
 // dimensionOrder is the order the checks are listed and written in.
