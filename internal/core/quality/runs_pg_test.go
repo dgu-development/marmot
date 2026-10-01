@@ -344,3 +344,25 @@ func TestARunWritesTheScoresOnTheAssetsAndAnUnchangedAssetIsLeftAlone(t *testing
 		t.Fatalf("run = %+v, score %v", third, storedAt(t, e, "id-pg0", "quality_score"))
 	}
 }
+
+func TestDocumentationPagesAndLegacyDocumentationCountAsDocumentationAvailable(t *testing.T) {
+	e := pgEnv(t, quality.DefaultSettings())
+	ctx := context.Background()
+	if _, err := e.pool.Exec(ctx, `INSERT INTO doc_pages (entity_type, entity_id, title, content) VALUES ('asset', 'mrn://table/test/pg0', 'Notes', 'x')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, `INSERT INTO documentation (mrn, content, source) VALUES ('mrn://table/test/pg1', 'old docs', 'plugin'), ('mrn://table/test/pg2', '   ', 'plugin')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, `INSERT INTO doc_pages (entity_type, entity_id, title, content) VALUES ('data_product', 'mrn://table/test/pg3', 'Not an asset page', 'x')`); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := e.repo.DocumentedAssets(ctx, []string{"mrn://table/test/pg0", "mrn://table/test/pg1", "mrn://table/test/pg2", "mrn://table/test/pg3"})
+	if err != nil || len(got) != 2 || !got["mrn://table/test/pg0"] || !got["mrn://table/test/pg1"] {
+		t.Fatalf("documented = %v (%v)", got, err)
+	}
+	if none, err := e.repo.DocumentedAssets(ctx, nil); err != nil || len(none) != 0 {
+		t.Fatalf("nothing asked: %v %v", none, err)
+	}
+}

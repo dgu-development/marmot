@@ -154,8 +154,14 @@ func (a *Auditor) coherence(values map[string]any, links []asset.ExternalLink) [
 }
 
 // Audit scores one asset. A stub is judged on its native attributes only, as the server exempts
-// it from every governed field.
+// it from every governed field. Whether the asset has documentation is judged from its ingested
+// markdown alone; AuditWithDocs knows about the pages written in the platform too.
 func (a *Auditor) Audit(as *asset.Asset) AssetResult {
+	return a.AuditWithDocs(as, false)
+}
+
+// AuditWithDocs is Audit given whether the asset has documentation pages of its own.
+func (a *Auditor) AuditWithDocs(as *asset.Asset, hasPages bool) AssetResult {
 	values := asset.MetamodelValues(a.registry, as)
 	result := AssetResult{AssetID: as.ID, Type: as.Type, Stub: as.IsStub, DomainID: UnassignedDomain, Sections: map[string]SectionStat{}}
 	if as.MRN != nil {
@@ -212,7 +218,7 @@ func (a *Auditor) Audit(as *asset.Asset) AssetResult {
 	}
 	result.IssueCount = len(result.Issues)
 	if !as.IsStub {
-		result.Dimensions = a.dimensions(as, values, findings)
+		result.Dimensions = a.dimensions(as, values, findings, hasPages || ingestedBody(as))
 	}
 
 	completeness := 100.0
@@ -248,7 +254,15 @@ func (w Weights) score(completeness, conformity float64) float64 {
 }
 
 // dimensionOrder is the order the checks are listed and written in.
-var dimensionOrder = []string{"description", "tags", "ownership", "classification", "review", "documentation", "completeness", "conformity"}
+var dimensionOrder = []string{"description", "tags", "ownership", "classification", "review", "documentation", "resource", "completeness", "conformity"}
+
+// ingestedBody is whether a source (an Obsidian note, say) brought the asset a markdown body, which
+// the documentation tab shows as its first page.
+func ingestedBody(as *asset.Asset) bool {
+	dgu, _ := as.Metadata["dgu"].(map[string]any)
+	body, _ := dgu["body"].(string)
+	return strings.TrimSpace(body) != ""
+}
 
 // valueCodes are the findings about a value, as opposed to the coherence rules and the gaps.
 func valueCode(code string) bool {
@@ -259,16 +273,18 @@ func valueCode(code string) bool {
 	return true
 }
 
-// dimensions lists the checks an asset meets. A check about a field the profile does not have does
+// dimensions lists the checks an asset meets. `documentation` is having documentation to read (pages
+// or an ingested body) and `resource` is having a link out to a resource that documents it. A check about a field the profile does not have does
 // not apply and is left out, so a profile without a steward never fails ownership.
-func (a *Auditor) dimensions(as *asset.Asset, values map[string]any, findings []finding) []string {
+func (a *Auditor) dimensions(as *asset.Asset, values map[string]any, findings []finding, documented bool) []string {
 	has := func(id string) bool { _, ok := a.byID[id]; return ok }
 	met := map[string]bool{
 		"description":    (as.UserDescription != nil && strings.TrimSpace(*as.UserDescription) != "") || (as.Description != nil && strings.TrimSpace(*as.Description) != ""),
 		"tags":           !unset(as.Tags),
 		"ownership":      has("data_steward") && !unset(values["data_steward"]),
 		"classification": has("classification") && !unset(values["classification"]),
-		"documentation":  false,
+		"documentation":  documented,
+		"resource":       false,
 		"completeness":   true,
 		"conformity":     true,
 	}
@@ -276,7 +292,7 @@ func (a *Auditor) dimensions(as *asset.Asset, values map[string]any, findings []
 	met["review"] = has("next_review") && validDate(review) && review >= a.today
 	for _, link := range as.ExternalLinks {
 		if strings.TrimSpace(link.URL) != "" {
-			met["documentation"] = true
+			met["resource"] = true
 			break
 		}
 	}

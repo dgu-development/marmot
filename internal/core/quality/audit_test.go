@@ -221,7 +221,8 @@ func dimensionsOf(t *testing.T, a *asset.Asset) []string {
 func TestDimensionsListTheChecksAnAssetMeetsInOrder(t *testing.T) {
 	a := newAsset("a", complete())
 	a.ExternalLinks = []asset.ExternalLink{{Name: "docs", URL: "https://x"}}
-	if got := strings.Join(dimensionsOf(t, a), ","); got != "description,tags,ownership,classification,review,documentation,completeness,conformity" {
+	a.Metadata["dgu"].(map[string]any)["body"] = "# the note"
+	if got := strings.Join(dimensionsOf(t, a), ","); got != "description,tags,ownership,classification,review,documentation,resource,completeness,conformity" {
 		t.Fatalf("%s", got)
 	}
 
@@ -231,7 +232,7 @@ func TestDimensionsListTheChecksAnAssetMeetsInOrder(t *testing.T) {
 	bare := newAsset("b", values)
 	bare.Description, bare.UserDescription, bare.Tags = nil, nil, nil
 	if got := strings.Join(dimensionsOf(t, bare), ","); got != "ownership,conformity" {
-		t.Fatalf("a missing required field fails completeness; no links, tags or description; overdue review: %s", got)
+		t.Fatalf("a missing required field fails completeness; no links, tags, description or documentation; overdue review: %s", got)
 	}
 
 	invalid := complete()
@@ -249,5 +250,44 @@ func TestScoreValueIsAFractionWithThreeDecimals(t *testing.T) {
 		if got := quality.ScoreValue(in); got != want {
 			t.Errorf("%v -> %v, want %v", in, got, want)
 		}
+	}
+}
+
+func TestDocumentationAvailableIsTheBodyOrThePagesAndTheLinkedResourceIsAnotherCheck(t *testing.T) {
+	has := func(dims []string, id string) bool {
+		for _, d := range dims {
+			if d == id {
+				return true
+			}
+		}
+		return false
+	}
+	auditor := quality.NewAuditor(registry(t), quality.DefaultSettings(), now)
+
+	plain := newAsset("plain", complete())
+	if dims := auditor.Audit(plain).Dimensions; has(dims, "documentation") || has(dims, "resource") {
+		t.Fatalf("nothing to read, nothing linked: %v", dims)
+	}
+
+	withPages := auditor.AuditWithDocs(plain, true).Dimensions
+	if !has(withPages, "documentation") || has(withPages, "resource") {
+		t.Fatalf("pages written in the platform are documentation, not a linked resource: %v", withPages)
+	}
+
+	body := newAsset("body", complete())
+	body.Metadata["dgu"].(map[string]any)["body"] = "# a note"
+	if !has(auditor.Audit(body).Dimensions, "documentation") {
+		t.Fatal("an ingested markdown body is documentation")
+	}
+	blank := newAsset("blank", complete())
+	blank.Metadata["dgu"].(map[string]any)["body"] = "  \n "
+	if has(auditor.Audit(blank).Dimensions, "documentation") {
+		t.Fatal("a blank body is not")
+	}
+
+	linked := newAsset("linked", complete())
+	linked.ExternalLinks = []asset.ExternalLink{{Name: "wiki"}, {URL: " https://wiki "}}
+	if dims := auditor.Audit(linked).Dimensions; !has(dims, "resource") || has(dims, "documentation") {
+		t.Fatalf("a link out is a resource, not documentation: %v", dims)
 	}
 }
