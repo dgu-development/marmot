@@ -123,6 +123,8 @@ type Profile struct {
 	// locale then by key. A key missing from the current locale falls back to
 	// defaultLocale, then to the raw key. Clients own this fallback chain.
 	Messages map[string]map[string]string `json:"messages,omitempty"`
+	// QualityRules are the checks the quality audit applies on top of the fields' own validation.
+	QualityRules []QualityRule `json:"qualityRules,omitempty"`
 }
 
 type Schema struct {
@@ -221,6 +223,7 @@ func New(profile *Profile) (*Registry, error) {
 		}
 		schema.FormatVersion, schema.ID, schema.Version, schema.DefaultLocale = profile.FormatVersion, profile.ID, profile.Version, profile.DefaultLocale
 		schema.Messages = profile.Messages
+		schema.QualityRules = profile.QualityRules
 		schema.Enabled = true
 		seen := make(map[string]bool)
 		for _, field := range profile.Fields {
@@ -257,6 +260,9 @@ func New(profile *Profile) (*Registry, error) {
 		}
 	}
 	if err := validateDerivations(schema.Fields); err != nil {
+		return nil, err
+	}
+	if err := validateProfileRules(schema.QualityRules, schema.Fields); err != nil {
 		return nil, err
 	}
 	// Unique per kind, not globally: different kinds never share a row.
