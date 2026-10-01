@@ -719,6 +719,10 @@ func (r *Registry) Missing(values map[string]any, kind string, governed bool) []
 	return violations
 }
 
+// ValidateValue is the check Validate applies to one value: "" when it is valid, otherwise the
+// violation code. Audits call it field by field because they report every field, not just the first.
+func ValidateValue(f Field, value any) string { return validateValue(f, value) }
+
 func validateValue(f Field, value any) string {
 	v := f.Validation
 	switch f.Type {

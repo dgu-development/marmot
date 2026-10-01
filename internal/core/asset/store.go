@@ -161,6 +161,21 @@ func (r *PostgresRepository) Get(ctx context.Context, id string) (*Asset, error)
 	return r.scanSingleAsset(ctx, baseSelectAsset+" WHERE id = $1", id)
 }
 
+// ListAfter returns up to limit assets whose id sorts after afterID, in id order. Paging by key
+// instead of OFFSET keeps a pass over the whole catalog cheap and stable while it is being edited.
+func (r *PostgresRepository) ListAfter(ctx context.Context, afterID string, limit int) ([]*Asset, error) {
+	return r.scanMultipleAssets(ctx, baseSelectAsset+" WHERE id > $1 ORDER BY id LIMIT $2", afterID, limit)
+}
+
+// Count returns how many assets there are, stubs included.
+func (r *PostgresRepository) Count(ctx context.Context) (int, error) {
+	var n int
+	if err := r.db.QueryRow(ctx, "SELECT count(*) FROM assets").Scan(&n); err != nil {
+		return 0, fmt.Errorf("counting assets: %w", err)
+	}
+	return n, nil
+}
+
 func (r *PostgresRepository) GetByMRN(ctx context.Context, qualifiedName string) (*Asset, error) {
 	query := baseSelectAsset + " WHERE LOWER(mrn) = LOWER($1) AND is_stub = FALSE"
 	return r.scanSingleAsset(ctx, query, qualifiedName)

@@ -122,6 +122,7 @@ type Server struct {
 
 	// Workflow task timers (fork-only)
 	workflowTimers *background.SingletonTask
+	qualityRuns    quality.RunService
 
 	handlers []interface{ Routes() []common.Route }
 }
@@ -664,7 +665,10 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	}
 
 	if config.Quality.Enabled {
-		server.handlers = append(server.handlers, qualityAPI.NewHandler(quality.NewService(quality.NewPostgresRepository(db)), userSvc, authSvc, config))
+		qualityRepo := quality.NewPostgresRepository(db)
+		qualitySvc := quality.NewService(qualityRepo)
+		server.qualityRuns = quality.NewRunService(qualitySvc, qualityRepo, assetRepo, metamodelRegistry)
+		server.handlers = append(server.handlers, qualityAPI.NewHandler(qualitySvc, server.qualityRuns, userSvc, authSvc, config))
 	}
 
 	// Set up K8s SA token auth and operator syncer if enabled
@@ -698,6 +702,9 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 }
 
 func (s *Server) Stop() {
+	if s.qualityRuns != nil {
+		s.qualityRuns.Shutdown()
+	}
 	if s.workflowTimers != nil {
 		s.workflowTimers.Stop()
 	}
