@@ -63,6 +63,9 @@ func (*recordedRuns) Run(context.Context, string) (*quality.Run, error)         
 func (*recordedRuns) Results(context.Context, string, quality.ResultFilter) ([]quality.AssetResult, int, error) {
 	return nil, 0, nil
 }
+func (*recordedRuns) Evaluate(context.Context, []string) ([]quality.AssetResult, error) {
+	return nil, nil
+}
 func (*recordedRuns) Shutdown() {}
 
 type scheduleSettings struct{ stored quality.Stored }

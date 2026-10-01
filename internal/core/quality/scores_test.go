@@ -11,7 +11,7 @@ import (
 	"github.com/marmotdata/marmot/internal/core/quality"
 )
 
-const scoreProfile = auditProfile + `  - id: quality_dimensions
+const scoreProfile = auditFields + `  - id: quality_dimensions
     type: list
     itemType: enum
     values: [description, tags, ownership, classification, review, documentation, resource, completeness, conformity]
@@ -29,7 +29,7 @@ const scoreProfile = auditProfile + `  - id: quality_dimensions
     storage: metadata.dgu.quality_evaluated_at
     presentation:
       labelKey: audit.evaluated
-`
+` + auditRules
 
 // The audit profile asks for quality_score as required, which a system field cannot be; this one
 // has it the way the distribution does.

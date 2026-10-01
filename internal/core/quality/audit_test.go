@@ -10,7 +10,7 @@ import (
 	"github.com/marmotdata/marmot/internal/core/quality"
 )
 
-const auditProfile = `formatVersion: 1
+const auditFields = `formatVersion: 1
 id: audit
 version: 1
 defaultLocale: en
@@ -67,6 +67,27 @@ fields:
       labelKey: audit.score
       section: output
 `
+
+// The coherence rules a profile declares: the ones that used to be fixed in the server.
+const auditRules = `qualityRules:
+  - id: piiCoherence
+    code: pii_coherence
+    labelKey: audit.rule.pii
+    severity: warning
+    when:
+      - {field: contains_pii, op: equals, value: true}
+    checks:
+      - {field: classification, op: set}
+      - {field: data_steward, op: set}
+  - id: reviewExpired
+    code: review_expired
+    labelKey: audit.rule.review
+    severity: warning
+    checks:
+      - {field: next_review, op: notBefore, value: today, optional: true}
+`
+
+const auditProfile = auditFields + auditRules
 
 var now = time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 
@@ -163,11 +184,11 @@ func TestCoherenceRules(t *testing.T) {
 
 	r := audit(t, quality.DefaultSettings(), a)
 	got := strings.Join(codes(r), ",")
-	want := "data_steward:pii_coherence,next_review:review_expired,external_links:external_link_empty,external_links:external_link_empty"
+	want := "external_links:external_link_empty,external_links:external_link_empty,data_steward:pii_coherence,next_review:review_expired"
 	if got != want {
 		t.Fatalf("issues = %s", got)
 	}
-	last := r.Issues[len(r.Issues)-1]
+	last := r.Issues[1]
 	if last.Item == nil || *last.Item != 2 {
 		t.Fatalf("the offending entry is not named: %+v", last)
 	}

@@ -18,17 +18,13 @@ type RuleID string
 const (
 	RuleRequired            RuleID = "required"
 	RuleValidation          RuleID = "validation"
-	RulePIICoherence        RuleID = "piiCoherence"
-	RuleReviewExpired       RuleID = "reviewExpired"
 	RuleExternalLinkInvalid RuleID = "externalLinkInvalid"
 	RuleExternalLinkEmpty   RuleID = "externalLinkEmpty"
 )
 
-// Rules lists the rules the audit knows, in display order.
-var Rules = []RuleID{
-	RuleRequired, RuleValidation, RulePIICoherence,
-	RuleReviewExpired, RuleExternalLinkInvalid, RuleExternalLinkEmpty,
-}
+// Rules lists the built-in rules, in display order. The profile declares others, which the settings
+// hold too; see ProfileRules.
+var Rules = []RuleID{RuleRequired, RuleValidation, RuleExternalLinkInvalid, RuleExternalLinkEmpty}
 
 type Severity string
 
@@ -132,9 +128,14 @@ func inPercent(value float64) bool {
 	return !math.IsNaN(value) && value >= 0 && value <= 100
 }
 
-// Validate reports every invalid setting. Codes: range, total, order,
-// unknown_rule, missing_rule, severity, cron, retention, batch, timeout.
-func (s Settings) Validate() error {
+// Validate reports every invalid setting for a profile that declares no rules of its own.
+func (s Settings) Validate() error { return s.ValidateWith(nil) }
+
+// ValidateWith reports every invalid setting, knowing the rules a profile declares besides the
+// built-in ones. Codes: range, total, order, unknown_rule, missing_rule, severity, cron,
+// retention, batch, timeout.
+func (s Settings) ValidateWith(profileRules []RuleID) error {
+	known := append(slices.Clone(Rules), profileRules...)
 	var problems []FieldError
 	add := func(field, code string) { problems = append(problems, FieldError{field, code}) }
 
@@ -149,13 +150,13 @@ func (s Settings) Validate() error {
 		add("thresholds", "order")
 	}
 	for id, rule := range s.Rules {
-		if !slices.Contains(Rules, id) {
+		if !slices.Contains(known, id) {
 			add("rules."+string(id), "unknown_rule")
 		} else if rule.Severity != SeverityError && rule.Severity != SeverityWarning {
 			add("rules."+string(id), "severity")
 		}
 	}
-	for _, id := range Rules {
+	for _, id := range known {
 		if _, ok := s.Rules[id]; !ok {
 			add("rules."+string(id), "missing_rule")
 		}

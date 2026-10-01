@@ -51,7 +51,77 @@ The summary has the totals, the status counts, the fields with most findings and
 
 ### Rules and findings
 
-A finding has a field, a code and the rule it belongs to. Codes of a value are the metamodel's (`type`, `length`, `enum`, `date`, `range`, `items`) plus `required`; the coherence rules add `pii_coherence` (an asset that contains personal data needs a classification and a steward), `review_expired` and `external_link_empty`. A disabled rule raises nothing. The fields the audit itself writes (`quality_score` and its companions) are not part of the calculation.
+A finding has a field, a code and the rule it belongs to. The audit applies three kinds of rule:
+
+| Source | What it judges | Who changes it |
+| --- | --- | --- |
+| Built-in | `required` (a required field with no value), `validation` (the metamodel's value checks: `type`, `length`, `enum`, `date`, `range`, `items`) and `externalLinkInvalid` / `externalLinkEmpty` (the structure of the external links, which are not a profile field) | Severity and on/off, in the settings |
+| Profile | The `qualityRules` the metamodel profile declares | Their text and conditions are code of the distribution, read-only here; severity and on/off, in the settings |
+| Custom | Rules people write in the interface | Whoever has `metadata_quality:manage`; kept in the database |
+
+A rule never runs code: a rule is a closed set of conditions over the fields of the profile.
+
+#### Declaring a rule
+
+A rule applies to an asset when every `when` condition holds (always, if there are none) and then raises one finding, on its own field, for each `check` that does not.
+
+```yaml
+qualityRules:
+  - id: piiCoherence
+    code: pii_coherence          # the finding code clients translate; defaults to the id in snake_case
+    labelKey: metamodel.rule.pii
+    severity: warning            # what a finding counts as by default: error or warning
+    when:
+      - { field: contains_pii, op: equals, value: true }
+    checks:
+      - { field: classification, op: set }
+      - { field: data_steward, op: set }
+  - id: reviewExpired
+    code: review_expired
+    labelKey: metamodel.rule.review
+    severity: warning
+    checks:
+      - { field: next_review, op: notBefore, value: today, optional: true }
+```
+
+A condition is `field`, `op` and, for most operators, `value`:
+
+| `op` | `value` | True when |
+| --- | --- | --- |
+| `set` / `unset` | none | The field has / has no value (blank text and empty lists are no value) |
+| `equals` / `notEquals` | A string, number or boolean | The field equals / differs from it; `notEquals` is also true when unset |
+| `oneOf` / `noneOf` | A list of strings or numbers | The field is / is not one of them; `noneOf` is also true when unset |
+| `contains` / `notContains` | An item | A list field has / lacks the item; `notContains` is also true when unset |
+| `matches` | A regular expression ([RE2](https://github.com/google/re2/wiki/Syntax), up to 200 characters) | The whole text satisfies it |
+| `minItems` / `maxItems` | A number | The list has at least / at most that many items |
+| `atLeast` / `atMost` | A number | A number field is at least / at most that |
+| `notBefore` / `notAfter` | `today` or `YYYY-MM-DD` | A date field is not before / after it, moved by `days` (`value: today, days: 30` is 30 days from now) |
+
+Apart from the operators about absence, a condition on a field with no value is false. On a `check`, `optional: true` makes an empty field pass instead: there is nothing to judge, as with an optional review date. `optional` is not allowed in `when`. A rule names asset fields, native ones (`name`, `description`, `tags`) included; a profile with a rule that names a field it does not have, an unknown operator or key, a value of the wrong type or a reserved id does not load.
+
+A finding of a declared rule counts for the status of the asset (an `error` keeps it from being compliant) but not for the score or the checks it meets.
+
+#### Custom rules
+
+`GET /api/v1/quality/rules` lists every rule with its source, severity and whether it applies. `POST /api/v1/quality/rules` creates a custom rule, `PUT /api/v1/quality/rules/{id}` replaces it (with `If-Match`, like the settings; `412` when someone changed it first) and `DELETE` removes it. The body is the same declaration as above with literal `name` and `description` instead of message keys, plus `enabled` and `severity`:
+
+```json
+{
+  "name": "Tables with personal data need a steward",
+  "severity": "warning",
+  "enabled": true,
+  "when": [{ "field": "contains_pii", "op": "equals", "value": true }],
+  "checks": [{ "field": "data_steward", "op": "set" }]
+}
+```
+
+A `400` lists every problem with its path (`checks[1].value`: `type_mismatch`). The id is generated (`rule_ab12cd34`) unless given; it cannot be a built-in or profile id. There are at most 100 custom rules, with at most 20 conditions each. A custom rule that names a field the profile has since lost is skipped and listed with `problem: invalid`. A run keeps the custom rules it applied (`custom_rules` when a run is read), so changing a rule afterwards does not rewrite history.
+
+The profile and the custom rules are two sources on purpose: the profile ships with the platform and is mounted read-only, so the application never writes it; what people write lives in the database, with its audit trail.
+
+#### Evaluating assets now
+
+`POST /api/v1/quality/evaluate` with `{"asset_ids": [...]}` (up to 200) judges the assets as they are, with the current settings and rules, and records nothing: it is what the quality card of an asset or a data product shows. It returns the findings and the checks each asset meets; an id that is not an asset is left out.
 
 The detail of the findings is kept for the last successful run only; every result carries its `issue_count`.
 

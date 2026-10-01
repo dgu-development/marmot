@@ -667,8 +667,10 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 
 	if config.Quality.Enabled {
 		qualityRepo := quality.NewPostgresRepository(db)
-		qualitySvc := quality.NewService(qualityRepo)
-		server.qualityRuns = quality.NewRunService(qualitySvc, qualityRepo, assetRepo, metamodelRegistry, quality.WithScoreWriter(assetSvc))
+		qualitySvc := quality.NewService(qualityRepo, quality.WithRegistry(metamodelRegistry))
+		qualityRules := quality.NewPostgresRuleRepository(db)
+		server.qualityRuns = quality.NewRunService(qualitySvc, qualityRepo, assetRepo, metamodelRegistry,
+			quality.WithScoreWriter(assetSvc), quality.WithRuleStore(qualityRules))
 		qualityScheduler := quality.NewScheduler(qualitySvc, server.qualityRuns, qualityRepo)
 		server.qualitySchedule = background.NewSingletonTask(background.SingletonConfig{
 			Name:     "quality-schedule",
@@ -677,7 +679,7 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 			TaskFn:   qualityScheduler.Tick,
 		})
 		server.qualitySchedule.Start(context.Background())
-		server.handlers = append(server.handlers, qualityAPI.NewHandler(qualitySvc, server.qualityRuns, qualityScheduler, userSvc, authSvc, config))
+		server.handlers = append(server.handlers, qualityAPI.NewHandler(qualitySvc, server.qualityRuns, quality.NewRuleService(qualityRules, qualitySvc, metamodelRegistry), qualityScheduler, userSvc, authSvc, config))
 	}
 
 	// Set up K8s SA token auth and operator syncer if enabled
