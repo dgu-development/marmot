@@ -2,6 +2,11 @@
 	import { onMount } from 'svelte';
 	import { listPermissions } from '$lib/roles/api';
 	import type { Permission } from '$lib/roles/types';
+	import {
+		permissionDescription,
+		permissionName,
+		resourceLabel
+	} from '$lib/roles/permission-labels';
 	import { m } from '$lib/paraglide/messages';
 
 	export let selectedIds: string[] = [];
@@ -94,7 +99,7 @@
 					<span
 						class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider"
 					>
-						{resourceType}
+						{resourceLabel(resourceType)}
 					</span>
 					<span class="ml-auto text-xs text-gray-500 dark:text-gray-500">
 						{perms.filter((p) => isSelected(p.id)).length} / {perms.length}
@@ -116,10 +121,13 @@
 								/>
 							{/if}
 							<div class="flex-1 min-w-0">
-								<span class="text-sm font-medium text-gray-900 dark:text-gray-100">{perm.name}</span
+								<span class="text-sm font-medium text-gray-900 dark:text-gray-100"
+									>{permissionName(perm)}</span
 								>
-								{#if perm.description}
-									<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{perm.description}</p>
+								{#if permissionDescription(perm)}
+									<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+										{permissionDescription(perm)}
+									</p>
 								{/if}
 							</div>
 						</label>

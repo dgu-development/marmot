@@ -35,7 +35,7 @@ func (h *Handler) Routes() []common.Route {
 	guarded := func(action string) []func(http.HandlerFunc) http.HandlerFunc {
 		return []func(http.HandlerFunc) http.HandlerFunc{
 			common.WithAuth(h.userService, h.authService, h.config),
-			common.RequirePermission(h.userService, "quality", action),
+			common.RequirePermission(h.userService, "metadata_quality", action),
 		}
 	}
 	return []common.Route{
