@@ -650,6 +650,72 @@ fields:
 	}
 }
 
+func TestAssetControlRules(t *testing.T) {
+	field := func(kinds, typ string) string {
+		return `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: applies_to
+    type: ` + typ + `
+    itemType: string
+    core: true
+    nullable: true
+    storage: metadata.example.applies_to
+    appliesTo:
+      kinds: [` + kinds + `]
+    presentation:
+      labelKey: example.applies_to.label
+      control: asset
+      inverseLabelKey: example.applies_to.inverse
+`
+	}
+	if _, err := Load(strings.NewReader(field("asset", "list"))); err != nil {
+		t.Fatalf("asset control on an asset list: %v", err)
+	}
+	if _, err := Load(strings.NewReader(field("data_product", "list"))); err == nil {
+		t.Fatal("the asset control must be limited to asset fields")
+	}
+	if _, err := Load(strings.NewReader(field("asset", "integer"))); err == nil {
+		t.Fatal("the asset control needs a string or a list of strings")
+	}
+}
+
+func TestManualAssetTypes(t *testing.T) {
+	profile := func(manual string) string {
+		return `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: asset_type
+    type: enum
+    core: true
+    nullable: true
+    storage: metadata.example.asset_type
+    values: [policy, table]
+    presentation:
+      labelKey: example.asset_type.label
+` + manual
+	}
+	ok := "      manual: {type: BusinessAsset, provider: DGU, values: [policy]}\n"
+	if r, err := Load(strings.NewReader(profile(ok))); err != nil {
+		t.Fatal(err)
+	} else if f, _ := r.Field("asset_type"); f.Presentation.Manual == nil || f.Presentation.Manual.Provider != "DGU" {
+		t.Fatal("manual is not served")
+	}
+	for _, bad := range []string{
+		"      manual: {type: BusinessAsset, provider: DGU, values: [kpi]}\n",
+		"      manual: {type: BusinessAsset, provider: \"\", values: [policy]}\n",
+		"      manual: {type: BusinessAsset, provider: DGU, values: []}\n",
+	} {
+		if _, err := Load(strings.NewReader(profile(bad))); err == nil {
+			t.Fatalf("accepted an invalid manual: %s", bad)
+		}
+	}
+}
+
 func TestSystemFieldDefinitions(t *testing.T) {
 	profile := func(field string) string {
 		return exampleProfile + field + "\n"

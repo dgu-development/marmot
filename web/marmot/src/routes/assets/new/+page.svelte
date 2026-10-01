@@ -10,10 +10,46 @@
 	import DomainSelect from '$components/domain/DomainSelect.svelte';
 	import { providerIconMap, typeIconMap } from '$lib/iconloader';
 	import { m } from '$lib/paraglide/messages';
+	import { locale } from '$lib/i18n';
+	import { fetchMetamodel } from '$lib/metamodel/api';
+	import { nativeMessage } from '$lib/metamodel/i18n';
+	import { valueLabel } from '$lib/metamodel/labels';
+	import type { MetamodelSchema } from '$lib/metamodel/types';
 
 	let name = $state('');
 	let assetType = $state('');
 	let providers = $state<string[]>([]);
+	let origin = $state<'technical' | 'manual'>('technical');
+	let manualType = $state('');
+	let schema = $state<MetamodelSchema>();
+	const typeField = $derived(
+		schema?.enabled
+			? schema.fields.find((f) => f.id === 'asset_type' && f.presentation?.manual)
+			: undefined
+	);
+	const manual = $derived(typeField?.presentation?.manual);
+	const isManual = $derived(origin === 'manual' && !!manual);
+	const labelContext = $derived({
+		locale: $locale,
+		defaultLocale: schema?.defaultLocale ?? 'en',
+		messages: schema?.messages,
+		native: nativeMessage
+	});
+	const manualLabel = (value: string) =>
+		(typeField && valueLabel(typeField, value, labelContext)) ?? value;
+
+	$effect(() => {
+		fetchMetamodel()
+			.then((loaded) => (schema = loaded))
+			.catch(() => {});
+	});
+
+	function nestedMetadata(storage: string, value: string): Record<string, unknown> {
+		const keys = storage.replace(/^metadata\./, '').split('.');
+		let nested: Record<string, unknown> = { [keys[keys.length - 1]]: value };
+		for (let i = keys.length - 2; i >= 0; i--) nested = { [keys[i]]: nested };
+		return nested;
+	}
 	let userDescription = $state('');
 	let tags = $state<string[]>([]);
 	let domainId = $state('');
@@ -82,7 +118,9 @@
 
 	let canProceedToStep2 = $derived(validateName(name) === null);
 	let canProceedToStep3 = $derived(
-		validateType(assetType) === null && validateProviders(providers) === null
+		isManual
+			? manualType !== ''
+			: validateType(assetType) === null && validateProviders(providers) === null
 	);
 
 	function canNavigateToStep(stepNumber: number): boolean {
@@ -214,7 +252,11 @@
 	}
 
 	async function handleSave() {
-		if (!name.trim() || !assetType.trim() || providers.length === 0) {
+		if (
+			isManual
+				? !name.trim() || !manualType
+				: !name.trim() || !assetType.trim() || providers.length === 0
+		) {
 			error = m.assetnew_error_missing_required();
 			return;
 		}
@@ -223,11 +265,15 @@
 			saving = true;
 			error = null;
 
-			const payload: Record<string, unknown> = {
-				name: name.trim(),
-				type: assetType.trim(),
-				providers
-			};
+			const payload: Record<string, unknown> =
+				isManual && manual && typeField
+					? {
+							name: name.trim(),
+							type: manual.type,
+							providers: [manual.provider],
+							metadata: nestedMetadata(typeField.storage, manualType)
+						}
+					: { name: name.trim(), type: assetType.trim(), providers };
 
 			if (userDescription.trim()) {
 				payload.user_description = userDescription.trim();
@@ -267,6 +313,16 @@
 			const nameErr = validateName(name);
 			if (nameErr) {
 				error = nameErr;
+				return;
+			}
+			error = null;
+			currentStep++;
+			return;
+		}
+
+		if (currentStep === 2 && isManual) {
+			if (!manualType) {
+				error = m.assetnew_error_type_required();
 				return;
 			}
 			error = null;
@@ -355,6 +411,39 @@
 				/>
 				{m.assetnew_basic_info_heading()}
 			</h3>
+			{#if manual}
+				<fieldset class="mb-6">
+					<legend class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+						{m.assetnew_origin_label()}
+					</legend>
+					<div class="grid gap-3 sm:grid-cols-2">
+						{#each [{ id: 'technical', title: m.assetnew_origin_technical(), hint: m.assetnew_origin_technical_hint(), icon: 'material-symbols:database-outline' }, { id: 'manual', title: m.assetnew_origin_manual(), hint: m.assetnew_origin_manual_hint(), icon: 'material-symbols:account-tree-outline' }] as option (option.id)}
+							<label
+								class="flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-earthy-terracotta-600 {origin ===
+								option.id
+									? 'border-earthy-terracotta-600 bg-earthy-terracotta-50 dark:bg-earthy-terracotta-900/20'
+									: 'border-gray-300 dark:border-gray-600'}"
+							>
+								<input
+									type="radio"
+									name="asset-origin"
+									class="sr-only"
+									value={option.id}
+									checked={origin === option.id}
+									onchange={() => (origin = option.id as 'technical' | 'manual')}
+								/>
+								<IconifyIcon icon={option.icon} class="mt-0.5 h-5 w-5 flex-shrink-0" />
+								<span>
+									<span class="block text-sm font-medium text-gray-900 dark:text-gray-100"
+										>{option.title}</span
+									>
+									<span class="block text-xs text-gray-500 dark:text-gray-400">{option.hint}</span>
+								</span>
+							</label>
+						{/each}
+					</div>
+				</fieldset>
+			{/if}
 			<div>
 				<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
 					{m.assetnew_name_label()} <span class="text-red-500">*</span>
@@ -395,8 +484,43 @@
 		</div>
 	{/if}
 
+	<!-- Step 2 (manual): business asset type -->
+	{#if currentStep === 2 && isManual && manual}
+		<div
+			class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6"
+		>
+			<h3 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+				<IconifyIcon
+					icon="material-symbols:category"
+					class="h-5 w-5 mr-2 text-earthy-terracotta-600"
+				/>
+				{m.assetnew_manual_type_heading()}
+			</h3>
+			<div role="radiogroup" aria-label={m.common_type()} class="grid gap-2 sm:grid-cols-2">
+				{#each manual.values as value (value)}
+					<label
+						class="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-earthy-terracotta-600 {manualType ===
+						value
+							? 'border-earthy-terracotta-600 bg-earthy-terracotta-50 dark:bg-earthy-terracotta-900/20'
+							: 'border-gray-300 dark:border-gray-600'}"
+					>
+						<input
+							type="radio"
+							name="manual-type"
+							class="sr-only"
+							{value}
+							checked={manualType === value}
+							onchange={() => (manualType = value)}
+						/>
+						{manualLabel(value)}
+					</label>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
 	<!-- Step 2: Type & Providers -->
-	{#if currentStep === 2}
+	{#if currentStep === 2 && !isManual}
 		<div
 			class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6"
 		>
@@ -630,9 +754,11 @@
 				</div>
 				<div>
 					<dt class="text-gray-500 dark:text-gray-400">{m.common_type()}</dt>
-					<dd class="font-medium text-gray-900 dark:text-gray-100">{assetType}</dd>
+					<dd class="font-medium text-gray-900 dark:text-gray-100">
+						{isManual ? manualLabel(manualType) : assetType}
+					</dd>
 				</div>
-				<div class="sm:col-span-2">
+				<div class="sm:col-span-2" hidden={isManual}>
 					<dt class="text-gray-500 dark:text-gray-400">{m.assetnew_providers_label()}</dt>
 					<dd class="flex flex-wrap gap-1.5 mt-1">
 						{#each providers as provider (provider)}
