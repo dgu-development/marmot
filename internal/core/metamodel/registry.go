@@ -34,8 +34,9 @@ type Presentation struct {
 	// exist. "search" shows each value of a string or list of strings as a
 	// link to a catalog search for it, such as a term's synonyms.
 	Control string `json:"control,omitempty"`
-	// InverseLabelKey names a glossary_term link seen from the term it points
-	// to, such as "Acronyms" for a "Stands for" field.
+	// InverseLabelKey names a glossary_term or asset link seen from the entity it points
+	// to, such as "Acronyms" for a "Stands for" field. "asset" holds asset IDs, in a string or
+	// a list of strings, on asset fields only; the asset service checks the assets exist.
 	InverseLabelKey string `json:"inverseLabelKey,omitempty"`
 	// Facet asks Discover to offer this field as a segmented filter. Only enum and boolean fields qualify
 	Facet bool `json:"facet,omitempty"`
@@ -47,14 +48,25 @@ type Presentation struct {
 	// Badge asks clients to show an enum field's value as a chip next to the
 	// entity's name, on its page and in search results.
 	Badge bool `json:"badge,omitempty"`
+	// Manual marks an asset enum whose Values can be created by hand, with no discovery source
+	// behind them: the create form offers them and stores the fixed native type and provider.
+	Manual *Manual `json:"manual,omitempty"`
+}
+
+// Manual is the native identity given to assets created by hand.
+type Manual struct {
+	Type     string   `json:"type"`
+	Provider string   `json:"provider"`
+	Values   []string `json:"values"`
 }
 
 const (
 	ControlGlossaryTerm = "glossary_term"
+	ControlAsset        = "asset"
 	ControlSearch       = "search"
 )
 
-var supportedControls = []string{"", "user", ControlGlossaryTerm, ControlSearch}
+var supportedControls = []string{"", "user", ControlGlossaryTerm, ControlAsset, ControlSearch}
 
 type Constraints struct {
 	Minimum   *float64 `json:"minimum,omitempty"`
@@ -411,14 +423,35 @@ func validateDefinition(f Field) error {
 			return errors.New("the glossary_term control applies to glossary_term fields only")
 		}
 	}
+	if f.Presentation.Control == ControlAsset {
+		if f.Type != "string" && (f.Type != "list" || f.ItemType != "string") {
+			return errors.New("the asset control requires type string or a list of strings")
+		}
+		if kinds := f.AppliesTo.EffectiveKinds(); len(kinds) != 1 || kinds[0] != "asset" {
+			return errors.New("the asset control applies to asset fields only")
+		}
+	}
 	if f.Presentation.Control == ControlSearch && f.Type != "string" && (f.Type != "list" || f.ItemType != "string") {
 		return errors.New("the search control requires type string or a list of strings")
 	}
 	if f.Presentation.Badge && f.Type != "enum" {
 		return errors.New("badge requires type enum")
 	}
-	if f.Presentation.InverseLabelKey != "" && f.Presentation.Control != ControlGlossaryTerm {
-		return errors.New("inverseLabelKey requires the glossary_term control")
+	if f.Presentation.InverseLabelKey != "" && f.Presentation.Control != ControlGlossaryTerm && f.Presentation.Control != ControlAsset {
+		return errors.New("inverseLabelKey requires the glossary_term or asset control")
+	}
+	if m := f.Presentation.Manual; m != nil {
+		if f.Type != "enum" || len(f.AppliesTo.AssetTypes) > 0 || !slices.Equal(f.AppliesTo.EffectiveKinds(), []string{"asset"}) {
+			return errors.New("manual requires an enum field of kind asset")
+		}
+		if m.Type == "" || len(m.Type) > 80 || m.Provider == "" || len(m.Provider) > 80 || len(m.Values) == 0 {
+			return errors.New("manual requires a type, a provider and values")
+		}
+		for _, v := range m.Values {
+			if !slices.Contains(f.Values, v) {
+				return fmt.Errorf("manual value %q is not a value of the field", v)
+			}
+		}
 	}
 	if f.Presentation.Facet && f.Type != "enum" && f.Type != "boolean" {
 		return errors.New("facet requires type enum or boolean")

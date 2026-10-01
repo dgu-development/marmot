@@ -48,6 +48,8 @@ type Repository interface {
 	DeleteByMRN(ctx context.Context, mrn string) error
 	ListByPattern(ctx context.Context, pattern string, assetType string) ([]*Asset, error)
 	GetByMRNs(ctx context.Context, mrns []string) ([]*Asset, error)
+	RefsByID(ctx context.Context, ids []string) ([]AssetRef, error)
+	ReferencedBy(ctx context.Context, path []string, id string) ([]AssetRef, error)
 	GetByTypeAndName(ctx context.Context, assetType, name string) (*Asset, error)
 	GetMetadataFieldsWithContext(ctx context.Context, queryContext *MetadataContext) ([]MetadataFieldSuggestion, error)
 	GetMetadataValuesWithContext(ctx context.Context, field string, prefix string, limit int, queryContext *MetadataContext) ([]MetadataValueSuggestion, error)

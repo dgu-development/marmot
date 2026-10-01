@@ -6,6 +6,9 @@
 	import { locale } from '$lib/i18n';
 	import { m } from '$lib/paraglide/messages';
 	import Avatar from '$components/user/Avatar.svelte';
+	import AssetLinks from '$components/asset/AssetLinks.svelte';
+	import AssetLinkPicker from '$components/asset/AssetLinkPicker.svelte';
+	import { ASSET_CONTROL, assetLinkIds } from '$lib/assets/links';
 	import { createKeyboardNavigationState } from '$lib/keyboard';
 	import type { Asset } from '$lib/assets/types';
 	import type { MetamodelField, MetamodelSchema } from '$lib/metamodel/types';
@@ -357,6 +360,8 @@
 		</span>
 	{:else if field.presentation?.control === 'user' && typeof value === 'string'}
 		{@render ownerChip(value, false)}
+	{:else if field.presentation?.control === ASSET_CONTROL}
+		<AssetLinks ids={assetLinkIds(value)} />
 	{:else if field.presentation?.control === 'search'}
 		<SearchLinks values={Array.isArray(value) ? value.map(String) : [String(value)]} />
 	{:else if Array.isArray(value)}
@@ -536,6 +541,20 @@
 		<div class="min-w-0 flex-1">
 			{#if field.presentation?.control === 'user'}
 				{@render userEditor(field, controlId, described)}
+			{:else if field.presentation?.control === ASSET_CONTROL}
+				<AssetLinkPicker
+					ids={assetLinkIds(draft)}
+					multiple={field.type === 'list'}
+					exclude={asset.id}
+					inputId={controlId}
+					labelledby={`governed-label-${field.id}`}
+					describedby={described}
+					onchange={(ids) => {
+						draft = field.type === 'list' ? ids : (ids[0] ?? '');
+						errorCode = null;
+					}}
+					onescape={cancel}
+				/>
 			{:else if field.type === 'integer' || field.type === 'number'}
 				<input
 					id={controlId}

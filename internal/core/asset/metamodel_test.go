@@ -349,6 +349,20 @@ func (m *memoryRepo) ListByPattern(context.Context, string, string) ([]*Asset, e
 	return nil, nil
 }
 func (m *memoryRepo) GetByMRNs(context.Context, []string) ([]*Asset, error) { return nil, nil }
+func (m *memoryRepo) RefsByID(_ context.Context, ids []string) ([]AssetRef, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	refs := []AssetRef{}
+	for _, id := range ids {
+		if a, ok := m.byID[id]; ok {
+			refs = append(refs, AssetRef{ID: a.ID, Type: a.Type})
+		}
+	}
+	return refs, nil
+}
+func (m *memoryRepo) ReferencedBy(context.Context, []string, string) ([]AssetRef, error) {
+	return nil, nil
+}
 func (m *memoryRepo) GetByTypeAndName(context.Context, string, string) (*Asset, error) {
 	return nil, ErrNotFound
 }

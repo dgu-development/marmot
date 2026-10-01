@@ -300,6 +300,24 @@ func (h *Handler) Routes() []common.Route {
 			},
 		},
 		{
+			Path:    "/api/v1/assets/references/{id}",
+			Method:  http.MethodGet,
+			Handler: h.getAssetReferences,
+			Middleware: []func(http.HandlerFunc) http.HandlerFunc{
+				common.WithAuth(h.userService, h.authService, h.config),
+				common.RequirePermission(h.userService, "assets", "view"),
+			},
+		},
+		{
+			Path:    "/api/v1/assets/refs",
+			Method:  http.MethodGet,
+			Handler: h.getAssetRefs,
+			Middleware: []func(http.HandlerFunc) http.HandlerFunc{
+				common.WithAuth(h.userService, h.authService, h.config),
+				common.RequirePermission(h.userService, "assets", "view"),
+			},
+		},
+		{
 			Path:    "/api/v1/assets/by-glossary-term/{term_id}",
 			Method:  http.MethodGet,
 			Handler: h.getAssetsByTerm,
