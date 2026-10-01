@@ -1,6 +1,6 @@
-// Package quality is the fork-only quality audit: versioned settings today,
-// runs and results in the deliveries that follow. See the ADR-007 of the
-// distribution and docs/docs/Configure/quality.md.
+// Package quality is the fork-only metadata quality audit: versioned settings,
+// manual runs with their results, and the history kept in tables of their own.
+// See the ADR-007 of the distribution and web/docs/docs/Configure/quality.md.
 package quality
 
 import (
@@ -55,7 +55,7 @@ type Thresholds struct {
 	Warning   float64 `json:"warning"`
 } // @name QualityThresholds
 
-// Retention is how long each kind of history is kept, in days; 0 keeps none.
+// Retention is how long each kind of history is kept, in days; 0 keeps nothing beyond the latest run.
 type Retention struct {
 	RunDays    int `json:"run_days"`
 	ResultDays int `json:"result_days"`
