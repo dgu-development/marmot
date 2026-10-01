@@ -28,6 +28,7 @@ import (
 	metricsAPI "github.com/marmotdata/marmot/internal/api/v1/metrics"
 	notificationsAPI "github.com/marmotdata/marmot/internal/api/v1/notifications"
 	"github.com/marmotdata/marmot/internal/api/v1/plugins"
+	qualityAPI "github.com/marmotdata/marmot/internal/api/v1/quality"
 	rolesAPI "github.com/marmotdata/marmot/internal/api/v1/roles"
 	"github.com/marmotdata/marmot/internal/api/v1/runs"
 	schedulesAPI "github.com/marmotdata/marmot/internal/api/v1/schedules"
@@ -55,6 +56,7 @@ import (
 	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/mfa"
 	notificationService "github.com/marmotdata/marmot/internal/core/notification"
+	"github.com/marmotdata/marmot/internal/core/quality"
 	roleService "github.com/marmotdata/marmot/internal/core/role"
 	runService "github.com/marmotdata/marmot/internal/core/runs"
 	searchService "github.com/marmotdata/marmot/internal/core/search"
@@ -659,6 +661,10 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 		})
 		server.workflowTimers.Start(context.Background())
 		server.handlers = append(server.handlers, workflowsAPI.NewHandler(workflowSvc, userSvc, authSvc, config))
+	}
+
+	if config.Quality.Enabled {
+		server.handlers = append(server.handlers, qualityAPI.NewHandler(quality.NewService(quality.NewPostgresRepository(db)), userSvc, authSvc, config))
 	}
 
 	// Set up K8s SA token auth and operator syncer if enabled

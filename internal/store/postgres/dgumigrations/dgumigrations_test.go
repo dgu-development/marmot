@@ -204,3 +204,41 @@ func TestSearchUnaccentMigrationKeepsExistingDataSearchableAndReverses(t *testin
 		}
 	}
 }
+
+func TestQualityPermissionsAndAuditorRole(t *testing.T) {
+	pool := pgtest.TempDB(t)
+	ctx := context.Background()
+	rows, err := pool.Query(ctx, `
+		SELECT r.name, p.action
+		  FROM permissions p
+		  JOIN role_permissions rp ON rp.permission_id = p.id
+		  JOIN roles r ON r.id = rp.role_id
+		 WHERE p.resource_type = 'quality' AND r.deleted_at IS NULL`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	granted := map[string]map[string]bool{}
+	for rows.Next() {
+		var role, action string
+		if err := rows.Scan(&role, &action); err != nil {
+			t.Fatal(err)
+		}
+		if granted[role] == nil {
+			granted[role] = map[string]bool{}
+		}
+		granted[role][action] = true
+	}
+	for _, action := range []string{"view", "run", "manage"} {
+		if !granted["admin"][action] || !granted["quality_auditor"][action] {
+			t.Errorf("admin or quality_auditor lacks quality:%s: %v", action, granted)
+		}
+	}
+	if len(granted["user"]) != 1 || !granted["user"]["view"] {
+		t.Errorf("user should only view: %v", granted["user"])
+	}
+	var system bool
+	if err := pool.QueryRow(ctx, `SELECT is_system FROM roles WHERE name = 'quality_auditor' AND deleted_at IS NULL`).Scan(&system); err != nil || system {
+		t.Errorf("quality_auditor must exist and be editable: system=%v err=%v", system, err)
+	}
+}

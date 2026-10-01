@@ -191,6 +191,10 @@ type Config struct {
 		// TimerInterval is how often due task timers are checked.
 		TimerInterval time.Duration `mapstructure:"timer_interval"`
 	} `mapstructure:"workflows"`
+	// Quality is fork-only: the quality audit and its settings.
+	Quality struct {
+		Enabled bool `mapstructure:"enabled"`
+	} `mapstructure:"quality"`
 }
 
 type BannerConfig struct {
@@ -428,6 +432,7 @@ func loadConfig(configPath string) error {
 	v.BindEnv("domains.enabled")
 	v.BindEnv("workflows.enabled")
 	v.BindEnv("workflows.timer_interval")
+	v.BindEnv("quality.enabled")
 
 	// Set defaults
 	setDefaults(v)
@@ -573,6 +578,7 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("workflows.enabled", false)
 	v.SetDefault("workflows.timer_interval", time.Minute)
+	v.SetDefault("quality.enabled", false)
 }
 
 // BuildDSN builds a PostgreSQL connection string from config
