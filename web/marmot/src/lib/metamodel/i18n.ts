@@ -29,6 +29,8 @@ export function violationMessage(code: string): string {
 			return m.metamodel_error_enum();
 		case 'date':
 			return m.metamodel_error_date();
+		case 'url':
+			return m.metamodel_error_url();
 		case 'term_not_found':
 			return m.metamodel_error_term_not_found();
 		case 'derived':
