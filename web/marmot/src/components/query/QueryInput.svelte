@@ -463,7 +463,9 @@
 	function adjustTextareaHeight() {
 		if (!input) return;
 		input.style.height = 'auto';
-		input.style.height = `${input.scrollHeight}px`;
+		// scrollHeight omits the border; with border-box that 2px becomes a scrollbar.
+		const border = input.offsetHeight - input.clientHeight;
+		input.style.height = `${input.scrollHeight + border}px`;
 	}
 
 	function syncScroll() {
@@ -798,6 +800,7 @@
 	}
 
 	.fancy-input {
+		display: block;
 		width: 100%;
 		padding: 0.5rem 0.75rem;
 		border: 1px solid #e5e7eb;
