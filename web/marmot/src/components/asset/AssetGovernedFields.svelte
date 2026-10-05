@@ -16,6 +16,7 @@
 	import {
 		fieldsForAssetType,
 		governedFields,
+		isHttpUrl,
 		isUnset,
 		readMetadataValue,
 		sectionLabel,
@@ -185,17 +186,39 @@
 						{:else if Array.isArray(value)}
 							<div class="flex flex-wrap gap-1">
 								{#each value as item, itemIndex (itemIndex)}
-									<span
-										class="rounded-full bg-earthy-terracotta-100 px-2 py-0.5 text-xs break-all whitespace-pre-wrap text-earthy-terracotta-700 dark:bg-earthy-terracotta-900 dark:text-earthy-terracotta-100"
-									>
-										{shown(field, item)}
-									</span>
+									{#if typeof item === 'string' && isHttpUrl(item)}
+										<a
+											href={item.trim()}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="rounded-full bg-earthy-terracotta-100 px-2 py-0.5 text-xs break-all whitespace-pre-wrap text-earthy-terracotta-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 dark:bg-earthy-terracotta-900 dark:text-earthy-terracotta-100"
+										>
+											{shown(field, item)}
+										</a>
+									{:else}
+										<span
+											class="rounded-full bg-earthy-terracotta-100 px-2 py-0.5 text-xs break-all whitespace-pre-wrap text-earthy-terracotta-700 dark:bg-earthy-terracotta-900 dark:text-earthy-terracotta-100"
+										>
+											{shown(field, item)}
+										</span>
+									{/if}
 								{/each}
 							</div>
 						{:else if typeof value === 'boolean'}
 							<span class="rounded-full px-2 py-0.5 text-xs {valueClass(value)}">
 								{shown(field, value)}
 							</span>
+						{:else if typeof value === 'string' && isHttpUrl(value)}
+							<a
+								href={value.trim()}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="rounded-full px-2 py-0.5 text-xs underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 {valueClass(
+									value
+								)}"
+							>
+								{shown(field, value)}
+							</a>
 						{:else}
 							<span class="rounded-full px-2 py-0.5 text-xs {valueClass(value)}">
 								{shown(field, value)}

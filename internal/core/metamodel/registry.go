@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/url"
 	"os"
 	"regexp"
 	"slices"
@@ -377,11 +378,11 @@ func validateDefinition(f Field) error {
 	if err := validateAppliesTo(f.AppliesTo); err != nil {
 		return err
 	}
-	if !slices.Contains([]string{"string", "integer", "number", "boolean", "date", "enum", "list"}, f.Type) {
+	if !slices.Contains([]string{"string", "integer", "number", "boolean", "date", "enum", "url", "list"}, f.Type) {
 		return errors.New("unsupported type")
 	}
 	if f.Type == "list" {
-		if !slices.Contains([]string{"string", "integer", "number", "boolean", "date", "enum"}, f.ItemType) {
+		if !slices.Contains([]string{"string", "integer", "number", "boolean", "date", "enum", "url"}, f.ItemType) {
 			return errors.New("list requires a supported itemType")
 		}
 	} else if f.ItemType != "" {
@@ -485,7 +486,7 @@ func validateDefinition(f Field) error {
 	if (v.Minimum != nil || v.Maximum != nil) && valueType != "number" && valueType != "integer" {
 		return errors.New("numeric bounds require a numeric type")
 	}
-	if (v.MinLength != nil || v.MaxLength != nil) && !slices.Contains([]string{"string", "enum", "date"}, valueType) {
+	if (v.MinLength != nil || v.MaxLength != nil) && !slices.Contains([]string{"string", "enum", "date", "url"}, valueType) {
 		return errors.New("length bounds require a string type")
 	}
 	if (v.MinItems != nil || v.MaxItems != nil) && f.Type != "list" {
@@ -818,7 +819,7 @@ func ValidateValue(f Field, value any) string { return validateValue(f, value) }
 func validateValue(f Field, value any) string {
 	v := f.Validation
 	switch f.Type {
-	case "string", "enum", "date":
+	case "string", "enum", "date", "url":
 		s, ok := value.(string)
 		if !ok {
 			return "type"
@@ -837,6 +838,9 @@ func validateValue(f Field, value any) string {
 			if _, err := time.Parse("2006-01-02", s); err != nil {
 				return "date"
 			}
+		}
+		if f.Type == "url" && !validHTTPURL(s) {
+			return "url"
 		}
 	case "integer", "number":
 		n, ok := number(value)
@@ -895,6 +899,16 @@ func number(value any) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// validHTTPURL accepts absolute http(s) URLs with a host — ELI and ordinary web links.
+func validHTTPURL(raw string) bool {
+	u, err := url.ParseRequestURI(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return false
+	}
+	scheme := strings.ToLower(u.Scheme)
+	return scheme == "http" || scheme == "https"
 }
 
 func validateValueLabelKeys(f Field) error {

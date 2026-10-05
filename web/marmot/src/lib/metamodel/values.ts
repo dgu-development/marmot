@@ -5,7 +5,17 @@ export type Draft = string | string[] | null | undefined;
 
 export type ParseResult = { ok: true; value: unknown } | { ok: false; code: string };
 
-const SCALAR_ITEM_TYPES = ['string', 'integer', 'number', 'boolean', 'date', 'enum'];
+const SCALAR_ITEM_TYPES = ['string', 'integer', 'number', 'boolean', 'date', 'enum', 'url'];
+
+/** Absolute http(s) URL with a host — same rule the server uses for type `url`. */
+export function isHttpUrl(value: string): boolean {
+	try {
+		const parsed = new URL(value.trim());
+		return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && !!parsed.host;
+	} catch {
+		return false;
+	}
+}
 
 export function isMetadataStorage(storage: string): boolean {
 	return storage.startsWith('metadata.');
@@ -183,8 +193,12 @@ export function typeIcon(field: MetamodelField): string {
 			return 'material-symbols:calendar-today-outline-rounded';
 		case 'enum':
 			return 'material-symbols:list-alt-outline-rounded';
+		case 'url':
+			return 'material-symbols:link-rounded';
 		case 'list':
-			return 'material-symbols:format-list-bulleted-rounded';
+			return field.itemType === 'url'
+				? 'material-symbols:link-rounded'
+				: 'material-symbols:format-list-bulleted-rounded';
 		default:
 			return 'material-symbols:text-fields-rounded';
 	}
@@ -255,6 +269,10 @@ export function parseScalar(type: string, raw: string, values?: string[]): Parse
 				: { ok: false, code: 'date' };
 		case 'enum':
 			return values?.includes(raw) ? { ok: true, value: raw } : { ok: false, code: 'enum' };
+		case 'url': {
+			const trimmed = raw.trim();
+			return isHttpUrl(trimmed) ? { ok: true, value: trimmed } : { ok: false, code: 'url' };
+		}
 		default:
 			return { ok: true, value: raw };
 	}
@@ -268,7 +286,7 @@ export function checkConstraints(field: MetamodelField, value: unknown): string 
 			if (rules.minimum != null && item < rules.minimum) return 'range';
 			if (rules.maximum != null && item > rules.maximum) return 'range';
 		}
-		if (typeof item === 'string' && ['string', 'enum', 'date'].includes(type)) {
+		if (typeof item === 'string' && ['string', 'enum', 'date', 'url'].includes(type)) {
 			const length = [...item].length;
 			if (rules.minLength != null && length < rules.minLength) return 'length';
 			if (rules.maxLength != null && length > rules.maxLength) return 'length';

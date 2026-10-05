@@ -21,6 +21,7 @@
 	} from '$lib/metamodel/owners';
 	import {
 		draftFromValue,
+		isHttpUrl,
 		isUnset,
 		readMetadataValue,
 		sameValue,
@@ -377,17 +378,39 @@
 	{:else if Array.isArray(value)}
 		<div class="flex flex-wrap gap-1.5">
 			{#each value as item, i (i)}
-				<span
-					class="rounded-full bg-earthy-terracotta-100 px-2 py-0.5 text-xs whitespace-pre-wrap break-all text-earthy-terracotta-700 dark:bg-earthy-terracotta-900 dark:text-earthy-terracotta-100"
-				>
-					{shown(field, item)}
-				</span>
+				{#if typeof item === 'string' && isHttpUrl(item)}
+					<a
+						href={item.trim()}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="rounded-full bg-earthy-terracotta-100 px-2 py-0.5 text-xs whitespace-pre-wrap break-all text-earthy-terracotta-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 dark:bg-earthy-terracotta-900 dark:text-earthy-terracotta-100"
+					>
+						{shown(field, item)}
+					</a>
+				{:else}
+					<span
+						class="rounded-full bg-earthy-terracotta-100 px-2 py-0.5 text-xs whitespace-pre-wrap break-all text-earthy-terracotta-700 dark:bg-earthy-terracotta-900 dark:text-earthy-terracotta-100"
+					>
+						{shown(field, item)}
+					</span>
+				{/if}
 			{/each}
 		</div>
 	{:else if typeof value === 'boolean'}
 		<span class="rounded-full px-2 py-1 text-sm {valueClass(value)}">
 			{shown(field, value)}
 		</span>
+	{:else if typeof value === 'string' && isHttpUrl(value)}
+		<a
+			href={value.trim()}
+			target="_blank"
+			rel="noopener noreferrer"
+			class="rounded-full px-2 py-1 text-sm underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 {valueClass(
+				value
+			)}"
+		>
+			{shown(field, value)}
+		</a>
 	{:else}
 		<span class="rounded-full px-2 py-1 text-sm {valueClass(value)}">{shown(field, value)}</span>
 	{/if}
@@ -574,6 +597,22 @@
 					onkeydown={(e) => onKey(e, field)}
 					use:focusIf={true}
 				/>
+			{:else if field.type === 'url'}
+				<input
+					id={controlId}
+					type="url"
+					inputmode="url"
+					placeholder="https://"
+					maxlength={rules.maxLength}
+					class="w-full rounded border border-earthy-terracotta-500 bg-white px-2 py-1.5 text-sm text-gray-900 focus:ring-1 focus:ring-earthy-terracotta-600 dark:border-earthy-terracotta-700 dark:bg-gray-800 dark:text-gray-100"
+					aria-labelledby={`governed-product-label-${field.id}`}
+					aria-invalid={errorCode ? true : undefined}
+					aria-describedby={described}
+					value={scalar}
+					oninput={(e) => (draft = e.currentTarget.value)}
+					onkeydown={(e) => onKey(e, field)}
+					use:focusIf={true}
+				/>
 			{:else if field.type === 'list' && field.itemType === 'enum'}
 				<div
 					role="group"
@@ -615,10 +654,15 @@
 				</div>
 				<input
 					id={controlId}
-					type={field.itemType === 'integer' || field.itemType === 'number' ? 'number' : 'text'}
+					type={field.itemType === 'integer' || field.itemType === 'number'
+						? 'number'
+						: field.itemType === 'url'
+							? 'url'
+							: 'text'}
 					step={field.itemType === 'integer' ? '1' : 'any'}
+					inputmode={field.itemType === 'url' ? 'url' : undefined}
+					placeholder={field.itemType === 'url' ? 'https://' : m.metamodel_list_placeholder()}
 					class="mt-1.5 w-full rounded border border-earthy-terracotta-500 bg-white px-2 py-1.5 text-sm text-gray-900 focus:ring-1 focus:ring-earthy-terracotta-600 dark:border-earthy-terracotta-700 dark:bg-gray-800 dark:text-gray-100"
-					placeholder={m.metamodel_list_placeholder()}
 					aria-labelledby={`governed-product-label-${field.id}`}
 					aria-invalid={errorCode ? true : undefined}
 					aria-describedby={described}

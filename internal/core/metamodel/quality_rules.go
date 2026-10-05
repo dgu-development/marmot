@@ -210,7 +210,7 @@ func validateCondition(c QualityCondition, path string, fields map[string]Field,
 		if !ok || pattern == "" || len(pattern) > MaxRegexLength {
 			return problem(".value", "bad_value")
 		}
-		if valueType != "string" || field.Type == "list" {
+		if valueType != "string" && valueType != "url" || field.Type == "list" {
 			return problem(".op", "type_mismatch")
 		}
 		if _, err := regexp.Compile("^(?:" + pattern + ")$"); err != nil {

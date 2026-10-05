@@ -740,3 +740,47 @@ func TestSystemFieldDefinitions(t *testing.T) {
 		}
 	}
 }
+
+func TestURLType(t *testing.T) {
+	doc := `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: link
+    type: url
+    core: true
+    nullable: true
+    storage: metadata.example.link
+    presentation:
+      labelKey: example.link.label
+  - id: links
+    type: list
+    itemType: url
+    core: true
+    storage: metadata.example.links
+    validation:
+      maxLength: 512
+      maxItems: 5
+    presentation:
+      labelKey: example.links.label
+`
+	r, err := Load(strings.NewReader(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := map[string]any{"name": "t"}
+	if err := r.Validate(mergeValues(base, map[string]any{"link": "https://eur-lex.europa.eu/eli/reg/2016/679/oj"}), "asset", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Validate(mergeValues(base, map[string]any{"links": []any{"http://data.europa.eu/eli/dir/2000/60/oj"}}), "asset", true); err != nil {
+		t.Fatal(err)
+	}
+	var invalid *ValidationError
+	if err := r.Validate(mergeValues(base, map[string]any{"link": "not a url"}), "asset", true); !errors.As(err, &invalid) || invalid.Fields[0] != (Violation{"link", "url"}) {
+		t.Fatalf("want url violation, got %v", err)
+	}
+	if err := r.Validate(mergeValues(base, map[string]any{"link": "ftp://example.com/x"}), "asset", true); !errors.As(err, &invalid) {
+		t.Fatalf("ftp must fail, got %v", err)
+	}
+}
