@@ -380,7 +380,7 @@
 			</div>
 		</div>
 	{:else}
-		<div class="flex-1 flex flex-col min-w-0">
+		<div class="flex-1 flex flex-col min-h-0 min-w-0">
 			<div class="flex-none p-8">
 				<div class="mb-6">
 					<button
@@ -564,7 +564,9 @@
 				{/if}
 			</div>
 
-			<div class="flex-1 overflow-y-auto {activeTab === 'preview' ? '' : 'overflow-x-auto'} px-8">
+			<div
+				class="flex-1 min-h-0 overflow-y-auto px-8 {activeTab === 'preview' ? '' : 'overflow-x-auto'}"
+			>
 				<div
 					class="pb-16 {activeTab === 'lineage' ||
 					activeTab === 'preview' ||
@@ -572,7 +574,9 @@
 						? ''
 						: 'max-w-7xl mx-auto'}"
 				>
-					<div class="rounded-lg max-w-full {activeTab === 'preview' ? '' : 'overflow-x-auto'}">
+					<div
+						class="rounded-lg max-w-full {activeTab === 'preview' ? '' : 'overflow-x-auto'}"
+					>
 						{#if !asset}
 							<div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
 								<p class="text-gray-500 dark:text-gray-400">{m.discover_asset_loading()}</p>
@@ -652,7 +656,7 @@
 								<SchemaEditor {asset} />
 							</div>
 						{:else if activeTab === 'documentation'}
-							<div class="mt-6" style="height: calc(100vh - 320px); min-height: 400px;">
+							<div class="mt-6">
 								<DocumentationSystem entityType="asset" entityId={asset.mrn} />
 							</div>
 						{:else if activeTab === 'run-history'}

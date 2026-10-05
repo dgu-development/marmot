@@ -644,7 +644,7 @@
 			</div>
 		</div>
 	{:else if product}
-		<div class="flex-1 flex flex-col min-w-0">
+		<div class="flex-1 flex flex-col min-h-0 min-w-0">
 			<div class="flex-none p-8">
 				<div class="mb-6">
 					<button
@@ -802,7 +802,7 @@
 				<Tabs tabs={visibleTabs} bind:activeTab onTabChange={setActiveTab} />
 			</div>
 
-			<div class="flex-1 overflow-y-auto overflow-x-auto px-8">
+			<div class="flex-1 min-h-0 overflow-y-auto overflow-x-auto px-8">
 				<div class="pb-16 {activeTab.startsWith('ext-') ? '' : 'max-w-7xl mx-auto'}">
 					<div class="rounded-lg max-w-full overflow-x-auto">
 						<!-- Metadata Tab -->
@@ -835,7 +835,7 @@
 
 						<!-- Documentation Tab -->
 						{#if activeTab === 'documentation'}
-							<div class="mt-6" style="height: calc(100vh - 320px); min-height: 400px;">
+							<div class="mt-6">
 								<DocumentationSystem entityType="data_product" entityId={product.id} />
 							</div>
 						{/if}
