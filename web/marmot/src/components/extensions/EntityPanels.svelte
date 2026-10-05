@@ -17,16 +17,16 @@
 	}: {
 		entity: EntityRef;
 		withTabs?: boolean;
-		placement?: Extract<PanelPlacement, 'side' | 'header'>;
+		placement?: PanelPlacement;
 	} = $props();
 
 	const shown = $derived(
-		placement === 'header'
-			? panelsFor($entityPanels, entity.kind, 'header')
-			: [
+		placement === 'side'
+			? [
 					...panelsFor($entityPanels, entity.kind, 'side'),
 					...(withTabs ? panelsFor($entityPanels, entity.kind, 'tab') : [])
 				]
+			: panelsFor($entityPanels, entity.kind, placement)
 	);
 </script>
 
