@@ -80,15 +80,16 @@
 	$: governedHidePaths = governedPaths(governed);
 	$: termTypeField = governed.find((field) => field.id === 'term_type');
 	$: detailFields = governed.filter((field) => field.id !== 'term_type');
+	const defaultTermType = 'business_term';
 	$: termTypeValue = termTypeField
 		? String(
 				readMetadataValue(
 					(isEditing && editedTerm ? editedTerm.metadata : selectedTerm?.metadata) ?? {},
 					termTypeField.storage
 				) ?? ''
-			)
+			) || defaultTermType
 		: '';
-	let savingTermType = false;
+	let termTypeOpen = false;
 	$: if (selectedTerm && !Array.isArray(selectedTerm.tags)) selectedTerm.tags = [];
 
 	$: linkFields = governed.filter((f) => f.presentation?.control === GLOSSARY_TERM_CONTROL);
@@ -287,7 +288,10 @@
 					name: newTermName,
 					definition: newTermDefinition,
 					description: newTermDescription || undefined,
-					owners
+					owners,
+					metadata: termTypeField
+						? writeMetadataValue({}, termTypeField.storage, defaultTermType)
+						: { dgu: { term_type: defaultTermType } }
 				})
 			});
 
@@ -309,12 +313,44 @@
 	function startEdit() {
 		if (!selectedTerm) return;
 		isEditing = true;
+		termTypeOpen = false;
 		editedTerm = JSON.parse(JSON.stringify(selectedTerm));
+		if (!termTypeField || !editedTerm) return;
+		const current = String(
+			readMetadataValue(editedTerm.metadata ?? {}, termTypeField.storage) ?? ''
+		);
+		if (!current) {
+			editedTerm.metadata = writeMetadataValue(
+				editedTerm.metadata ?? {},
+				termTypeField.storage,
+				defaultTermType
+			);
+		}
 	}
 
 	function cancelEdit() {
 		isEditing = false;
+		termTypeOpen = false;
 		editedTerm = null;
+	}
+
+	function chooseTermType(value: string) {
+		termTypeOpen = false;
+		if (!editedTerm || !termTypeField || value === termTypeValue) return;
+		const parsed = toPayload(termTypeField, value);
+		if (!parsed.ok) return;
+		editedTerm.metadata = writeMetadataValue(
+			editedTerm.metadata ?? {},
+			termTypeField.storage,
+			parsed.value
+		);
+	}
+
+	function badgeMetadata(term: GlossaryTerm | null) {
+		if (!term || !termTypeField) return term?.metadata;
+		const current = String(readMetadataValue(term.metadata ?? {}, termTypeField.storage) ?? '');
+		if (current) return term.metadata;
+		return writeMetadataValue(term.metadata ?? {}, termTypeField.storage, defaultTermType);
 	}
 
 	async function saveEdit() {
@@ -383,42 +419,6 @@
 		terms.update((list) => list.map((t) => (t.id === updated.id ? updated : t)));
 	}
 
-	async function setTermType(event: Event) {
-		const select = event.currentTarget as HTMLSelectElement;
-		if (!selectedTerm || !termTypeField || savingTermType) return;
-		const parsed = toPayload(termTypeField, select.value);
-		if (!parsed.ok) {
-			select.value = termTypeValue;
-			return;
-		}
-		const previous = (isEditing && editedTerm ? editedTerm.metadata : selectedTerm.metadata) ?? {};
-		const metadata = writeMetadataValue(previous, termTypeField.storage, parsed.value);
-		if (editedTerm) editedTerm.metadata = metadata;
-		else selectedTerm.metadata = metadata;
-		savingTermType = true;
-		try {
-			const response = await fetchApi(`/glossary/${selectedTerm.id}`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ metadata })
-			});
-			if (!response.ok) {
-				const info = await parseApiError(response);
-				throw new Error(info.message);
-			}
-			const updated: GlossaryTerm = await response.json();
-			if (editedTerm) editedTerm.metadata = updated.metadata ?? {};
-			applyTerm(updated);
-		} catch (err) {
-			if (editedTerm) editedTerm.metadata = previous;
-			else if (selectedTerm) selectedTerm.metadata = previous;
-			select.value = termTypeValue;
-			toasts.error(err instanceof Error ? err.message : m.metamodel_save_failed());
-		} finally {
-			savingTermType = false;
-		}
-	}
-
 	async function deleteTerm() {
 		if (!selectedTerm) return;
 
@@ -470,6 +470,8 @@
 		return () => unsubscribe();
 	});
 </script>
+
+<svelte:window on:click={() => (termTypeOpen = false)} />
 
 <div class="h-[calc(100vh-4rem)] overflow-y-auto">
 	<div class="max-w-[1600px] mx-auto px-6 py-6">
@@ -604,34 +606,74 @@
 												{selectedTerm.name}
 											</h2>
 										{/if}
-										{#if termTypeField && canEditTerm}
-											<div class="mt-3 flex flex-wrap items-center gap-2">
-												<label
-													for="glossary-term-type"
+										{#if isEditing && editedTerm && termTypeField}
+											<div class="relative mt-3 flex flex-wrap items-center gap-2">
+												<span
+													id="glossary-term-type-label"
 													class="text-xs font-semibold tracking-wider text-gray-500 uppercase dark:text-gray-400"
 												>
 													{linkLabel(termTypeField.presentation?.labelKey, termTypeField.id)}
-												</label>
-												<select
-													id="glossary-term-type"
-													class="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-transparent focus:ring-2 focus:ring-earthy-terracotta-600 focus:outline-none disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-													value={termTypeValue}
-													disabled={savingTermType}
-													on:change={setTermType}
-												>
-													{#if !termTypeField.required}
-														<option value="">{m.metamodel_not_set()}</option>
-													{/if}
-													{#each termTypeField.values ?? [] as value (value)}
-														<option {value}
-															>{valueLabel(termTypeField, value, messageContext()) ?? value}</option
+												</span>
+												<div class="relative inline-flex">
+													<button
+														id="glossary-term-type"
+														type="button"
+														aria-haspopup="listbox"
+														aria-expanded={termTypeOpen}
+														aria-labelledby="glossary-term-type-label glossary-term-type"
+														on:click|stopPropagation={() => (termTypeOpen = !termTypeOpen)}
+														class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-900 focus:border-transparent focus:ring-2 focus:ring-earthy-terracotta-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+													>
+														<span class="min-w-0 truncate"
+															>{valueLabel(termTypeField, termTypeValue, messageContext()) ??
+																termTypeValue}</span
 														>
-													{/each}
-												</select>
+														<Icon
+															icon="material-symbols:keyboard-arrow-down"
+															class="h-4 w-4 shrink-0 text-gray-500 transition-transform dark:text-gray-400 {termTypeOpen
+																? 'rotate-180'
+																: ''}"
+														/>
+													</button>
+													{#if termTypeOpen}
+														<div
+															role="listbox"
+															aria-labelledby="glossary-term-type-label"
+															class="absolute top-full left-0 z-50 mt-1 max-h-60 w-max min-w-full overflow-y-auto overscroll-contain rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+														>
+															{#each termTypeField.values ?? [] as value (value)}
+																<button
+																	type="button"
+																	role="option"
+																	aria-selected={value === termTypeValue}
+																	on:click|stopPropagation={() => chooseTermType(value)}
+																	class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors {value ===
+																	termTypeValue
+																		? 'font-medium text-earthy-terracotta-700 dark:text-earthy-terracotta-700'
+																		: 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'}"
+																>
+																	<span
+																		>{valueLabel(termTypeField, value, messageContext()) ??
+																			value}</span
+																	>
+																	{#if value === termTypeValue}
+																		<span
+																			class="h-1.5 w-1.5 shrink-0 rounded-full bg-earthy-terracotta-700"
+																			aria-hidden="true"
+																		></span>
+																	{/if}
+																</button>
+															{/each}
+														</div>
+													{/if}
+												</div>
 											</div>
 										{:else if !isEditing}
 											<div class="mt-2 flex flex-shrink-0 flex-wrap gap-1.5">
-												<FieldBadges schema={metamodel} metadata={selectedTerm.metadata} />
+												<FieldBadges
+													schema={metamodel}
+													metadata={badgeMetadata(selectedTerm)}
+												/>
 											</div>
 										{/if}
 									</div>
