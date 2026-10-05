@@ -2427,6 +2427,10 @@ definitions:
         type: array
       parent_term_id:
         type: string
+      tags:
+        items:
+          type: string
+        type: array
     type: object
   UpdateUserInput:
     properties:

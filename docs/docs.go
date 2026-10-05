@@ -14915,6 +14915,12 @@ const docTemplate = `{
                 },
                 "parent_term_id": {
                     "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

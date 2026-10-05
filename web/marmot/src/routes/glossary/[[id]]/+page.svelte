@@ -31,11 +31,17 @@
 	import SearchLinks from '$components/metamodel/SearchLinks.svelte';
 	import { GLOSSARY_TERM_CONTROL, linkIds } from '$lib/glossary/links';
 	import { nativeMessage } from '$lib/metamodel/i18n';
-	import { resolveMessage } from '$lib/metamodel/labels';
+	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
 	import { locale } from '$lib/i18n';
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import type { MetamodelSchema } from '$lib/metamodel/types';
-	import { governedFields, governedPaths, readMetadataValue } from '$lib/metamodel/values';
+	import {
+		governedFields,
+		governedPaths,
+		readMetadataValue,
+		toPayload,
+		writeMetadataValue
+	} from '$lib/metamodel/values';
 	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages';
 	import { formatDate } from '$lib/utils';
@@ -72,8 +78,29 @@
 	let metamodel: MetamodelSchema | null = null;
 	$: governed = metamodel?.enabled ? governedFields(metamodel.fields) : [];
 	$: governedHidePaths = governedPaths(governed);
+	$: termTypeField = governed.find((field) => field.id === 'term_type');
+	$: detailFields = governed.filter((field) => field.id !== 'term_type');
+	$: termTypeValue = termTypeField
+		? String(
+				readMetadataValue(
+					(isEditing && editedTerm ? editedTerm.metadata : selectedTerm?.metadata) ?? {},
+					termTypeField.storage
+				) ?? ''
+			)
+		: '';
+	let savingTermType = false;
+	$: if (selectedTerm && !Array.isArray(selectedTerm.tags)) selectedTerm.tags = [];
 
 	$: linkFields = governed.filter((f) => f.presentation?.control === GLOSSARY_TERM_CONTROL);
+
+	function messageContext() {
+		return {
+			locale: $locale,
+			defaultLocale: metamodel?.defaultLocale ?? 'es',
+			messages: metamodel?.messages,
+			native: nativeMessage
+		};
+	}
 
 	function linkLabel(key: string | undefined, fallback: string): string {
 		if (!metamodel) return fallback;
@@ -340,15 +367,55 @@
 				throw new Error(errorData.error || m.glossary_update_error());
 			}
 
-			const updated = await response.json();
-			selectedTerm = updated;
-
-			terms.update((list) => list.map((t) => (t.id === updated.id ? updated : t)));
+			applyTerm(await response.json());
 
 			isEditing = false;
 			editedTerm = null;
 		} catch (err) {
 			error.set(err instanceof Error ? err.message : m.glossary_update_error());
+		}
+	}
+
+	function applyTerm(updated: GlossaryTerm) {
+		if (!updated.tags) updated.tags = [];
+		if (!updated.metadata) updated.metadata = {};
+		selectedTerm = updated;
+		terms.update((list) => list.map((t) => (t.id === updated.id ? updated : t)));
+	}
+
+	async function setTermType(event: Event) {
+		const select = event.currentTarget as HTMLSelectElement;
+		if (!selectedTerm || !termTypeField || savingTermType) return;
+		const parsed = toPayload(termTypeField, select.value);
+		if (!parsed.ok) {
+			select.value = termTypeValue;
+			return;
+		}
+		const previous = (isEditing && editedTerm ? editedTerm.metadata : selectedTerm.metadata) ?? {};
+		const metadata = writeMetadataValue(previous, termTypeField.storage, parsed.value);
+		if (editedTerm) editedTerm.metadata = metadata;
+		else selectedTerm.metadata = metadata;
+		savingTermType = true;
+		try {
+			const response = await fetchApi(`/glossary/${selectedTerm.id}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ metadata })
+			});
+			if (!response.ok) {
+				const info = await parseApiError(response);
+				throw new Error(info.message);
+			}
+			const updated: GlossaryTerm = await response.json();
+			if (editedTerm) editedTerm.metadata = updated.metadata ?? {};
+			applyTerm(updated);
+		} catch (err) {
+			if (editedTerm) editedTerm.metadata = previous;
+			else if (selectedTerm) selectedTerm.metadata = previous;
+			select.value = termTypeValue;
+			toasts.error(err instanceof Error ? err.message : m.metamodel_save_failed());
+		} finally {
+			savingTermType = false;
 		}
 	}
 
@@ -523,34 +590,84 @@
 						>
 							<!-- Header Section -->
 							<div class="relative px-6 py-5 border-b border-gray-200 dark:border-gray-700">
-								<!-- Term Name -->
-								{#if isEditing && editedTerm}
-									<input
-										type="text"
-										bind:value={editedTerm.name}
-										class="w-full text-2xl font-bold bg-transparent border-b-2 border-earthy-terracotta-300 dark:border-earthy-terracotta-700 focus:outline-none focus:border-earthy-terracotta-700 dark:focus:border-earthy-terracotta-500 text-gray-900 dark:text-gray-100 pb-2 mb-3"
-										placeholder={m.glossary_term_name_placeholder()}
-									/>
-								{:else}
-									<div class="mb-3 flex items-start justify-between gap-3">
-										<h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-											{selectedTerm.name}
-										</h2>
-										<div class="flex flex-shrink-0 flex-wrap justify-end gap-1.5 pt-1">
-											<FieldBadges schema={metamodel} metadata={selectedTerm.metadata} />
-										</div>
+								<div class="mb-3 flex items-start justify-between gap-3">
+									<div class="min-w-0 flex-1">
+										{#if isEditing && editedTerm}
+											<input
+												type="text"
+												bind:value={editedTerm.name}
+												class="w-full text-2xl font-bold bg-transparent border-b-2 border-earthy-terracotta-300 pb-2 text-gray-900 focus:border-earthy-terracotta-700 focus:outline-none dark:border-earthy-terracotta-700 dark:text-gray-100 dark:focus:border-earthy-terracotta-500"
+												placeholder={m.glossary_term_name_placeholder()}
+											/>
+										{:else}
+											<h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+												{selectedTerm.name}
+											</h2>
+										{/if}
+										{#if termTypeField && canEditTerm}
+											<div class="mt-3 flex flex-wrap items-center gap-2">
+												<label
+													for="glossary-term-type"
+													class="text-xs font-semibold tracking-wider text-gray-500 uppercase dark:text-gray-400"
+												>
+													{linkLabel(termTypeField.presentation?.labelKey, termTypeField.id)}
+												</label>
+												<select
+													id="glossary-term-type"
+													class="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-transparent focus:ring-2 focus:ring-earthy-terracotta-600 focus:outline-none disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+													value={termTypeValue}
+													disabled={savingTermType}
+													on:change={setTermType}
+												>
+													{#if !termTypeField.required}
+														<option value="">{m.metamodel_not_set()}</option>
+													{/if}
+													{#each termTypeField.values ?? [] as value (value)}
+														<option {value}
+															>{valueLabel(termTypeField, value, messageContext()) ?? value}</option
+														>
+													{/each}
+												</select>
+											</div>
+										{:else if !isEditing}
+											<div class="mt-2 flex flex-shrink-0 flex-wrap gap-1.5">
+												<FieldBadges schema={metamodel} metadata={selectedTerm.metadata} />
+											</div>
+										{/if}
 									</div>
-									{#if synonymsOf(selectedTerm).length > 0}
-										<div
-											class="-mt-1 mb-3 flex flex-wrap items-center gap-1.5"
-											aria-label={m.glossary_synonyms_label()}
-										>
-											<span class="text-xs text-gray-500 dark:text-gray-400"
-												>{m.glossary_synonyms_label()}:</span
-											>
-											<SearchLinks values={synonymsOf(selectedTerm)} />
+									{#if canEditTerm}
+										<div class="flex flex-shrink-0 items-center gap-2">
+											{#if isEditing}
+												<Button
+													click={saveEdit}
+													icon="material-symbols:check"
+													text={m.glossary_save_changes()}
+													variant="filled"
+												/>
+												<Button click={cancelEdit} text={m.common_cancel()} variant="clear" />
+											{:else}
+												<button
+													type="button"
+													on:click={startEdit}
+													class="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+												>
+													<Icon icon="material-symbols:edit-outline" class="h-4 w-4" />
+													{m.common_edit()}
+												</button>
+											{/if}
 										</div>
 									{/if}
+								</div>
+								{#if !isEditing && synonymsOf(selectedTerm).length > 0}
+									<div
+										class="-mt-1 mb-3 flex flex-wrap items-center gap-1.5"
+										aria-label={m.glossary_synonyms_label()}
+									>
+										<span class="text-xs text-gray-500 dark:text-gray-400"
+											>{m.glossary_synonyms_label()}:</span
+										>
+										<SearchLinks values={synonymsOf(selectedTerm)} />
+									</div>
 								{/if}
 
 								<!-- Definition -->
@@ -622,10 +739,10 @@
 										</h3>
 									</div>
 									<Tags
-										tags={selectedTerm.tags ?? []}
+										bind:tags={selectedTerm.tags}
 										endpoint="/glossary"
 										id={selectedTerm.id}
-										canEdit={canEditTerm && isEditing}
+										canEdit={canEditTerm}
 									/>
 								</div>
 
@@ -650,7 +767,22 @@
 											readOnly={false}
 											maxDepth={2}
 											hidePaths={governedHidePaths}
-										/>
+											hasLeadingRows={detailFields.length > 0}
+										>
+											{#snippet leadingRows()}
+												{#if metamodel && editedTerm}
+													<ProductGovernedFields
+														bind:metadata={editedTerm.metadata}
+														productId={undefined}
+														endpoint={`/glossary/${editedTerm.id}`}
+														selfId={editedTerm.id}
+														schema={metamodel}
+														fields={detailFields}
+														editable={canEditTerm}
+													/>
+												{/if}
+											{/snippet}
+										</MetadataView>
 									{:else}
 										<MetadataView
 											bind:metadata={selectedTerm.metadata}
@@ -658,7 +790,7 @@
 											id={selectedTerm.id}
 											maxDepth={2}
 											hidePaths={governedHidePaths}
-											hasLeadingRows={governed.length > 0}
+											hasLeadingRows={detailFields.length > 0}
 										>
 											{#snippet leadingRows()}
 												{#if metamodel && selectedTerm}
@@ -668,7 +800,7 @@
 														endpoint={`/glossary/${selectedTerm.id}`}
 														selfId={selectedTerm.id}
 														schema={metamodel}
-														fields={governed}
+														fields={detailFields}
 														editable={canEditTerm}
 													/>
 												{/if}
@@ -752,33 +884,14 @@
 								<!-- Actions -->
 								{#if canEditTerm}
 									<div
-										class="pt-5 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between"
+										class="flex items-center justify-end border-t border-gray-200 pt-5 dark:border-gray-700"
 									>
-										{#if isEditing}
-											<div class="flex gap-2">
-												<Button
-													click={saveEdit}
-													icon="material-symbols:check"
-													text={m.glossary_save_changes()}
-													variant="filled"
-												/>
-												<Button click={cancelEdit} text={m.common_cancel()} variant="clear" />
-											</div>
-										{:else}
-											<button
-												on:click={startEdit}
-												class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-											>
-												<Icon icon="material-symbols:edit-outline" class="w-4 h-4" />
-												{m.common_edit()}
-											</button>
-										{/if}
-
 										<button
+											type="button"
 											on:click={() => (showDeleteConfirm = true)}
-											class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:text-white hover:bg-red-600 dark:hover:bg-red-500 border border-red-300 dark:border-red-600 hover:border-transparent rounded-lg transition-colors"
+											class="inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:border-transparent hover:bg-red-600 hover:text-white dark:border-red-600 dark:text-red-400 dark:hover:bg-red-500"
 										>
-											<Icon icon="material-symbols:delete-outline" class="w-4 h-4" />
+											<Icon icon="material-symbols:delete-outline" class="h-4 w-4" />
 											{m.common_delete()}
 										</button>
 									</div>
