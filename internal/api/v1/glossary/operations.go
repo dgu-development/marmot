@@ -37,6 +37,8 @@ type UpdateTermRequest struct {
 	ParentTermID *string                `json:"parent_term_id,omitempty"`
 	Owners       []OwnerRequest         `json:"owners,omitempty"`
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	// Absent leaves the stored tags alone; an empty list clears them.
+	Tags []string `json:"tags,omitempty"`
 } // @name UpdateTermRequest
 
 // CreateTerm creates a new glossary term
@@ -204,6 +206,7 @@ func (h *Handler) updateTerm(w http.ResponseWriter, r *http.Request) {
 		ParentTermID: req.ParentTermID,
 		Owners:       owners,
 		Metadata:     req.Metadata,
+		Tags:         req.Tags,
 	}
 
 	term, err := h.glossaryService.Update(r.Context(), id, input)
