@@ -81,11 +81,13 @@ type Constraints struct {
 	MaxItems  *int     `json:"maxItems,omitempty"`
 }
 
-// AppliesTo scopes a field to entity kinds and, within asset, to specific asset types. Kinds
-// defaults to ["asset"] when empty. Stub exemption is not part of this; see Registry.Missing.
+// AppliesTo scopes a field to entity kinds and, within asset or glossary_term, to specific asset
+// or term types. Kinds defaults to ["asset"] when empty. Stub exemption is not part of this; see
+// Registry.Missing.
 type AppliesTo struct {
 	Kinds      []string `json:"kinds,omitempty"`
 	AssetTypes []string `json:"assetTypes,omitempty"`
+	TermTypes  []string `json:"termTypes,omitempty"`
 }
 
 func (a AppliesTo) EffectiveKinds() []string {
@@ -253,7 +255,7 @@ func New(profile *Profile) (*Registry, error) {
 			index := slices.IndexFunc(schema.Fields, func(f Field) bool { return f.ID == field.ID })
 			if index >= 0 {
 				base := schema.Fields[index]
-				overridesScope := len(field.AppliesTo.Kinds) > 0 || len(field.AppliesTo.AssetTypes) > 0
+				overridesScope := len(field.AppliesTo.Kinds) > 0 || len(field.AppliesTo.AssetTypes) > 0 || len(field.AppliesTo.TermTypes) > 0
 				if field.Storage != base.Storage || field.Type != base.Type || field.ItemType != base.ItemType || !field.Core || (field.Nullable && !base.Nullable) || (base.Required && !field.Required) || (base.Required && overridesScope) {
 					return nil, fmt.Errorf("field %q changes a native contract", field.ID)
 				}
@@ -369,6 +371,15 @@ func validateAppliesTo(a AppliesTo) error {
 				return errors.New("empty or duplicate appliesTo assetType")
 			}
 			seenTypes[t] = true
+		}
+	}
+	if len(a.TermTypes) > 0 {
+		if !slices.Equal(a.Kinds, []string{"glossary_term"}) {
+			return errors.New("appliesTo termTypes requires kinds [glossary_term]")
+		}
+		sorted := slices.Sorted(slices.Values(a.TermTypes))
+		if len(a.TermTypes) > 64 || sorted[0] == "" || len(slices.Compact(sorted)) != len(a.TermTypes) {
+			return errors.New("appliesTo termTypes holds up to 64 distinct term types")
 		}
 	}
 	return nil
@@ -598,6 +609,19 @@ func validateAssetTypeScopes(fields []Field) error {
 			}
 		}
 	}
+	var knownTerms []string
+	for _, f := range fields {
+		if f.ID == termTypeField && f.Type == "enum" && slices.Contains(f.AppliesTo.EffectiveKinds(), "glossary_term") {
+			knownTerms = f.Values
+		}
+	}
+	for _, f := range fields {
+		for _, t := range f.AppliesTo.TermTypes {
+			if !slices.Contains(knownTerms, t) {
+				return fmt.Errorf("field %q: termType %q is not a value of %s", f.ID, t, termTypeField)
+			}
+		}
+	}
 	return nil
 }
 
@@ -771,14 +795,22 @@ const assetTypeField = "asset_type"
 // AssetTypeField is the ID of that enum, for services that read an asset's governed type.
 const AssetTypeField = assetTypeField
 
-// InScope reports whether f applies to the asset type held in values. A field without assetTypes
-// always applies; a scoped one drops out of an asset that is untyped or of another type.
+// termTypeField is the enum whose value selects the fields scoped by appliesTo.termTypes.
+const termTypeField = "term_type"
+
+// InScope reports whether f applies to the asset or term type held in values. A field without
+// assetTypes or termTypes always applies; a scoped one drops out of an entity that is untyped or
+// of another type.
 func (f Field) InScope(values map[string]any) bool {
-	if len(f.AppliesTo.AssetTypes) == 0 {
-		return true
+	if len(f.AppliesTo.AssetTypes) > 0 {
+		assetType, _ := values[assetTypeField].(string)
+		return slices.Contains(f.AppliesTo.AssetTypes, assetType)
 	}
-	assetType, _ := values[assetTypeField].(string)
-	return slices.Contains(f.AppliesTo.AssetTypes, assetType)
+	if len(f.AppliesTo.TermTypes) > 0 {
+		termType, _ := values[termTypeField].(string)
+		return slices.Contains(f.AppliesTo.TermTypes, termType)
+	}
+	return true
 }
 
 func isGoverned(f Field) bool {

@@ -35,6 +35,7 @@ export interface MetamodelConstraints {
 export interface MetamodelAppliesTo {
 	kinds?: string[];
 	assetTypes?: string[];
+	termTypes?: string[];
 }
 
 /** Maps a source value to a value of the field. */

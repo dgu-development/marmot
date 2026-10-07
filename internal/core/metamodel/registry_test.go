@@ -828,3 +828,56 @@ fields:
 		}
 	}
 }
+
+func TestTermTypesScopeFieldsOfGlossaryTerms(t *testing.T) {
+	profile := func(kinds, termType string) string {
+		return `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: term_type
+    type: enum
+    core: true
+    storage: metadata.example.term_type
+    appliesTo:
+      kinds: [glossary_term]
+    values: [concept, relation]
+    presentation:
+      labelKey: example.term_type.label
+  - id: relation_to
+    type: string
+    core: true
+    nullable: true
+    storage: metadata.example.relation_to
+    appliesTo:
+      kinds: [` + kinds + `]
+      termTypes: [` + termType + `]
+    validation:
+      maxLength: 3
+    presentation:
+      labelKey: example.relation_to.label
+`
+	}
+	registry, err := Load(strings.NewReader(profile("glossary_term", "relation")))
+	if err != nil {
+		t.Fatalf("a known term type must load: %v", err)
+	}
+	long := map[string]any{"term_type": "concept", "relation_to": "too long"}
+	if err := registry.Validate(long, "glossary_term", true); err != nil {
+		t.Fatalf("a field scoped to another term type must be ignored: %v", err)
+	}
+	long["term_type"] = "relation"
+	if err := registry.Validate(long, "glossary_term", true); err == nil {
+		t.Fatal("the field must be validated on a term of its type")
+	}
+	for name, source := range map[string]string{
+		"unknown type": profile("glossary_term", "nope"),
+		"other kind":   profile("asset", "relation"),
+		"duplicate":    profile("glossary_term", "relation, relation"),
+	} {
+		if _, err := Load(strings.NewReader(source)); err == nil {
+			t.Errorf("%s must be rejected", name)
+		}
+	}
+}

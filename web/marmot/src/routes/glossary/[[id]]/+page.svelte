@@ -36,6 +36,7 @@
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import type { MetamodelSchema } from '$lib/metamodel/types';
 	import {
+		fieldsForTermType,
 		governedFields,
 		governedPaths,
 		readMetadataValue,
@@ -816,7 +817,7 @@
 														endpoint={`/glossary/${editedTerm.id}`}
 														selfId={editedTerm.id}
 														schema={metamodel}
-														fields={detailFields}
+														fields={fieldsForTermType(detailFields, governed, editedTerm.metadata)}
 														editable={canEditTerm}
 													/>
 												{/if}
@@ -839,7 +840,11 @@
 														endpoint={`/glossary/${selectedTerm.id}`}
 														selfId={selectedTerm.id}
 														schema={metamodel}
-														fields={detailFields}
+														fields={fieldsForTermType(
+															detailFields,
+															governed,
+															selectedTerm.metadata
+														)}
 														editable={canEditTerm}
 													/>
 												{/if}

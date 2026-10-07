@@ -41,6 +41,20 @@ export function fieldsForAssetType(
 	});
 }
 
+/** The same for glossary terms: `appliesTo.termTypes` against the term's `term_type`. */
+export function fieldsForTermType(
+	fields: MetamodelField[],
+	allFields: MetamodelField[],
+	metadata: Record<string, unknown> | undefined
+): MetamodelField[] {
+	const typeField = allFields.find((field) => field.id === 'term_type');
+	const termType = typeField ? readMetadataValue(metadata, typeField.storage) : undefined;
+	return fields.filter((field) => {
+		const scope = field.appliesTo?.termTypes;
+		return !scope?.length || (typeof termType === 'string' && scope.includes(termType));
+	});
+}
+
 export function readMetadataValue(
 	metadata: Record<string, unknown> | undefined,
 	storage: string
