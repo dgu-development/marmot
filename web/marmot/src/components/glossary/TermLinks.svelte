@@ -35,10 +35,8 @@
 			class="inline-flex max-w-full items-center gap-1 rounded-full bg-earthy-terracotta-100 px-2 py-0.5 text-xs text-earthy-terracotta-700 transition-opacity has-[a:hover]:opacity-80 dark:bg-earthy-terracotta-900 dark:text-earthy-terracotta-100"
 		>
 			{#if term}
-				<a
-					href={resolve(`/glossary/${term.id}`)}
-					class="truncate"
-					title={term.definition}>{term.name}</a
+				<a href={resolve(`/glossary/${term.id}`)} class="truncate" title={term.definition}
+					>{term.name}</a
 				>
 			{:else if terms.has(id)}
 				<span class="truncate italic" title={id}>{m.glossary_link_deleted()}</span>

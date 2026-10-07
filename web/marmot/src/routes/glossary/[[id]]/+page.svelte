@@ -670,10 +670,7 @@
 											</div>
 										{:else if !isEditing}
 											<div class="mt-2 flex flex-shrink-0 flex-wrap gap-1.5">
-												<FieldBadges
-													schema={metamodel}
-													metadata={badgeMetadata(selectedTerm)}
-												/>
+												<FieldBadges schema={metamodel} metadata={badgeMetadata(selectedTerm)} />
 											</div>
 										{/if}
 									</div>

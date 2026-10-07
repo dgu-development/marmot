@@ -565,7 +565,9 @@
 			</div>
 
 			<div
-				class="flex-1 min-h-0 overflow-y-auto px-8 {activeTab === 'preview' ? '' : 'overflow-x-auto'}"
+				class="flex-1 min-h-0 overflow-y-auto px-8 {activeTab === 'preview'
+					? ''
+					: 'overflow-x-auto'}"
 			>
 				<div
 					class="pb-16 {activeTab === 'lineage' ||
@@ -574,9 +576,7 @@
 						? ''
 						: 'max-w-7xl mx-auto'}"
 				>
-					<div
-						class="rounded-lg max-w-full {activeTab === 'preview' ? '' : 'overflow-x-auto'}"
-					>
+					<div class="rounded-lg max-w-full {activeTab === 'preview' ? '' : 'overflow-x-auto'}">
 						{#if !asset}
 							<div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
 								<p class="text-gray-500 dark:text-gray-400">{m.discover_asset_loading()}</p>
