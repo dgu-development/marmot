@@ -26,7 +26,7 @@
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import { nativeMessage } from '$lib/metamodel/i18n';
 	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
-	import { orderFacetFields } from '$lib/metamodel/values';
+	import { facetableFields, orderFacetFields } from '$lib/metamodel/values';
 	import { catalogLabels } from '$lib/catalog/labels';
 	import type { MetamodelField, MetamodelSchema } from '$lib/metamodel/types';
 	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
@@ -130,6 +130,22 @@
 		}
 	});
 
+	// A field shared with assets is already in facetOrder.
+	let otherFacets = $derived(
+		['glossary_term', 'data_product']
+			.flatMap((kind) => facetableFields(kindSchemas[kind]?.fields ?? []))
+			.filter(
+				(field, index, all) =>
+					!metamodelFields.some((f) => f.id === field.id) &&
+					all.findIndex((f) => f.id === field.id) === index
+			)
+	);
+
+	function facetKinds(field: MetamodelField): string[] {
+		const kinds = field.appliesTo?.kinds?.length ? field.appliesTo.kinds : ['asset'];
+		return kinds.map((kind) => (kind === 'glossary_term' ? 'glossary' : kind));
+	}
+
 	function governedFieldLabel(field: MetamodelField): string {
 		return resolveMessage(field.presentation?.labelKey, messageContext) ?? field.id;
 	}
@@ -229,9 +245,9 @@
 				if (selectedTypes.length) queryParams.append('asset_types', selectedTypes.join(','));
 				if (selectedProviders.length) queryParams.append('providers', selectedProviders.join(','));
 				if (selectedTags.length) queryParams.append('tags', selectedTags.join(','));
-				for (const [id, values] of Object.entries(selectedGoverned)) {
-					if (values.length) queryParams.append(`governed.${id}`, values.join(','));
-				}
+			}
+			for (const [id, values] of Object.entries(selectedGoverned)) {
+				if (values.length) queryParams.append(`governed.${id}`, values.join(','));
 			}
 
 			const response = await fetchApi(`/search?${queryParams}`);
@@ -510,7 +526,7 @@
 					...selectedGoverned,
 					[field.id]: checked ? [...current, value] : current.filter((v) => v !== value)
 				};
-				if (checked) selectedKinds = ['asset'];
+				if (checked) selectedKinds = facetKinds(field);
 				handleFilterChange();
 			}}
 		/>
@@ -663,6 +679,9 @@
 									{@render typeFacet()}
 								{/if}
 							{/if}
+							{#each otherFacets as field (field.id)}
+								{@render governedFacet(field)}
+							{/each}
 						</div>
 					{/if}
 				</div>
@@ -812,7 +831,7 @@
 								{/each}
 								{#each Object.entries(selectedGoverned) as [id, values] (id)}
 									{#each values as value (value)}
-										{@const field = metamodelFields.find((f) => f.id === id)}
+										{@const field = [...metamodelFields, ...otherFacets].find((f) => f.id === id)}
 										<span
 											class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-white dark:bg-earthy-terracotta-900/40 text-earthy-terracotta-700 dark:text-earthy-terracotta-100 border border-earthy-terracotta-300 dark:border-earthy-terracotta-800"
 										>
