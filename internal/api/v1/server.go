@@ -641,7 +641,7 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 				server.handlers[i] = domainsAPI.WithCreateTargets(h, domainSvc, "/api/v1/glossary/", "/api/v1/glossary/import")
 			}
 		}
-		server.handlers = append(server.handlers, domainsAPI.NewHandler(domainSvc, domainGuard, userSvc, authSvc, config))
+		server.handlers = append(server.handlers, domainsAPI.NewHandler(domainSvc, domainGuard, userSvc, authSvc, config).WithOntologyVersions(domainService.NewOntologyVersions(db)))
 	}
 
 	if config.Workflows.Enabled {
