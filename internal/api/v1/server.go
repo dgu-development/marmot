@@ -644,6 +644,13 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 		server.handlers = append(server.handlers, domainsAPI.NewHandler(domainSvc, domainGuard, userSvc, authSvc, config).WithOntologyVersions(domainService.NewOntologyVersions(db)))
 	}
 
+	// Capabilities compiled in from outside this repository; see pkg/extension.
+	extensionHandler, err := extensionRoutes(db, domainSvc, userSvc, authSvc, config)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to register extensions")
+	}
+	server.handlers = append(server.handlers, extensionHandler)
+
 	if config.Workflows.Enabled {
 		var workflowDomains workflowService.Domains
 		if domainSvc != nil {

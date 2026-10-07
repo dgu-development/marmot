@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/tern/v2/migrate"
+	"github.com/marmotdata/marmot/internal/extensions"
 	"github.com/marmotdata/marmot/internal/store/postgres/dgumigrations"
 	"github.com/rs/zerolog/log"
 )
@@ -71,7 +72,10 @@ func (s *Setup) Initialize(ctx context.Context) error {
 	}
 	log.Info().Int32("version", currentVersion).Msg("Database schema is up to date")
 
-	return dgumigrations.Migrate(ctx, conn.Conn())
+	if err := dgumigrations.Migrate(ctx, conn.Conn()); err != nil {
+		return err
+	}
+	return extensions.Migrate(ctx, conn.Conn())
 }
 
 // seedVersionFromLegacy checks for the old schema_migrations table, parses the highest
