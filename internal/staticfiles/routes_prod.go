@@ -59,6 +59,9 @@ func (h *Handler) SetupRoutes(mux *http.ServeMux) error {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else if path == "index.html" {
 			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		} else if strings.HasSuffix(path, ".svg") {
+			// A proxy that recompresses SVG (Cloudflare zstd) can truncate it and leave Chrome with a blank logo.
+			w.Header().Set("Cache-Control", "no-transform")
 		}
 
 		fsHandler.ServeHTTP(w, r)
