@@ -943,6 +943,7 @@
 	"metamodel_error_range": "El valor está fuera del rango permitido.",
 	"metamodel_error_required": "Se requiere un valor.",
 	"metamodel_error_self_reference": "Un término no puede apuntar a sí mismo.",
+	"metamodel_error_target_type": "Este campo no admite activos de ese tipo.",
 	"metamodel_error_term_not_found": "Ese término no existe o se ha eliminado.",
 	"metamodel_error_type": "El valor no es del tipo correcto.",
 	"metamodel_error_unknown": "El valor no es válido.",

@@ -9,6 +9,8 @@ export interface MetamodelPresentation {
 	 * user ID; "glossary_term" holds glossary term IDs, in a string or a list, on terms only.
 	 */
 	control?: string;
+	/** Asset types an asset link may point at; empty accepts every asset. */
+	targetAssetTypes?: string[];
 	/** Names a glossary_term link seen from the term it points to. */
 	inverseLabelKey?: string;
 	/** Offer this field as a segmented Discover filter. Only enum and boolean fields qualify. */

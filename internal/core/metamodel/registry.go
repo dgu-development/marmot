@@ -39,6 +39,9 @@ type Presentation struct {
 	// to, such as "Acronyms" for a "Stands for" field. "asset" holds asset IDs, in a string or
 	// a list of strings, on asset fields only; the asset service checks the assets exist.
 	InverseLabelKey string `json:"inverseLabelKey,omitempty"`
+	// TargetAssetTypes narrows an asset link to assets whose asset_type is listed; the asset
+	// service rejects any other target. Empty accepts every asset.
+	TargetAssetTypes []string `json:"targetAssetTypes,omitempty"`
 	// Facet asks Discover to offer this field as a segmented filter. Only enum and boolean fields qualify
 	Facet bool `json:"facet,omitempty"`
 	// ValueLabelKeys maps stored values to message keys, for showing a label
@@ -442,6 +445,15 @@ func validateDefinition(f Field) error {
 			return errors.New("the asset control applies to asset fields only")
 		}
 	}
+	if targets := f.Presentation.TargetAssetTypes; len(targets) > 0 {
+		if f.Presentation.Control != ControlAsset {
+			return errors.New("targetAssetTypes requires the asset control")
+		}
+		sorted := slices.Sorted(slices.Values(targets))
+		if len(targets) > 64 || sorted[0] == "" || len(slices.Compact(sorted)) != len(targets) {
+			return errors.New("targetAssetTypes holds up to 64 distinct asset types")
+		}
+	}
 	if f.Presentation.Control == ControlSearch && f.Type != "string" && (f.Type != "list" || f.ItemType != "string") {
 		return errors.New("the search control requires type string or a list of strings")
 	}
@@ -563,8 +575,8 @@ func kindNativeFields(kind string) []Field {
 	return fields
 }
 
-// validateAssetTypeScopes rejects an assetTypes entry the asset_type enum cannot hold: such a
-// field would silently never apply.
+// validateAssetTypeScopes rejects an assetTypes or targetAssetTypes entry the asset_type enum
+// cannot hold: such a field would silently never apply, or accept no target.
 func validateAssetTypeScopes(fields []Field) error {
 	var known []string
 	for _, f := range fields {
@@ -573,13 +585,14 @@ func validateAssetTypeScopes(fields []Field) error {
 		}
 	}
 	for _, f := range fields {
-		if len(f.AppliesTo.AssetTypes) == 0 {
+		scoped := slices.Concat(f.AppliesTo.AssetTypes, f.Presentation.TargetAssetTypes)
+		if len(scoped) == 0 {
 			continue
 		}
 		if known == nil {
-			return fmt.Errorf("field %q: appliesTo assetTypes requires an %s enum field", f.ID, assetTypeField)
+			return fmt.Errorf("field %q: assetTypes and targetAssetTypes require an %s enum field", f.ID, assetTypeField)
 		}
-		for _, t := range f.AppliesTo.AssetTypes {
+		for _, t := range scoped {
 			if !slices.Contains(known, t) {
 				return fmt.Errorf("field %q: assetType %q is not a value of %s", f.ID, t, assetTypeField)
 			}
@@ -754,6 +767,9 @@ func (r *Registry) Fields(kind string) []Field {
 
 // assetTypeField is the enum whose value selects the fields scoped by appliesTo.assetTypes.
 const assetTypeField = "asset_type"
+
+// AssetTypeField is the ID of that enum, for services that read an asset's governed type.
+const AssetTypeField = assetTypeField
 
 // InScope reports whether f applies to the asset type held in values. A field without assetTypes
 // always applies; a scoped one drops out of an asset that is untyped or of another type.
