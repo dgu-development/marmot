@@ -11,8 +11,10 @@
 
 	function fenceLanguage(name: string): string {
 		const normalized = name.trim().toLowerCase();
-		if (!normalized || normalized === 'sql' || normalized === 'hiveql' || normalized === 'cql') return 'sql';
-		if (['json', 'python', 'javascript', 'typescript', 'bash', 'yaml'].includes(normalized)) return normalized;
+		if (!normalized || normalized === 'sql' || normalized === 'hiveql' || normalized === 'cql')
+			return 'sql';
+		if (['json', 'python', 'javascript', 'typescript', 'bash', 'yaml'].includes(normalized))
+			return normalized;
 		return 'text';
 	}
 
@@ -44,9 +46,16 @@
 	}
 </script>
 
-<article class="query-view overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-	<header class="flex items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 dark:border-gray-700 dark:bg-gray-800">
-		<span class="font-mono text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{caption}</span>
+<article
+	class="query-view overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
+>
+	<header
+		class="flex items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 dark:border-gray-700 dark:bg-gray-800"
+	>
+		<span
+			class="font-mono text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400"
+			>{caption}</span
+		>
 		<button
 			type="button"
 			class="inline-flex items-center rounded px-2 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 {copied
