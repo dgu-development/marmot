@@ -403,9 +403,17 @@
 							<div
 								class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5"
 							>
-								<h3 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-3">
-									{m.asset_data_lineage_heading()}
-								</h3>
+								<div class="mb-3 flex items-center justify-between gap-3">
+									<h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">
+										{m.asset_data_lineage_heading()}
+									</h3>
+									{#if asset.mrn}
+										<EntityPanels
+											entity={{ kind: 'asset', id: asset.id, mrn: asset.mrn }}
+											placement="references"
+										/>
+									{/if}
+								</div>
 
 								{#if loadingLineage}
 									<div class="flex items-center justify-center py-8">
