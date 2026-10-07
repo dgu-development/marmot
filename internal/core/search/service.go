@@ -57,7 +57,9 @@ type MetadataFacetValue struct {
 
 // MetadataFacetSpec is a facetable field; Key is the storage path used in Facets.Metadata.
 type MetadataFacetSpec struct {
-	Key    string
+	Key string
+	// Types are the result types the field applies to; only those are counted.
+	Types  []string
 	Values []MetadataFacetValue
 }
 

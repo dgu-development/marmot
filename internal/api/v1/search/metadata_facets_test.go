@@ -28,6 +28,16 @@ fields:
     presentation:
       labelKey: example.contains_pii.label
       facet: true
+  - id: term_type
+    type: enum
+    core: true
+    storage: metadata.example.term_type
+    values: [business_term, acronym]
+    appliesTo:
+      kinds: [glossary_term]
+    presentation:
+      labelKey: example.term_type.label
+      facet: true
   - id: retention
     type: integer
     core: true
@@ -92,13 +102,14 @@ func TestParseGovernedFilters(t *testing.T) {
 	filters := h.parseGovernedFilters(map[string][]string{
 		"governed.classification": {"public, confidential"},
 		"governed.contains_pii":   {"true"},
+		"governed.term_type":      {"acronym"},
 		"governed.retention":      {"30"},  // not facetable, dropped
 		"governed.unknown":        {"x"},   // unknown field, dropped
 		"q":                       {"foo"}, // not a governed. key, ignored
 	})
 
-	if len(filters) != 2 {
-		t.Fatalf("expected 2 governed filters, got %d: %v", len(filters), filters)
+	if len(filters) != 3 {
+		t.Fatalf("expected 3 governed filters, got %d: %v", len(filters), filters)
 	}
 	classification := filters["metadata.example.classification"]
 	if len(classification) != 2 {
@@ -114,11 +125,18 @@ func TestMetadataFacetSpecs(t *testing.T) {
 	h := &Handler{metamodelRegistry: facetRegistry(t)}
 
 	specs := h.metadataFacetSpecs()
-	if len(specs) != 2 {
-		t.Fatalf("expected 2 facetable specs, got %d: %+v", len(specs), specs)
+	if len(specs) != 3 {
+		t.Fatalf("expected 3 facetable specs, got %d: %+v", len(specs), specs)
 	}
 	byKey := make(map[string][]string)
 	for _, spec := range specs {
+		want := "asset"
+		if spec.Key == "metadata.example.term_type" {
+			want = "glossary"
+		}
+		if len(spec.Types) != 1 || spec.Types[0] != want {
+			t.Fatalf("%s counted over %v, want [%s]", spec.Key, spec.Types, want)
+		}
 		for _, v := range spec.Values {
 			byKey[spec.Key] = append(byKey[spec.Key], v.Value)
 		}

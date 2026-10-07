@@ -613,7 +613,7 @@ func appendMetadataFilterClauses(filters map[string][]string, clauses []string, 
 	return clauses, params
 }
 
-// computeMetadataFacets counts, per facetable governed field, how many assets match each
+// computeMetadataFacets counts, per facetable governed field, how many entities of its kinds match each
 // candidate value under the same filters as the rest of the listing facets.
 func (r *PostgresRepository) computeMetadataFacets(ctx context.Context, baseWhere string, baseParams []interface{}, specs []MetadataFacetSpec, facets *Facets) error {
 	if len(specs) == 0 {
@@ -623,12 +623,12 @@ func (r *PostgresRepository) computeMetadataFacets(ctx context.Context, baseWher
 	for _, spec := range specs {
 		values := make([]FacetValue, 0, len(spec.Values))
 		for _, candidate := range spec.Values {
-			params := append(slices.Clone(baseParams), candidate.Literal)
+			params := append(slices.Clone(baseParams), spec.Types, candidate.Literal)
 			q := fmt.Sprintf(`
 				SELECT COUNT(*) FROM search_index
 				%s
-				AND type = 'asset' AND metadata @> $%d::jsonb
-			`, baseWhere, len(params))
+				AND type = ANY($%d) AND metadata @> $%d::jsonb
+			`, baseWhere, len(params)-1, len(params))
 			var count int
 			if err := r.db.QueryRow(ctx, q, params...).Scan(&count); err != nil {
 				return fmt.Errorf("querying metadata facet %q=%q: %w", spec.Key, candidate.Value, err)
@@ -1013,7 +1013,7 @@ func (r *PostgresRepository) buildCachedFacets(ctx context.Context, filter Filte
 	}
 
 	// Not covered by summary_counts: governed fields are config-driven, computed directly.
-	if err := r.computeMetadataFacets(ctx, "WHERE type = 'asset'", nil, filter.MetadataFacets, facets); err != nil {
+	if err := r.computeMetadataFacets(ctx, "WHERE true", nil, filter.MetadataFacets, facets); err != nil {
 		return facets, total, nil // non-fatal: return partial facets
 	}
 

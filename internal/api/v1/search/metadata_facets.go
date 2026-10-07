@@ -24,7 +24,7 @@ func (h *Handler) parseGovernedFilters(queryValues map[string][]string) map[stri
 			continue
 		}
 		field, ok := h.metamodelRegistry.Field(id)
-		if !ok || !field.Presentation.Facet || !slices.Contains(field.AppliesTo.EffectiveKinds(), "asset") {
+		if !ok || !field.Presentation.Facet || len(searchTypes(field)) == 0 {
 			continue
 		}
 		var literals []string
@@ -46,12 +46,26 @@ func (h *Handler) parseGovernedFilters(queryValues map[string][]string) map[stri
 	return filters
 }
 
+// searchTypeOfKind names, for each metamodel kind, the search result type that carries its metadata.
+var searchTypeOfKind = map[string]string{"asset": "asset", "data_product": "data_product", "glossary_term": "glossary"}
+
+func searchTypes(field metamodel.Field) []string {
+	var types []string
+	for _, kind := range field.AppliesTo.EffectiveKinds() {
+		if t, ok := searchTypeOfKind[kind]; ok {
+			types = append(types, t)
+		}
+	}
+	return types
+}
+
 // metadataFacetSpecs builds a facet spec for every field the profile marks facetable, so
 // listing queries always report counts for the values Discover can filter by.
 func (h *Handler) metadataFacetSpecs() []search.MetadataFacetSpec {
 	var specs []search.MetadataFacetSpec
-	for _, field := range h.metamodelRegistry.Fields("asset") {
-		if !field.Presentation.Facet {
+	for _, field := range h.metamodelRegistry.Schema().Fields {
+		types := searchTypes(field)
+		if !field.Presentation.Facet || len(types) == 0 {
 			continue
 		}
 		candidates := field.Values
@@ -65,7 +79,7 @@ func (h *Handler) metadataFacetSpecs() []search.MetadataFacetSpec {
 			}
 		}
 		if len(values) > 0 {
-			specs = append(specs, search.MetadataFacetSpec{Key: field.Storage, Values: values})
+			specs = append(specs, search.MetadataFacetSpec{Key: field.Storage, Types: types, Values: values})
 		}
 	}
 	return specs
