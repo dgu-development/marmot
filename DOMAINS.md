@@ -86,6 +86,7 @@ Every operation that creates, changes, moves or deletes catalog content, and how
 | REST | `internal/api/v1/glossary/operations.go` | Create, Update, Delete | decorator |
 | REST (bulk import) | `internal/api/v1/glossary/import.go` | Import | decorator (`guardedGlossary.Import`): every row is authorized before the batch is written (new term where it lands: its `domain` cell, else `?domain_id=`, else Unassigned; existing term where it is, and at its `domain` cell when that moves it); after the batch commits each term is placed and audited. The `domain` column itself comes from `GlossaryImportColumns`, which checks it in the preview |
 | Ingestion | `internal/core/runs/service.go` | SyncTerms | decorator; all or nothing: every existing term in the batch must be writable, and new terms land in the pipeline's domain |
+| REST (ontology versions) | `internal/api/v1/domains/ontology_versions.go` | `OntologyVersions.Restore` | own check: only who administers the domain; rewrites the domain's terms in one transaction, straight in SQL, so it does not go through the decorator |
 
 ### Lineage and documentation
 
