@@ -93,3 +93,55 @@ func TestAssetLinksRejectSelfAndKeepExistingOnes(t *testing.T) {
 		t.Fatalf("a link the asset already had must survive its target being deleted: %v", err)
 	}
 }
+
+func TestAssetLinksRespectTargetAssetTypes(t *testing.T) {
+	registry, err := metamodel.Load(strings.NewReader(`formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: asset_type
+    type: enum
+    core: true
+    nullable: true
+    storage: metadata.example.asset_type
+    values: [table, rule]
+    presentation:
+      labelKey: example.asset_type.label
+  - id: applies_to
+    type: list
+    itemType: string
+    core: true
+    nullable: true
+    storage: metadata.example.applies_to
+    presentation:
+      labelKey: example.applies_to.label
+      control: asset
+      targetAssetTypes: [table]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(newMemoryRepo(), WithMetamodel(registry))
+	typed := func(name, assetType string) *Asset {
+		input := validCreate(name)
+		if assetType != "" {
+			input.Metadata["example"] = map[string]any{"asset_type": assetType}
+		}
+		asset, err := svc.Create(context.Background(), input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return asset
+	}
+	table, rule, untyped := typed("table", "table"), typed("rule", "rule"), typed("untyped", "")
+	if _, err := svc.Create(context.Background(), withLinks("ok", table.ID)); err != nil {
+		t.Fatalf("a link to an accepted type must be accepted: %v", err)
+	}
+	for _, target := range []*Asset{rule, untyped} {
+		_, err := svc.Create(context.Background(), withLinks("bad-"+*target.Name, table.ID, target.ID))
+		if !hasViolation(err, "applies_to", "target_type") {
+			t.Fatalf("a link to %s must be rejected: %v", *target.Name, err)
+		}
+	}
+}

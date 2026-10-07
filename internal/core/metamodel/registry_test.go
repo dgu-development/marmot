@@ -784,3 +784,47 @@ fields:
 		t.Fatalf("ftp must fail, got %v", err)
 	}
 }
+
+func TestTargetAssetTypesNeedTheAssetControlAndKnownTypes(t *testing.T) {
+	profile := func(control, target string) string {
+		return `formatVersion: 1
+id: example
+version: 1
+defaultLocale: en
+fields:
+  - id: asset_type
+    type: enum
+    core: true
+    storage: metadata.example.asset_type
+    values: [table, rule]
+    presentation:
+      labelKey: example.asset_type.label
+  - id: applies_to
+    type: list
+    itemType: string
+    core: true
+    nullable: true
+    storage: metadata.example.applies_to
+    presentation:
+      labelKey: example.applies_to.label
+      control: ` + control + `
+      targetAssetTypes: [` + target + `]
+`
+	}
+	registry, err := Load(strings.NewReader(profile("asset", "table")))
+	if err != nil {
+		t.Fatalf("a known target type must load: %v", err)
+	}
+	if field, _ := registry.Field("applies_to"); !slices.Equal(field.Presentation.TargetAssetTypes, []string{"table"}) {
+		t.Fatalf("the schema must publish targetAssetTypes: %+v", field.Presentation)
+	}
+	for name, source := range map[string]string{
+		"unknown type":  profile("asset", "view"),
+		"other control": profile("search", "table"),
+		"duplicate":     profile("asset", "table, table"),
+	} {
+		if _, err := Load(strings.NewReader(source)); err == nil {
+			t.Errorf("%s must be rejected", name)
+		}
+	}
+}

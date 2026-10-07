@@ -62,7 +62,7 @@ func LinkIDs(value any) []string {
 }
 
 // checkLinks rejects asset-control values naming the asset itself, or adding an asset that does
-// not exist. Links the asset already had are kept even once their target is deleted, so an
+// not exist or whose asset_type the field's targetAssetTypes leaves out. Links the asset already had are kept even once their target is deleted, so an
 // unrelated edit or a re-ingest never fails on them.
 func (s *service) checkLinks(ctx context.Context, self string, metadata, previous map[string]interface{}) error {
 	var violations []metamodel.Violation
@@ -95,12 +95,42 @@ func (s *service) checkLinks(ctx context.Context, self string, metadata, previou
 		}
 		if len(found) != len(added) {
 			violations = append(violations, metamodel.Violation{Field: f.ID, Code: "asset_not_found"})
+			continue
+		}
+		allowed, err := s.targetsAllowed(ctx, f, valid)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			violations = append(violations, metamodel.Violation{Field: f.ID, Code: "target_type"})
 		}
 	}
 	if len(violations) > 0 {
 		return &metamodel.ValidationError{Fields: violations}
 	}
 	return nil
+}
+
+// targetsAllowed reports whether every asset in ids has an asset_type the field accepts.
+func (s *service) targetsAllowed(ctx context.Context, f metamodel.Field, ids []string) (bool, error) {
+	if len(f.Presentation.TargetAssetTypes) == 0 {
+		return true, nil
+	}
+	typeField, ok := s.registry().Field(metamodel.AssetTypeField)
+	if !ok {
+		return false, nil
+	}
+	for _, id := range ids {
+		target, err := s.repo.Get(ctx, id)
+		if err != nil {
+			return false, fmt.Errorf("checking the type of linked asset %s: %w", id, err)
+		}
+		value, _ := metamodel.ValueAt(target.Metadata, typeField.Storage)
+		if assetType, _ := value.(string); !slices.Contains(f.Presentation.TargetAssetTypes, assetType) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // References returns, per asset-control field, the assets pointing at id.

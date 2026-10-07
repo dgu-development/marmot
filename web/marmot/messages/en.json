@@ -943,6 +943,7 @@
 	"metamodel_error_range": "The value is outside the allowed range.",
 	"metamodel_error_required": "A value is required.",
 	"metamodel_error_self_reference": "A term cannot point at itself.",
+	"metamodel_error_target_type": "This field does not accept assets of that type.",
 	"metamodel_error_term_not_found": "That term does not exist or was deleted.",
 	"metamodel_error_type": "The value has the wrong type.",
 	"metamodel_error_unknown": "The value is not valid.",

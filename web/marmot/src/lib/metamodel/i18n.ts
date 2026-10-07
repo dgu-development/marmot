@@ -37,6 +37,8 @@ export function violationMessage(code: string): string {
 			return m.metamodel_error_derived();
 		case 'system':
 			return m.metamodel_error_system();
+		case 'target_type':
+			return m.metamodel_error_target_type();
 		case 'self_reference':
 			return m.metamodel_error_self_reference();
 		default:
