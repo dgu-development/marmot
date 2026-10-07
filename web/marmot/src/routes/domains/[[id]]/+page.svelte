@@ -11,6 +11,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { toasts } from '$lib/stores/toast';
 	import { m } from '$lib/paraglide/messages';
+	import EntityPanels from '$components/extensions/EntityPanels.svelte';
 	import type { DomainNode } from '$lib/domains/types';
 	import {
 		capabilities,
@@ -379,6 +380,9 @@
 								{/if}
 							</div>
 							<div class="flex flex-wrap gap-2">
+								{#if !isUnassigned(selected)}
+									<EntityPanels entity={{ kind: 'domain', id: selected.id }} placement="header" />
+								{/if}
 								{#if landingTemplate && !isUnassigned(selected)}
 									<Button
 										variant="filled"

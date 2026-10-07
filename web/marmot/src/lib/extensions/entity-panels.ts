@@ -1,7 +1,7 @@
 import type { Component } from 'svelte';
 import { writable } from 'svelte/store';
 
-export type EntityKind = 'asset' | 'data_product' | 'glossary_term';
+export type EntityKind = 'asset' | 'data_product' | 'glossary_term' | 'domain';
 
 /** The entity a panel describes; `mrn` is set for assets. */
 export interface EntityRef {
@@ -17,7 +17,8 @@ export interface EntityRef {
 export type PanelPlacement = 'side' | 'tab' | 'header' | 'references';
 
 /**
- * A view a distribution adds to asset, data product and glossary term pages.
+ * A view a distribution adds to asset, data product and glossary term pages. A domain page
+ * shows only the `header` ones, next to its own actions.
  * `load` is only called on a page that shows the panel, so its code stays out of
  * the main bundle. A `tab` panel falls back to the side column on pages without tabs.
  */
