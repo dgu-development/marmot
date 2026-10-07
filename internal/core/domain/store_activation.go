@@ -29,6 +29,7 @@ func (r *PostgresRepository) EnforcementState(ctx context.Context) (*Enforcement
 		 WHERE s.key = $1`, writeEnforcementKey).
 		Scan(&state.Write, &by, &name, &at)
 	if errors.Is(err, pgx.ErrNoRows) {
+		state.Write = r.enforceByDefault
 		return &state, nil
 	}
 	if err != nil {

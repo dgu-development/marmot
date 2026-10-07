@@ -13,7 +13,7 @@ func (r *PostgresRepository) WriteEnforced(ctx context.Context) (bool, error) {
 	var on bool
 	err := r.db.QueryRow(ctx, "SELECT value = 'true'::jsonb FROM domain_settings WHERE key = $1", writeEnforcementKey).Scan(&on)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
+		return r.enforceByDefault, nil
 	}
 	return on, err
 }

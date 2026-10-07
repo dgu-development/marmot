@@ -18,7 +18,7 @@ Each row is a change to a file that also exists upstream. A PR that adds, moves 
 | `internal/core/lineage/service.go` | `service.edgeGuard` and the check at the top of `CreateDirectLineage`; the option lives in the new file `edge_guard.go` | Vets every edge, including those an OpenLineage event writes internally, which never go through a decorator |
 | `internal/core/search/store.go` | `PostgresRepository.domainResolver`; `Search` resolves `@domain` first; `buildFilterClauses` and `buildListingFacetWhereClause` call `appendDomainClauses`; `buildFacetsParallel` skips cached facets when `filter.Domain` is set | `@domain` filter over subtrees, by id, name or name path, and `NOT @domain` exclusion. Cached facets are global counts and would ignore it |
 | `internal/core/search/service.go` | `Filter.Domain` | Carries the resolved domain filter; never read from JSON |
-| `pkg/config/config.go` | `Config.Domains`; `BindEnv("domains.enabled")`; `SetDefault("domains.enabled", false)` | The feature flag (`MARMOT_DOMAINS_ENABLED`) |
+| `pkg/config/config.go` | `Config.Domains`; `BindEnv` and `SetDefault` of `domains.enabled` and `domains.write_enforcement` | The feature flag (`MARMOT_DOMAINS_ENABLED`) and the state of write enforcement before it is ever set (`MARMOT_DOMAINS_WRITE_ENFORCEMENT`) |
 | `pkg/config/config_test.go` | `TestLoad_DCRAllowedRedirectHostsFromEnv` | Asserts the flag is read from the environment; `Load` runs once per process, so it cannot live in its own test |
 | `permissions`, `role_permissions` (data, fork migration `002`) | rows `dgu_view_domains`, `dgu_manage_domains` | `domains:view` for `admin` and `user`, `domains:manage` for `admin`. Names are `dgu_`-prefixed so an upstream permission with the same name cannot collide |
 | `charts/marmot/values.yaml`, `values.schema.json`, `templates/validation.yaml`, `tests/{configmap,validation}_test.yaml` | `config.domains`; the Elasticsearch check | The flag through the chart; refuses to render domains with Elasticsearch, as the server refuses to start |
@@ -60,6 +60,7 @@ Every operation that creates, changes, moves or deletes catalog content, and how
 - `GET /api/v1/domains/enforcement/plan` (global scope only) lists the identities with `assets:manage` or `glossary:manage`, outside the admin role, that would lose write access, with the topmost domains they keep and lose. It also lists the pipelines whose ingested assets sit outside their domain: their runs could no longer update or remove them.
 - `POST /api/v1/domains/enforcement` with `{"write": true, "confirm": "<plan hash>"}` turns it on. A plan that changed since it was reviewed is refused with `plan_changed`. `{"write": false}` turns it off. Both need global scope and both are audited (`entity_kind = setting`).
 - `GET /api/v1/domains/enforcement` returns the state to anyone with `domains:view`.
+- `domains.write_enforcement` (`MARMOT_DOMAINS_WRITE_ENFORCEMENT`, off by default) is the state while the setting has never been saved, so an installation can start enforced. Once someone turns it on or off through the API, that choice wins and the configuration is no longer read.
 - CLI: `marmot domains enforcement status | plan | enable --confirm <hash> | disable` (`internal/cmd/domains.go`, fork-only; it calls the API directly because domains are not in the generated SDK).
 
 ### Assets (`asset.Service`)
