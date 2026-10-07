@@ -155,7 +155,7 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	var domainSvc domainService.Service
 	var domainGuard *domainService.Guard
 	if config.Domains.Enabled {
-		domainRepo = domainService.NewPostgresRepository(db)
+		domainRepo = domainService.NewPostgresRepository(db).WithWriteEnforcementDefault(config.Domains.WriteEnforcement)
 		domainSvc = domainService.NewService(domainRepo)
 		domainGuard = domainService.NewGuard(domainSvc, domainRepo, common.PrincipalFromContext)
 		assetSvc = domainService.GuardAssets(assetSvc, domainGuard)

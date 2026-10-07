@@ -10,6 +10,7 @@ func TestLoad_DCRAllowedRedirectHostsFromEnv(t *testing.T) {
 	t.Setenv("MARMOT_AUTH_DCR_ALLOWED_REDIRECT_HOSTS", "claude.ai,example.com:8443")
 	t.Setenv("MARMOT_METAMODEL_PROFILE", "/etc/marmot/metamodel.yaml")
 	t.Setenv("MARMOT_DOMAINS_ENABLED", "true")
+	t.Setenv("MARMOT_DOMAINS_WRITE_ENFORCEMENT", "true")
 	t.Setenv("MARMOT_WORKFLOWS_ENABLED", "true")
 	t.Setenv("MARMOT_WORKFLOWS_TIMER_INTERVAL", "30s")
 	t.Setenv("MARMOT_AUTH_TOTP_ENABLED", "true")
@@ -33,8 +34,8 @@ func TestLoad_DCRAllowedRedirectHostsFromEnv(t *testing.T) {
 	if cfg.Metamodel.Profile != "/etc/marmot/metamodel.yaml" {
 		t.Fatalf("unexpected metamodel profile from env: %q", cfg.Metamodel.Profile)
 	}
-	if !cfg.Domains.Enabled {
-		t.Fatal("domains.enabled not read from env")
+	if !cfg.Domains.Enabled || !cfg.Domains.WriteEnforcement {
+		t.Fatalf("domains not read from env: %+v", cfg.Domains)
 	}
 	if !cfg.Workflows.Enabled || cfg.Workflows.TimerInterval != 30*time.Second {
 		t.Fatalf("workflows not read from env: %+v", cfg.Workflows)

@@ -68,10 +68,19 @@ const columns = `id, parent_id, path, depth, name, description, metadata, tags, 
 
 type PostgresRepository struct {
 	db *pgxpool.Pool
+	// enforceByDefault holds until the setting is saved: an explicit choice always wins.
+	enforceByDefault bool
 }
 
 func NewPostgresRepository(db *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{db: db}
+}
+
+// WithWriteEnforcementDefault sets whether writes are scoped by domain while nobody has turned
+// enforcement on or off through the API.
+func (r *PostgresRepository) WithWriteEnforcementDefault(on bool) *PostgresRepository {
+	r.enforceByDefault = on
+	return r
 }
 
 func scanDomain(row pgx.Row) (*Domain, error) {

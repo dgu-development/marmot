@@ -182,6 +182,8 @@ type Config struct {
 	// Domains is fork-only; see DOMAINS.md.
 	Domains struct {
 		Enabled bool `mapstructure:"enabled"`
+		// WriteEnforcement is the state of write enforcement until someone sets it through the API.
+		WriteEnforcement bool `mapstructure:"write_enforcement"`
 	} `mapstructure:"domains"`
 
 	// Workflows is fork-only: BPMN governance workflows. Role groups in a
@@ -430,6 +432,7 @@ func loadConfig(configPath string) error {
 
 	v.BindEnv("metamodel.profile")
 	v.BindEnv("domains.enabled")
+	v.BindEnv("domains.write_enforcement")
 	v.BindEnv("workflows.enabled")
 	v.BindEnv("workflows.timer_interval")
 	v.BindEnv("quality.enabled")
@@ -575,6 +578,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("metamodel.profile", "")
 
 	v.SetDefault("domains.enabled", false)
+	v.SetDefault("domains.write_enforcement", false)
 
 	v.SetDefault("workflows.enabled", false)
 	v.SetDefault("workflows.timer_interval", time.Minute)
