@@ -54,7 +54,7 @@
 	:global(.dark .prose),
 	:global(.dark .prose p),
 	:global(.dark .prose li),
-	:global(.dark .prose span) {
+	:global(.dark .prose span:not(.token)) {
 		color: #dfdfdf !important;
 	}
 	:global(.prose h1),

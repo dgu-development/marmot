@@ -23,7 +23,7 @@
 	import RunHistory from '$components/runs/RunHistory.svelte';
 	import AgentSpecCard from '$components/asset/AgentSpecCard.svelte';
 	import AgentRunsView from '$components/asset/AgentRunsView.svelte';
-	import CodeBlock from '$components/editor/CodeBlock.svelte';
+	import QueryView from '$components/asset/QueryView.svelte';
 	import DataPreviewTable from '$components/asset/DataPreviewTable.svelte';
 	import Tabs, { type Tab } from '$components/ui/Tabs.svelte';
 	import Icon from '$components/ui/Icon.svelte';
@@ -618,12 +618,7 @@
 						{:else if activeTab === 'query'}
 							<div class="mt-6">
 								{#if asset.query}
-									{#if asset.query_language}
-										<div class="text-xs text-gray-500 dark:text-gray-400 mb-2 uppercase">
-											{asset.query_language}
-										</div>
-									{/if}
-									<CodeBlock code={asset.query} language={asset.query_language || 'sql'} />
+									<QueryView query={asset.query} language={asset.query_language || ''} />
 								{:else}
 									<div class="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
 										<p class="text-gray-500 dark:text-gray-400 italic">
