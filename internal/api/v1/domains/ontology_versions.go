@@ -40,6 +40,46 @@ func actorID(r *http.Request) *string {
 	return nil
 }
 
+// requireWrite lets through whoever may edit the domain's terms: publishing only records them.
+func (h *Handler) requireWrite(w http.ResponseWriter, r *http.Request, domainID string) bool {
+	allowed, err := h.mayAdminister(r, domainID)
+	if err == nil && !allowed {
+		allowed, err = h.mayWriteTerms(r, domainID)
+	}
+	if err != nil {
+		respondError(w, err, "check domain permissions")
+		return false
+	}
+	if !allowed {
+		respondCode(w, http.StatusForbidden, "forbidden", "Writing in this domain is not allowed")
+		return false
+	}
+	return true
+}
+
+func (h *Handler) mayWriteTerms(r *http.Request, domainID string) (bool, error) {
+	principal, ok := common.PrincipalFromContext(r.Context())
+	if !ok {
+		return false, nil
+	}
+	state, err := h.service.Enforcement(r.Context())
+	if err != nil {
+		return false, err
+	}
+	if !state.Write {
+		return principal.HasPermission("glossary", "manage"), nil
+	}
+	d, err := h.service.Get(r.Context(), domainID)
+	if err != nil {
+		return false, err
+	}
+	scope, err := h.service.Scope(r.Context(), principal)
+	if err != nil {
+		return false, err
+	}
+	return scope.Can(domain.ActionWrite, d.Path), nil
+}
+
 func versionParam(w http.ResponseWriter, r *http.Request) (int, bool) {
 	version, err := strconv.Atoi(r.PathValue("version"))
 	if err != nil || version < 1 {
@@ -73,7 +113,7 @@ func (h *Handler) listOntologyVersions(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary Publish a version of a domain's ontology
-// @Description Stores the domain's glossary terms and its ontology metadata as they are now. Needs to administer the domain.
+// @Description Stores the domain's glossary terms and its ontology metadata as they are now. Needs to write in the domain: its stewards and admins, or glossary:manage while writes are not scoped by domain.
 // @Tags ontologies
 // @Accept json
 // @Produce json
@@ -95,7 +135,7 @@ func (h *Handler) publishOntologyVersion(w http.ResponseWriter, r *http.Request)
 		respondCode(w, http.StatusBadRequest, "invalid_input", "Note too long")
 		return
 	}
-	if !h.requireAdmin(w, r, r.PathValue("domainId")) {
+	if !h.requireWrite(w, r, r.PathValue("domainId")) {
 		return
 	}
 	version, err := h.versions.Publish(r.Context(), r.PathValue("domainId"), req.Note, actorID(r))
