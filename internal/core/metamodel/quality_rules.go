@@ -251,7 +251,7 @@ func validateCondition(c QualityCondition, path string, fields map[string]Field,
 // an enum.
 func valueFits(field Field, valueType string, value any) bool {
 	switch valueType {
-	case "string", "date":
+	case "string", "date", "url":
 		_, ok := value.(string)
 		return ok
 	case "enum":
