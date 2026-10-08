@@ -28,7 +28,6 @@ type Handler struct {
 	userService user.Service
 	authService auth.Service
 	config      *config.Config
-	versions    *domain.OntologyVersions
 }
 
 func NewHandler(service domain.Service, guard Guard, userService user.Service, authService auth.Service, config *config.Config) *Handler {
@@ -44,7 +43,7 @@ func (h *Handler) Routes() []common.Route {
 		common.WithAuth(h.userService, h.authService, h.config),
 		common.RequirePermission(h.userService, "domains", "manage"),
 	}
-	return append(h.ontologyRoutes(view), []common.Route{
+	return []common.Route{
 		{Path: "/api/v1/domains", Method: http.MethodGet, Handler: h.list, Middleware: view},
 		{Path: "/api/v1/domains", Method: http.MethodPost, Handler: h.create, Middleware: view},
 		{Path: "/api/v1/domains/{id}", Method: http.MethodGet, Handler: h.get, Middleware: view},
@@ -66,5 +65,5 @@ func (h *Handler) Routes() []common.Route {
 		{Path: "/api/v1/domains/enforcement", Method: http.MethodPost, Handler: h.setEnforcement, Middleware: view},
 		{Path: "/api/v1/domains/enforcement/plan", Method: http.MethodGet, Handler: h.enforcementPlan, Middleware: view},
 		{Path: "/api/v1/domains/audit/{kind}/{id}", Method: http.MethodGet, Handler: h.auditLog, Middleware: manage},
-	}...)
+	}
 }

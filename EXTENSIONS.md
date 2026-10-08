@@ -26,3 +26,9 @@ Grow `Host` when an extension needs something, with that extension as the proof.
 | `internal/api/v1/server.go` | `New`, the block after the domains one | Appends the extensions' routes to `server.handlers` |
 
 `pkg/extension`, `internal/extensions` and `internal/api/v1/extensions.go` are new files.
+
+## In use
+
+The versions of a domain's ontology were added here first (`ontology_versions`, `/api/v1/ontologies/...`) and moved out to the `dguext-ontology` extension, which owns `ext_ontology_versions` and serves under `/api/v1/ext/ontology/`. Fork migration `020` drops the table they left behind.
+
+A new extension starts from [dguext-template](https://github.com/dgu-development/dguext-template).
