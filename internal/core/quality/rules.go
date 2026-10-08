@@ -3,7 +3,6 @@ package quality
 import (
 	"regexp"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/marmotdata/marmot/internal/core/metamodel"
@@ -24,21 +23,6 @@ type compiledRule struct {
 	checks    []compiledCondition
 }
 
-func snakeCode(id string) string {
-	var out strings.Builder
-	for i, r := range id {
-		if r >= 'A' && r <= 'Z' {
-			if i > 0 {
-				out.WriteByte('_')
-			}
-			out.WriteRune(r + 'a' - 'A')
-			continue
-		}
-		out.WriteRune(r)
-	}
-	return out.String()
-}
-
 func compileConditions(conditions []metamodel.QualityCondition) []compiledCondition {
 	out := make([]compiledCondition, len(conditions))
 	for i, c := range conditions {
@@ -53,10 +37,7 @@ func compileConditions(conditions []metamodel.QualityCondition) []compiledCondit
 }
 
 func compileRule(rule metamodel.QualityRule, severity Severity) *compiledRule {
-	code := rule.Code
-	if code == "" {
-		code = snakeCode(rule.ID)
-	}
+	code := rule.FindingCode()
 	dimension := rule.Dimension
 	if dimension == "" {
 		dimension = metamodel.DimensionValidity

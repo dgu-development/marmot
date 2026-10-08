@@ -19,11 +19,13 @@ import (
 	"github.com/marmotdata/marmot/internal/core/glossary"
 	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/notification"
+	"github.com/marmotdata/marmot/internal/core/quality"
 	"github.com/marmotdata/marmot/internal/core/team"
 	"github.com/marmotdata/marmot/internal/core/user"
 	"github.com/marmotdata/marmot/internal/extensions"
 	"github.com/marmotdata/marmot/pkg/config"
 	"github.com/marmotdata/marmot/pkg/extension"
+	extquality "github.com/marmotdata/marmot/pkg/extension/quality"
 )
 
 // extensionServices is what the server lends the extensions.
@@ -37,6 +39,7 @@ type extensionServices struct {
 	glossary      glossary.Service
 	rules         assetrule.Service
 	notifications *notification.Service
+	quality       *quality.Engine
 }
 
 // extensionHost is the server as an extension sees it.
@@ -80,6 +83,7 @@ func (h extensionHost) Teams() extension.Teams            { return extensionTeam
 func (h extensionHost) Assets() extension.Assets          { return extensionAssets{h.assets, h.registry} }
 func (h extensionHost) Glossary() extension.Glossary      { return extensionGlossary{h.glossary} }
 func (h extensionHost) Queries() extension.Queries        { return extensionQueries{h.rules} }
+func (h extensionHost) Quality() extquality.Engine        { return h.quality }
 func (h extensionHost) Notifications() extension.Notifier { return extensionNotifier{h.notifications} }
 
 // extensionErr turns the errors of the core services into the contract's, keeping the text.

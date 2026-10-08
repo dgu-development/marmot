@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/marmotdata/marmot/pkg/extension/quality"
 )
 
 // Extension is a capability with its own routes and, optionally, its own tables.
@@ -83,6 +84,8 @@ type Host interface {
 	Glossary() Glossary
 	Queries() Queries
 	Notifications() Notifier
+	// Quality is the evaluating half of the metadata quality audit.
+	Quality() quality.Engine
 	// As returns the person with that ID as they are now, and a context in
 	// which the host's write guards see them. Work without a request, such as
 	// a Task, has no identity until it takes one. ok is false for a missing

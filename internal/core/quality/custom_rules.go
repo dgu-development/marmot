@@ -77,7 +77,7 @@ func (s *ruleService) Rules(ctx context.Context) ([]RuleInfo, error) {
 		definition := rule
 		out = append(out, RuleInfo{
 			ID: RuleID(rule.ID), Source: SourceProfile, Dimension: rule.Dimension, LabelKey: rule.LabelKey, DescriptionKey: rule.DescriptionKey,
-			Code: ruleCode(rule), Severity: setting.Severity, Enabled: setting.Enabled, Definition: &definition,
+			Code: rule.FindingCode(), Severity: setting.Severity, Enabled: setting.Enabled, Definition: &definition,
 		})
 	}
 	custom, err := s.repo.List(ctx)
@@ -88,7 +88,7 @@ func (s *ruleService) Rules(ctx context.Context) ([]RuleInfo, error) {
 	for _, c := range custom {
 		definition := c.Rule
 		info := RuleInfo{
-			ID: RuleID(c.ID), Source: SourceCustom, Dimension: c.Dimension, Name: c.Name, Description: c.Description, Code: ruleCode(c.Rule),
+			ID: RuleID(c.ID), Source: SourceCustom, Dimension: c.Dimension, Name: c.Name, Description: c.Description, Code: c.FindingCode(),
 			Severity: Severity(c.Severity), Enabled: c.Enabled, Definition: &definition, Version: c.Version,
 		}
 		if err := metamodel.ValidateQualityRule(c.Rule, fields, true); err != nil {
@@ -97,13 +97,6 @@ func (s *ruleService) Rules(ctx context.Context) ([]RuleInfo, error) {
 		out = append(out, info)
 	}
 	return out, nil
-}
-
-func ruleCode(rule metamodel.QualityRule) string {
-	if rule.Code != "" {
-		return rule.Code
-	}
-	return snakeCode(rule.ID)
 }
 
 func (s *ruleService) taken(id string) bool {

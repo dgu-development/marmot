@@ -648,6 +648,7 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	extensionHandler, extensionTasks, err := extensionRoutes(extensionServices{
 		db: db, domains: domainSvc, users: userSvc, teams: teamSvc, assets: assetSvc, registry: metamodelRegistry,
 		glossary: glossarySvc, rules: assetRuleSvc, notifications: notificationSvc,
+		quality: quality.NewEngine(metamodelRegistry, assetRepo, quality.NewAssetFacts(db), assetSvc),
 	}, authSvc, config)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to register extensions")

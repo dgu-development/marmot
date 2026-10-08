@@ -9,6 +9,7 @@ import (
 
 	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/metamodel"
+	extquality "github.com/marmotdata/marmot/pkg/extension/quality"
 	"github.com/rs/zerolog/log"
 )
 
@@ -28,7 +29,7 @@ const (
 var (
 	ErrRunInProgress    = errors.New("a quality run is already in progress")
 	ErrRunNotFound      = errors.New("quality run not found")
-	ErrMetamodelOff     = errors.New("the metamodel profile is not loaded")
+	ErrMetamodelOff     = extquality.ErrNoProfile
 	errRunInterrupted   = errors.New("interrupted")
 	staleAfter          = 5 * time.Minute
 	failureWriteTimeout = 10 * time.Second
