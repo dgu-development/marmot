@@ -168,7 +168,7 @@ func (r *PostgresRepository) RefsByID(ctx context.Context, ids []string) ([]Asse
 		return []AssetRef{}, nil
 	}
 	return r.refs(ctx, `SELECT id::text, COALESCE(name, mrn, ''), type, providers, mrn FROM assets
-		WHERE id = ANY($1::uuid[]) ORDER BY name`, ids)
+		WHERE id = ANY($1::text[]) ORDER BY name`, ids)
 }
 
 func (r *PostgresRepository) ReferencedBy(ctx context.Context, path []string, id string) ([]AssetRef, error) {

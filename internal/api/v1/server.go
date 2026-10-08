@@ -43,6 +43,7 @@ import (
 	"github.com/marmotdata/marmot/internal/background"
 	agentService "github.com/marmotdata/marmot/internal/core/agent"
 	"github.com/marmotdata/marmot/internal/core/asset"
+	"github.com/marmotdata/marmot/internal/core/contentpack"
 	"github.com/marmotdata/marmot/internal/core/assetdocs"
 	assetruleService "github.com/marmotdata/marmot/internal/core/assetrule"
 	authService "github.com/marmotdata/marmot/internal/core/auth"
@@ -150,6 +151,8 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	}
 
 	assetSvc := asset.NewService(assetRepo, asset.WithMetamodel(metamodelRegistry))
+	// Content packs are the deployment's own configuration: they are applied without the domain guard.
+	packAssets := assetSvc
 	searchRepo.SetAssetBadgePaths(metamodelRegistry.BadgeStorages("asset"))
 	var domainRepo *domainService.PostgresRepository
 	var domainSvc domainService.Service
@@ -716,7 +719,26 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 		}
 	}
 
+	applyContentPacks(config.Metamodel.Packs, metamodelRegistry, packAssets)
+
 	return server
+}
+
+// applyContentPacks creates the reference assets the deployment ships with. A pack that fails is
+// logged and the server starts: the catalog is usable without it.
+func applyContentPacks(dir string, registry *metamodel.Registry, assets contentpack.Assets) {
+	packs, err := contentpack.LoadDir(dir)
+	if err != nil {
+		log.Error().Err(err).Str("dir", dir).Msg("Failed to load content packs")
+		return
+	}
+	created, err := contentpack.Apply(context.Background(), packs, registry, assets)
+	if err != nil {
+		log.Error().Err(err).Msg("Some content pack assets were not created")
+	}
+	if len(packs) > 0 {
+		log.Info().Int("packs", len(packs)).Int("created", created).Msg("Content packs applied")
+	}
 }
 
 func (s *Server) Stop() {
