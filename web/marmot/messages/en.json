@@ -235,7 +235,7 @@
 	"assetnew_error_name_too_short": "Name must be at least 2 characters",
 	"assetnew_error_provider_required": "At least one provider is required",
 	"assetnew_error_type_required": "Asset type is required",
-	"assetnew_name_hint": "A unique identifier for this asset in your data catalog",
+	"assetnew_name_hint": "A title for this asset in your data catalog",
 	"assetnew_name_label": "Asset Name",
 	"assetnew_name_placeholder": "e.g., user_events, orders_table",
 	"assetnew_optional_suffix": "(Optional)",
