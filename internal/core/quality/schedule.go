@@ -3,10 +3,8 @@ package quality
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
-	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
 
@@ -15,22 +13,9 @@ import (
 // schedules it runs on a singleton task, so one replica at a time checks.
 const ScheduleCheckInterval = 30 * time.Second
 
-// parseSchedule reads a five-field cron expression with the parser the ingestion schedules use, so
-// the same expression means the same hour in a pipeline and in the audit: the server's local zone,
-// unless the expression names its own (`CRON_TZ=Europe/Madrid 0 3 * * *`). Empty means manual only
-// (nil, nil). The library reads a schedule without a zone in the zone of the time it is asked about,
-// so callers hand it times in the server's.
-func parseSchedule(expression string) (cron.Schedule, error) {
-	expression = strings.TrimSpace(expression)
-	if expression == "" {
-		return nil, nil
-	}
-	return cronParser.Parse(expression)
-}
-
 // NextRun is when an expression fires next after t; false when it is empty.
 func NextRun(expression string, after time.Time) (time.Time, bool, error) {
-	schedule, err := parseSchedule(expression)
+	schedule, err := ParseSchedule(expression)
 	if err != nil || schedule == nil {
 		return time.Time{}, false, err
 	}
@@ -61,7 +46,7 @@ func NewScheduler(settings Service, runs RunService, last LastRunSource) *Schedu
 // one that passed before it existed, and counting any run, a manual one included, avoids running
 // twice for one slot. A slot missed while the server was down fires once, not once per slot.
 func (s *Scheduler) due(ctx context.Context, stored *Stored) (next time.Time, scheduled bool, err error) {
-	schedule, err := parseSchedule(stored.Schedule)
+	schedule, err := ParseSchedule(stored.Schedule)
 	if err != nil || schedule == nil {
 		return time.Time{}, false, err
 	}

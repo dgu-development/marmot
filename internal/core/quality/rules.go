@@ -9,20 +9,6 @@ import (
 	"github.com/marmotdata/marmot/internal/core/metamodel"
 )
 
-// RuleSource says where a rule comes from, and so who may change it.
-type RuleSource string
-
-const (
-	// SourceBuiltin rules judge what the metamodel itself defines; only their severity and whether
-	// they apply are set, in the settings.
-	SourceBuiltin RuleSource = "builtin"
-	// SourceProfile rules are declared in the metamodel profile, which ships with the platform and
-	// is read-only at runtime; their severity and whether they apply are set in the settings.
-	SourceProfile RuleSource = "profile"
-	// SourceCustom rules are written in the interface and kept in the database.
-	SourceCustom RuleSource = "custom"
-)
-
 // compiledCondition is a condition ready to evaluate: its regular expression compiled once.
 type compiledCondition struct {
 	metamodel.QualityCondition
@@ -97,8 +83,8 @@ func activeRules(registry *metamodel.Registry, settings Settings, custom []Custo
 	}
 	fields := registry.QualityRuleFields()
 	for _, c := range custom {
-		if c.Enabled && metamodel.ValidateQualityRule(c.QualityRule, fields, true) == nil {
-			out = append(out, compileRule(c.QualityRule, Severity(c.Severity)))
+		if c.Enabled && metamodel.ValidateQualityRule(c.Rule, fields, true) == nil {
+			out = append(out, compileRule(c.Rule, Severity(c.Severity)))
 		}
 	}
 	return out

@@ -94,16 +94,6 @@ type ScoreWriter interface {
 	Update(ctx context.Context, id string, input asset.UpdateInput) (*asset.Asset, error)
 }
 
-// ScoreCounts is how a batch of writes went. A conflict is an asset someone edited after the audit
-// read it: the next run scores it, so it is not an error.
-type ScoreCounts struct{ Written, Conflicts, Failed int }
-
-func (c *ScoreCounts) add(other ScoreCounts) {
-	c.Written += other.Written
-	c.Conflicts += other.Conflicts
-	c.Failed += other.Failed
-}
-
 // publish writes the scores that changed as the platform: it keeps the asset's version honest
 // (the write is refused if the asset moved on), does not notify whoever follows the asset and is
 // not judged against the rest of the asset.

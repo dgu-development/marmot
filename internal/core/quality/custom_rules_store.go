@@ -32,7 +32,7 @@ func scanCustom(row pgx.Row) (*CustomRule, error) {
 	if err := json.Unmarshal(raw, &definition); err != nil {
 		return nil, fmt.Errorf("decoding a custom quality rule: %w", err)
 	}
-	rule.QualityRule = definition
+	rule.Rule = definition
 	return &rule, nil
 }
 
@@ -68,7 +68,7 @@ func (r *PostgresRuleRepository) Count(ctx context.Context) (int, error) {
 }
 
 func (r *PostgresRuleRepository) Create(ctx context.Context, rule CustomRule) (*CustomRule, error) {
-	raw, err := json.Marshal(rule.QualityRule)
+	raw, err := json.Marshal(rule.Rule)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (r *PostgresRuleRepository) Create(ctx context.Context, rule CustomRule) (*
 }
 
 func (r *PostgresRuleRepository) Update(ctx context.Context, rule CustomRule, expected int64) (*CustomRule, error) {
-	raw, err := json.Marshal(rule.QualityRule)
+	raw, err := json.Marshal(rule.Rule)
 	if err != nil {
 		return nil, err
 	}

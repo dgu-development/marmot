@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"time"
 
 	"github.com/marmotdata/marmot/internal/core/metamodel"
 )
@@ -24,18 +23,6 @@ var (
 	ErrRuleVersionRequired = errors.New("quality rule version required")
 )
 
-// CustomRule is a rule written in the interface. It is kept in the database, versioned for
-// compare-and-set like the settings, and evaluated like a rule of the profile.
-type CustomRule struct {
-	metamodel.QualityRule
-	Enabled   bool      `json:"enabled"`
-	Version   int64     `json:"version"`
-	CreatedBy string    `json:"created_by,omitempty"`
-	UpdatedBy string    `json:"updated_by,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-} // @name QualityCustomRule
-
 // RuleRepository stores the custom rules.
 type RuleRepository interface {
 	List(ctx context.Context) ([]CustomRule, error)
@@ -47,30 +34,6 @@ type RuleRepository interface {
 	Delete(ctx context.Context, id string) error
 	Count(ctx context.Context) (int, error)
 }
-
-// RuleInfo is a rule as the interface lists it, wherever it comes from.
-type RuleInfo struct {
-	ID     RuleID     `json:"id"`
-	Source RuleSource `json:"source" enums:"builtin,profile,custom"`
-	// Name and Description are literal text, of a custom rule; LabelKey and DescriptionKey resolve
-	// through the profile's messages, for a profile rule; a built-in rule has neither and the
-	// client names it by its id.
-	Name           string `json:"name,omitempty"`
-	Description    string `json:"description,omitempty"`
-	LabelKey       string `json:"label_key,omitempty"`
-	DescriptionKey string `json:"description_key,omitempty"`
-	Code           string `json:"code,omitempty"`
-	// Dimension is the quality dimension the rule feeds.
-	Dimension string   `json:"dimension" enums:"completeness,validity,consistency,timeliness"`
-	Severity  Severity `json:"severity" enums:"error,warning"`
-	Enabled   bool     `json:"enabled"`
-	// Definition is what the rule checks, for the rules that declare it.
-	Definition *metamodel.QualityRule `json:"definition,omitempty"`
-	// Version, for a custom rule, is what to send back with If-Match.
-	Version int64 `json:"version,omitempty"`
-	// Problem says why a custom rule is not applied: it names a field the profile no longer has.
-	Problem string `json:"problem,omitempty"`
-} // @name QualityRuleInfo
 
 // RuleService reads the rules and manages the custom ones.
 type RuleService interface {
@@ -123,12 +86,12 @@ func (s *ruleService) Rules(ctx context.Context) ([]RuleInfo, error) {
 	}
 	fields := s.registry.QualityRuleFields()
 	for _, c := range custom {
-		definition := c.QualityRule
+		definition := c.Rule
 		info := RuleInfo{
-			ID: RuleID(c.ID), Source: SourceCustom, Dimension: c.Dimension, Name: c.Name, Description: c.Description, Code: ruleCode(c.QualityRule),
+			ID: RuleID(c.ID), Source: SourceCustom, Dimension: c.Dimension, Name: c.Name, Description: c.Description, Code: ruleCode(c.Rule),
 			Severity: Severity(c.Severity), Enabled: c.Enabled, Definition: &definition, Version: c.Version,
 		}
-		if err := metamodel.ValidateQualityRule(c.QualityRule, fields, true); err != nil {
+		if err := metamodel.ValidateQualityRule(c.Rule, fields, true); err != nil {
 			info.Problem = "invalid"
 		}
 		out = append(out, info)
@@ -175,7 +138,7 @@ func (s *ruleService) Create(ctx context.Context, rule metamodel.QualityRule, en
 	if count >= MaxCustomRules {
 		return nil, ErrRuleLimit
 	}
-	return s.repo.Create(ctx, CustomRule{QualityRule: rule, Enabled: enabled, CreatedBy: by, UpdatedBy: by})
+	return s.repo.Create(ctx, CustomRule{Rule: rule, Enabled: enabled, CreatedBy: by, UpdatedBy: by})
 }
 
 func (s *ruleService) Update(ctx context.Context, id string, rule metamodel.QualityRule, enabled bool, expected int64, by string) (*CustomRule, error) {
@@ -186,7 +149,7 @@ func (s *ruleService) Update(ctx context.Context, id string, rule metamodel.Qual
 	if err := s.validate(rule); err != nil {
 		return nil, err
 	}
-	return s.repo.Update(ctx, CustomRule{QualityRule: rule, Enabled: enabled, UpdatedBy: by}, expected)
+	return s.repo.Update(ctx, CustomRule{Rule: rule, Enabled: enabled, UpdatedBy: by}, expected)
 }
 
 func (s *ruleService) Delete(ctx context.Context, id string) error { return s.repo.Delete(ctx, id) }

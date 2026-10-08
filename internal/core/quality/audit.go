@@ -10,61 +10,12 @@ import (
 	"github.com/marmotdata/marmot/internal/core/metamodel"
 )
 
-type Status string
-
-const (
-	StatusCompliant    Status = "compliant"
-	StatusWarning      Status = "warning"
-	StatusNoncompliant Status = "noncompliant"
-)
-
-// UnassignedDomain is the key of the assets that belong to no domain.
-const UnassignedDomain = "unassigned"
-
 // outputFields are written by the audit, not read: publishing a score must not change the score.
 var outputFields = []string{
 	"metadata_quality_score", "metadata_quality_dimensions", "metadata_quality_evaluated_at",
 	// The names these fields had before; a profile that still declares them is not audited on them.
 	"quality_score", "quality_dimensions", "quality_evaluated_at", "quality_run", "quality_scored_at",
 }
-
-// Issue is one finding on one field of one asset.
-type Issue struct {
-	FieldID  string   `json:"field_id"`
-	Code     string   `json:"code"`
-	RuleID   RuleID   `json:"rule_id"`
-	Severity Severity `json:"severity" enums:"error,warning"`
-	Section  string   `json:"section"`
-	// Item is the position of the offending entry when the field is a list.
-	Item *int `json:"item,omitempty"`
-} // @name QualityIssue
-
-// SectionStat counts how many of a section's fields an asset has, fills and fills validly.
-type SectionStat struct{ Total, Filled, Valid int }
-
-// AssetResult is what the audit concluded about one asset.
-type AssetResult struct {
-	AssetID  string `json:"asset_id"`
-	MRN      string `json:"mrn"`
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	DomainID string `json:"domain_id"`
-	// Scores are the score of each quality dimension that applies to the asset, out of 100.
-	Scores     map[string]float64 `json:"scores"`
-	Quality    float64            `json:"quality"`
-	Status     Status             `json:"status" enums:"compliant,warning,noncompliant"`
-	IssueCount int                `json:"issue_count"`
-	// Issues is filled for the last successful run only.
-	Issues []Issue `json:"issues,omitempty"`
-
-	// Stub marks a placeholder created by lineage: it is counted apart and never stored or scored.
-	Stub     bool                   `json:"stub,omitempty"`
-	Sections map[string]SectionStat `json:"-"`
-	// Dimensions are the checks the asset meets, in the order of dimensionOrder; they are written
-	// to the asset with its score and are not stored with the results, so only an evaluation of
-	// an asset carries them.
-	Dimensions []string `json:"dimensions,omitempty"`
-} // @name QualityAssetResult
 
 // Auditor scores assets against the effective metamodel with the settings of one run.
 type Auditor struct {
@@ -260,7 +211,7 @@ func (a *Auditor) AuditWithDocs(as *asset.Asset, hasPages bool) AssetResult {
 			result.Scores[dimension] = 100
 		}
 	}
-	quality := a.settings.Weights.mix(result.Scores)
+	quality := a.settings.Weights.Mix(result.Scores)
 	result.Quality = round(quality)
 	switch {
 	case quality >= a.settings.Thresholds.Compliant && !hasError:
