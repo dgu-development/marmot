@@ -69,7 +69,9 @@
 	function validateName(value: string): string | null {
 		if (!value.trim()) return m.assetnew_error_name_required();
 		if (value.trim().length < 2) return m.assetnew_error_name_too_short();
-		if (!/^[a-zA-Z0-9_\-.]+$/.test(value.trim())) return m.assetnew_error_name_charset();
+		// A business asset is named by people; the server derives its identifier from the name.
+		if (!isManual && !/^[a-zA-Z0-9_\-.]+$/.test(value.trim()))
+			return m.assetnew_error_name_charset();
 		return null;
 	}
 
@@ -363,7 +365,9 @@
 		? canProceedToStep2
 		: currentStep === 2
 			? canProceedToStep3
-			: !!name.trim() && !!assetType.trim() && providers.length > 0}
+			: isManual
+				? !!name.trim() && !!manualType
+				: !!name.trim() && !!assetType.trim() && providers.length > 0}
 	{saving}
 	saveLabel={m.assetnew_create_asset()}
 	savingLabel={m.assetnew_creating()}
@@ -430,7 +434,10 @@
 									class="sr-only"
 									value={option.id}
 									checked={origin === option.id}
-									onchange={() => (origin = option.id as 'technical' | 'manual')}
+									onchange={() => {
+										origin = option.id as 'technical' | 'manual';
+										if (touched['name']) validateField('name');
+									}}
 								/>
 								<IconifyIcon icon={option.icon} class="mt-0.5 h-5 w-5 flex-shrink-0" />
 								<span>
