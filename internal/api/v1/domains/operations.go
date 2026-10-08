@@ -90,7 +90,6 @@ var errorCodes = []struct {
 	code   string
 }{
 	{domain.ErrNotFound, http.StatusNotFound, "not_found"},
-	{domain.ErrVersionNotFound, http.StatusNotFound, "version_not_found"},
 	{domain.ErrEntityNotFound, http.StatusNotFound, "entity_not_found"},
 	{domain.ErrInvalidInput, http.StatusBadRequest, "invalid_input"},
 	{domain.ErrCycle, http.StatusBadRequest, "cycle"},

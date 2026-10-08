@@ -65,6 +65,8 @@ Anything in that "Fork GitHub forms, CODEOWNERS, this file" cell must never reac
 
 Upstream-candidate: branch from a freshly fetched `upstream/main`. Open a PR to **marmotdata/marmot** and land the **same** patch on `dgu` by cherry-pick (see above). Do not rewrite the change twice. After upstream merges, fast-forward `origin/main`, then open PR **`main` → `dgu`** so the product line also picks up the rest of Marmot — that PR carries the rest of upstream, not the patch you already backported.
 
+A capability with its own routes and tables does not belong here either: it is an extension, a repository of its own compiled into the server through `pkg/extension`. [EXTENSIONS.md](EXTENSIONS.md) has the contract and the two seams. What stays in this fork is what changes the behaviour of the core.
+
 ## Labels
 
 - `fork-only` — will not be proposed upstream
