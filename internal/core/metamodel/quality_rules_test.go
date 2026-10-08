@@ -19,6 +19,8 @@ fields:
   - {id: code, type: string, core: true, nullable: true, storage: metadata.r.code, presentation: {labelKey: r.code}}
   - {id: days, type: integer, core: true, nullable: true, storage: metadata.r.days, presentation: {labelKey: r.days}}
   - {id: areas, type: list, itemType: enum, values: [a, b], core: true, nullable: true, storage: metadata.r.areas, presentation: {labelKey: r.areas}}
+  - {id: homepage, type: url, core: true, nullable: true, storage: metadata.r.homepage, presentation: {labelKey: r.homepage}}
+  - {id: laws, type: list, itemType: url, core: true, nullable: true, storage: metadata.r.laws, presentation: {labelKey: r.laws}}
   - {id: glossary_only, type: string, core: true, nullable: true, appliesTo: {kinds: [glossary_term]}, storage: metadata.r.glossary, presentation: {labelKey: r.glossary}}
 `
 
@@ -129,6 +131,8 @@ func TestConditionsAreCheckedAgainstTheFieldsTheyName(t *testing.T) {
 		{Field: "code", Op: OpMatches, Value: `[A-Z]{3}-\d+`},
 		{Field: "days", Op: OpAtLeast, Value: 1.0},
 		{Field: "areas", Op: OpContains, Value: "a"},
+		{Field: "homepage", Op: OpEquals, Value: "https://example.org/a"},
+		{Field: "laws", Op: OpContains, Value: "https://example.org/eli/1"},
 		{Field: "areas", Op: OpMinItems, Value: 1.0},
 		{Field: "review", Op: OpNotBefore, Value: "today"},
 		{Field: "review", Op: OpNotAfter, Value: "today", Days: 30},
