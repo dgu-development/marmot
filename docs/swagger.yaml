@@ -203,6 +203,30 @@ definitions:
       url:
         type: string
     type: object
+  AssetRef:
+    properties:
+      id:
+        type: string
+      mrn:
+        type: string
+      name:
+        type: string
+      providers:
+        items:
+          type: string
+        type: array
+      type:
+        type: string
+    type: object
+  AssetReferences:
+    properties:
+      assets:
+        items:
+          $ref: '#/definitions/AssetRef'
+        type: array
+      field:
+        type: string
+    type: object
   AssetRule:
     properties:
       created_at:
@@ -1632,6 +1656,565 @@ definitions:
       url:
         type: string
     type: object
+  QualityAssetResult:
+    properties:
+      asset_id:
+        type: string
+      dimensions:
+        description: |-
+          Dimensions are the checks the asset meets, in the order of dimensionOrder; they are written
+          to the asset with its score and are not stored with the results, so only an evaluation of
+          an asset carries them.
+        items:
+          type: string
+        type: array
+      domain_id:
+        type: string
+      issue_count:
+        type: integer
+      issues:
+        description: Issues is filled for the last successful run only.
+        items:
+          $ref: '#/definitions/QualityIssue'
+        type: array
+      mrn:
+        type: string
+      name:
+        type: string
+      quality:
+        type: number
+      scores:
+        additionalProperties:
+          format: float64
+          type: number
+        description: Scores are the score of each quality dimension that applies to
+          the asset, out of 100.
+        type: object
+      status:
+        allOf:
+        - $ref: '#/definitions/quality.Status'
+        enum:
+        - compliant
+        - warning
+        - noncompliant
+      stub:
+        description: 'Stub marks a placeholder created by lineage: it is counted apart
+          and never stored or scored.'
+        type: boolean
+      type:
+        type: string
+    type: object
+  QualityCondition:
+    properties:
+      days:
+        description: Days moves the date a date operator compares with, from today
+          or from the given date.
+        type: integer
+      field:
+        type: string
+      op:
+        type: string
+      optional:
+        description: 'Optional, in a check, lets an empty field pass instead of failing:
+          nothing to judge.'
+        type: boolean
+      value:
+        description: Value is what the operator compares with; set and unset take
+          none.
+    type: object
+  QualityCustomRule:
+    properties:
+      checks:
+        items:
+          $ref: '#/definitions/QualityCondition'
+        type: array
+      code:
+        description: |-
+          Code is the finding code the audit reports, which clients translate; it defaults to a
+          snake_case form of the id.
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: string
+      description:
+        type: string
+      descriptionKey:
+        type: string
+      dimension:
+        description: Dimension is the quality dimension whose score the rule's checks
+          feed.
+        enum:
+        - completeness
+        - validity
+        - consistency
+        - timeliness
+        type: string
+      enabled:
+        type: boolean
+      id:
+        type: string
+      labelKey:
+        type: string
+      name:
+        description: |-
+          Name and Description are text in the language of whoever wrote the rule. A profile rule
+          uses LabelKey and DescriptionKey, which resolve through the profile's messages.
+        type: string
+      severity:
+        description: 'Severity is what a finding of the rule counts as: error or warning.'
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: string
+      version:
+        type: integer
+      when:
+        items:
+          $ref: '#/definitions/QualityCondition'
+        type: array
+    type: object
+  QualityEvaluateRequest:
+    properties:
+      asset_ids:
+        items:
+          type: string
+        type: array
+    type: object
+  QualityEvaluateResponse:
+    properties:
+      results:
+        items:
+          $ref: '#/definitions/QualityAssetResult'
+        type: array
+    type: object
+  QualityFieldCount:
+    properties:
+      count:
+        type: integer
+      field_id:
+        type: string
+    type: object
+  QualityFieldError:
+    properties:
+      code:
+        type: string
+      field:
+        type: string
+    type: object
+  QualityGroupStat:
+    properties:
+      count:
+        type: integer
+      key:
+        type: string
+      value:
+        type: number
+    type: object
+  QualityIssue:
+    properties:
+      code:
+        type: string
+      field_id:
+        type: string
+      item:
+        description: Item is the position of the offending entry when the field is
+          a list.
+        type: integer
+      rule_id:
+        $ref: '#/definitions/quality.RuleID'
+      section:
+        type: string
+      severity:
+        allOf:
+        - $ref: '#/definitions/quality.Severity'
+        enum:
+        - error
+        - warning
+    type: object
+  QualityResultsResponse:
+    properties:
+      limit:
+        type: integer
+      offset:
+        type: integer
+      results:
+        items:
+          $ref: '#/definitions/QualityAssetResult'
+        type: array
+      total:
+        type: integer
+    type: object
+  QualityRetention:
+    properties:
+      result_days:
+        type: integer
+      run_days:
+        type: integer
+    type: object
+  QualityRule:
+    properties:
+      checks:
+        items:
+          $ref: '#/definitions/QualityCondition'
+        type: array
+      code:
+        description: |-
+          Code is the finding code the audit reports, which clients translate; it defaults to a
+          snake_case form of the id.
+        type: string
+      description:
+        type: string
+      descriptionKey:
+        type: string
+      dimension:
+        description: Dimension is the quality dimension whose score the rule's checks
+          feed.
+        enum:
+        - completeness
+        - validity
+        - consistency
+        - timeliness
+        type: string
+      id:
+        type: string
+      labelKey:
+        type: string
+      name:
+        description: |-
+          Name and Description are text in the language of whoever wrote the rule. A profile rule
+          uses LabelKey and DescriptionKey, which resolve through the profile's messages.
+        type: string
+      severity:
+        description: 'Severity is what a finding of the rule counts as: error or warning.'
+        type: string
+      when:
+        items:
+          $ref: '#/definitions/QualityCondition'
+        type: array
+    type: object
+  QualityRuleError:
+    properties:
+      problems:
+        items:
+          $ref: '#/definitions/QualityRuleProblem'
+        type: array
+    type: object
+  QualityRuleInfo:
+    properties:
+      code:
+        type: string
+      definition:
+        allOf:
+        - $ref: '#/definitions/QualityRule'
+        description: Definition is what the rule checks, for the rules that declare
+          it.
+      description:
+        type: string
+      description_key:
+        type: string
+      dimension:
+        description: Dimension is the quality dimension the rule feeds.
+        enum:
+        - completeness
+        - validity
+        - consistency
+        - timeliness
+        type: string
+      enabled:
+        type: boolean
+      id:
+        $ref: '#/definitions/quality.RuleID'
+      label_key:
+        type: string
+      name:
+        description: |-
+          Name and Description are literal text, of a custom rule; LabelKey and DescriptionKey resolve
+          through the profile's messages, for a profile rule; a built-in rule has neither and the
+          client names it by its id.
+        type: string
+      problem:
+        description: 'Problem says why a custom rule is not applied: it names a field
+          the profile no longer has.'
+        type: string
+      severity:
+        allOf:
+        - $ref: '#/definitions/quality.Severity'
+        enum:
+        - error
+        - warning
+      source:
+        allOf:
+        - $ref: '#/definitions/quality.RuleSource'
+        enum:
+        - builtin
+        - profile
+        - custom
+      version:
+        description: Version, for a custom rule, is what to send back with If-Match.
+        type: integer
+    type: object
+  QualityRuleProblem:
+    properties:
+      code:
+        type: string
+      path:
+        type: string
+    type: object
+  QualityRuleRequest:
+    properties:
+      checks:
+        items:
+          $ref: '#/definitions/QualityCondition'
+        type: array
+      code:
+        description: |-
+          Code is the finding code the audit reports, which clients translate; it defaults to a
+          snake_case form of the id.
+        type: string
+      description:
+        type: string
+      descriptionKey:
+        type: string
+      dimension:
+        description: Dimension is the quality dimension whose score the rule's checks
+          feed.
+        enum:
+        - completeness
+        - validity
+        - consistency
+        - timeliness
+        type: string
+      enabled:
+        type: boolean
+      id:
+        type: string
+      labelKey:
+        type: string
+      name:
+        description: |-
+          Name and Description are text in the language of whoever wrote the rule. A profile rule
+          uses LabelKey and DescriptionKey, which resolve through the profile's messages.
+        type: string
+      severity:
+        description: 'Severity is what a finding of the rule counts as: error or warning.'
+        type: string
+      when:
+        items:
+          $ref: '#/definitions/QualityCondition'
+        type: array
+    type: object
+  QualityRuleSetting:
+    properties:
+      enabled:
+        type: boolean
+      severity:
+        allOf:
+        - $ref: '#/definitions/quality.Severity'
+        enum:
+        - error
+        - warning
+    type: object
+  QualityRulesResponse:
+    properties:
+      rules:
+        items:
+          $ref: '#/definitions/QualityRuleInfo'
+        type: array
+    type: object
+  QualityRun:
+    properties:
+      custom_rules:
+        description: |-
+          CustomRules are the rules people wrote that the run applied, as they were when it started;
+          only a single run read carries them.
+        items:
+          $ref: '#/definitions/QualityCustomRule'
+        type: array
+      error:
+        type: string
+      finished_at:
+        type: string
+      id:
+        type: string
+      metamodel_hash:
+        type: string
+      metamodel_profile:
+        type: string
+      metamodel_version:
+        type: integer
+      processed:
+        type: integer
+      score_conflicts:
+        type: integer
+      score_failures:
+        type: integer
+      scores_written:
+        description: |-
+          ScoresWritten, ScoreConflicts and ScoreFailures say how writing the scores on the assets
+          went: written, skipped because the asset was edited after it was read, and failed.
+        type: integer
+      settings:
+        $ref: '#/definitions/QualitySettings'
+      settings_version:
+        type: integer
+      started_at:
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/quality.RunStatus'
+        enum:
+        - running
+        - succeeded
+        - failed
+      summary:
+        $ref: '#/definitions/QualitySummary'
+      total:
+        type: integer
+      trigger:
+        enum:
+        - manual
+        - schedule
+        type: string
+      triggered_by:
+        type: string
+    type: object
+  QualityRunConflict:
+    properties:
+      error:
+        type: string
+      run:
+        $ref: '#/definitions/QualityRun'
+    type: object
+  QualityRunsResponse:
+    properties:
+      limit:
+        type: integer
+      offset:
+        type: integer
+      runs:
+        items:
+          $ref: '#/definitions/QualityRun'
+        type: array
+      total:
+        type: integer
+    type: object
+  QualitySettings:
+    properties:
+      batch_size:
+        type: integer
+      max_run_seconds:
+        type: integer
+      retention:
+        $ref: '#/definitions/QualityRetention'
+      rules:
+        additionalProperties:
+          $ref: '#/definitions/QualityRuleSetting'
+        type: object
+      schedule:
+        description: Schedule is a five-field cron expression; empty means runs are
+          manual only.
+        type: string
+      thresholds:
+        $ref: '#/definitions/QualityThresholds'
+      weights:
+        $ref: '#/definitions/QualityWeights'
+    type: object
+  QualitySettingsResponse:
+    properties:
+      batch_size:
+        type: integer
+      max_run_seconds:
+        type: integer
+      next_run:
+        type: string
+      retention:
+        $ref: '#/definitions/QualityRetention'
+      rules:
+        additionalProperties:
+          $ref: '#/definitions/QualityRuleSetting'
+        type: object
+      schedule:
+        description: Schedule is a five-field cron expression; empty means runs are
+          manual only.
+        type: string
+      thresholds:
+        $ref: '#/definitions/QualityThresholds'
+      updated_at:
+        type: string
+      updated_by:
+        type: string
+      version:
+        type: integer
+      weights:
+        $ref: '#/definitions/QualityWeights'
+    type: object
+  QualitySummary:
+    properties:
+      by_dimension:
+        description: ByDimension is the mean score of each quality dimension, over
+          the assets it applies to.
+        items:
+          $ref: '#/definitions/QualityGroupStat'
+        type: array
+      by_domain:
+        description: |-
+          ByDomain is one more aggregate of the run, not a filter of it; the assets of no domain are
+          under "unassigned".
+        items:
+          $ref: '#/definitions/QualityGroupStat'
+        type: array
+      by_section:
+        items:
+          $ref: '#/definitions/QualityGroupStat'
+        type: array
+      by_type:
+        items:
+          $ref: '#/definitions/QualityGroupStat'
+        type: array
+      quality:
+        type: number
+      status_counts:
+        additionalProperties:
+          type: integer
+        type: object
+      stubs:
+        type: integer
+      top_fields:
+        items:
+          $ref: '#/definitions/QualityFieldCount'
+        type: array
+      total_assets:
+        type: integer
+      total_issues:
+        type: integer
+    type: object
+  QualityThresholds:
+    properties:
+      compliant:
+        type: number
+      warning:
+        type: number
+    type: object
+  QualityValidationError:
+    properties:
+      fields:
+        items:
+          $ref: '#/definitions/QualityFieldError'
+        type: array
+    type: object
+  QualityWeights:
+    properties:
+      completeness:
+        type: number
+      consistency:
+        type: number
+      timeliness:
+        type: number
+      validity:
+        type: number
+    type: object
   QueryCount:
     properties:
       count:
@@ -2428,6 +3011,7 @@ definitions:
       parent_term_id:
         type: string
       tags:
+        description: Absent leaves the stored tags alone; an empty list clears them.
         items:
           type: string
         type: array
@@ -2912,6 +3496,10 @@ definitions:
         items:
           type: string
         type: array
+      termTypes:
+        items:
+          type: string
+        type: array
     type: object
   metamodel.Constraints:
     properties:
@@ -2967,10 +3555,27 @@ definitions:
         type: boolean
       storage:
         type: string
+      system:
+        description: |-
+          System marks a field only the platform writes, such as the quality score the audit
+          computes. The API refuses it with the code `system`, ingestion and whole-asset updates
+          leave it as it was, and the interface shows it read-only. An asset field bound to metadata.
+        type: boolean
       type:
         type: string
       validation:
         $ref: '#/definitions/metamodel.Constraints'
+      values:
+        items:
+          type: string
+        type: array
+    type: object
+  metamodel.Manual:
+    properties:
+      provider:
+        type: string
+      type:
+        type: string
       values:
         items:
           type: string
@@ -3002,15 +3607,29 @@ definitions:
         type: string
       inverseLabelKey:
         description: |-
-          InverseLabelKey names a glossary_term link seen from the term it points
-          to, such as "Acronyms" for a "Stands for" field.
+          InverseLabelKey names a glossary_term or asset link seen from the entity it points
+          to, such as "Acronyms" for a "Stands for" field. "asset" holds asset IDs, in a string or
+          a list of strings, on asset fields only; the asset service checks the assets exist.
         type: string
       labelKey:
         type: string
+      manual:
+        allOf:
+        - $ref: '#/definitions/metamodel.Manual'
+        description: |-
+          Manual marks an asset enum whose Values can be created by hand, with no discovery source
+          behind them: the create form offers them and stores the fixed native type and provider.
       order:
         type: integer
       section:
         type: string
+      targetAssetTypes:
+        description: |-
+          TargetAssetTypes narrows an asset link to assets whose asset_type is listed; the asset
+          service rejects any other target. Empty accepts every asset.
+        items:
+          type: string
+        type: array
       valueLabelKeys:
         additionalProperties:
           type: string
@@ -3047,6 +3666,12 @@ definitions:
           locale then by key. A key missing from the current locale falls back to
           defaultLocale, then to the raw key. Clients own this fallback chain.
         type: object
+      qualityRules:
+        description: QualityRules are the checks the quality audit applies on top
+          of the fields' own validation.
+        items:
+          $ref: '#/definitions/QualityRule'
+        type: array
       version:
         type: integer
     type: object
@@ -3198,6 +3823,56 @@ definitions:
       pattern:
         type: string
     type: object
+  quality.RuleID:
+    enum:
+    - required
+    - validation
+    - externalLinkInvalid
+    - externalLinkEmpty
+    type: string
+    x-enum-varnames:
+    - RuleRequired
+    - RuleValidation
+    - RuleExternalLinkInvalid
+    - RuleExternalLinkEmpty
+  quality.RuleSource:
+    enum:
+    - builtin
+    - profile
+    - custom
+    type: string
+    x-enum-varnames:
+    - SourceBuiltin
+    - SourceProfile
+    - SourceCustom
+  quality.RunStatus:
+    enum:
+    - running
+    - succeeded
+    - failed
+    type: string
+    x-enum-varnames:
+    - RunRunning
+    - RunSucceeded
+    - RunFailed
+  quality.Severity:
+    enum:
+    - error
+    - warning
+    type: string
+    x-enum-varnames:
+    - SeverityError
+    - SeverityWarning
+  quality.Status:
+    enum:
+    - compliant
+    - warning
+    - noncompliant
+    type: string
+    x-enum-varnames:
+    - StatusCompliant
+    - StatusWarning
+    - StatusNoncompliant
   v1_assets.patchFieldsRequest:
     properties:
       fields:
@@ -3345,225 +4020,6 @@ definitions:
       new_password:
         type: string
       password:
-        type: string
-    type: object
-  v1_workflows.CompleteRequest:
-    properties:
-      comment:
-        type: string
-      decision:
-        type: string
-    type: object
-  v1_workflows.DefinitionRequest:
-    properties:
-      bpmn:
-        type: string
-    type: object
-  v1_workflows.ErrorResponse:
-    properties:
-      code:
-        type: string
-      error:
-        type: string
-      issues:
-        items:
-          $ref: '#/definitions/workflow.Issue'
-        type: array
-    type: object
-  v1_workflows.StartRequest:
-    properties:
-      definition_id:
-        type: string
-      target:
-        $ref: '#/definitions/workflow.Target'
-    type: object
-  v1_workflows.ValidateResponse:
-    properties:
-      issues:
-        items:
-          $ref: '#/definitions/workflow.Issue'
-        type: array
-      valid:
-        type: boolean
-    type: object
-  workflow.Definition:
-    properties:
-      bpmn:
-        type: string
-      created_at:
-        type: string
-      created_by:
-        type: string
-      id:
-        type: string
-      issues:
-        description: 'Issues is filled on read: what keeps a draft from being published.'
-        items:
-          $ref: '#/definitions/workflow.Issue'
-        type: array
-      name:
-        type: string
-      process_key:
-        type: string
-      published_at:
-        type: string
-      status:
-        type: string
-      updated_at:
-        type: string
-      version:
-        type: integer
-    type: object
-  workflow.Event:
-    properties:
-      actor_id:
-        type: string
-      created_at:
-        type: string
-      detail:
-        additionalProperties: {}
-        type: object
-      element:
-        type: string
-      id:
-        type: integer
-      type:
-        type: string
-    type: object
-  workflow.Instance:
-    properties:
-      created_at:
-        type: string
-      definition_id:
-        type: string
-      definition_name:
-        type: string
-      ended_at:
-        type: string
-      failure_code:
-        type: string
-      failure_detail:
-        type: string
-      failure_element:
-        type: string
-      id:
-        type: string
-      initiator_id:
-        type: string
-      status:
-        type: string
-      target_id:
-        type: string
-      target_kind:
-        type: string
-      target_name:
-        type: string
-      updated_at:
-        type: string
-      version:
-        type: integer
-    type: object
-  workflow.InstanceDetail:
-    properties:
-      active:
-        description: Active lists the nodes that hold a token, to highlight in the
-          diagram.
-        items:
-          type: string
-        type: array
-      bpmn:
-        type: string
-      created_at:
-        type: string
-      definition_id:
-        type: string
-      definition_name:
-        type: string
-      ended_at:
-        type: string
-      events:
-        items:
-          $ref: '#/definitions/workflow.Event'
-        type: array
-      failure_code:
-        type: string
-      failure_detail:
-        type: string
-      failure_element:
-        type: string
-      id:
-        type: string
-      initiator_id:
-        type: string
-      status:
-        type: string
-      target_id:
-        type: string
-      target_kind:
-        type: string
-      target_name:
-        type: string
-      tasks:
-        items:
-          $ref: '#/definitions/workflow.Task'
-        type: array
-      updated_at:
-        type: string
-      version:
-        type: integer
-    type: object
-  workflow.Issue:
-    properties:
-      code:
-        type: string
-      detail:
-        type: string
-      element:
-        type: string
-    type: object
-  workflow.Target:
-    properties:
-      id:
-        type: string
-      kind:
-        type: string
-    type: object
-  workflow.Task:
-    properties:
-      candidates:
-        items:
-          type: string
-        type: array
-      comment:
-        type: string
-      completed_at:
-        type: string
-      completed_by:
-        type: string
-      created_at:
-        type: string
-      decision:
-        type: string
-      definition_name:
-        description: Filled when listed as an inbox, from the instance.
-        type: string
-      due_at:
-        type: string
-      id:
-        type: string
-      instance_id:
-        type: string
-      name:
-        type: string
-      node_id:
-        type: string
-      status:
-        type: string
-      target_id:
-        type: string
-      target_kind:
-        type: string
-      target_name:
         type: string
     type: object
 info:
@@ -4556,6 +5012,74 @@ paths:
       - ApiKeyAuth: []
       - BearerAuth: []
       summary: Get an asset by qualified name
+      tags:
+      - assets
+  /api/v1/assets/references/{id}:
+    get:
+      description: For each profile field with the asset control, the assets whose
+        value names this asset (for example, the rules that apply to a table).
+      operationId: getAssetReferences
+      parameters:
+      - description: Asset ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/AssetReferences'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Assets pointing at an asset
+      tags:
+      - assets
+  /api/v1/assets/refs:
+    get:
+      description: The assets with the given IDs, for showing asset-control values
+        by name. Unknown IDs are left out.
+      operationId: getAssetRefs
+      parameters:
+      - description: Comma-separated asset IDs (at most 100)
+        in: query
+        name: ids
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/AssetRef'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Resolve asset IDs
       tags:
       - assets
   /api/v1/assets/run-history-histogram/{id}:
@@ -7890,6 +8414,454 @@ paths:
       summary: Search data products
       tags:
       - products
+  /api/v1/quality/evaluate:
+    post:
+      consumes:
+      - application/json
+      description: 'Judges up to 200 assets as they are, with the current settings,
+        profile rules and custom rules, and records nothing. It is what a card on
+        an asset page shows: findings and the checks the asset meets. An id that is
+        not an asset is left out.'
+      operationId: evaluateQualityAssets
+      parameters:
+      - description: Assets
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/QualityEvaluateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/QualityEvaluateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Evaluate assets now
+      tags:
+      - quality
+  /api/v1/quality/rules:
+    get:
+      description: 'Every rule the audit applies: the built-in ones, the ones the
+        metamodel profile declares (read-only here) and the custom ones people wrote.
+        The severity and on/off of the first two are in the settings; a custom rule
+        carries its own.'
+      operationId: listQualityRules
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/QualityRulesResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: List the quality rules
+      tags:
+      - quality
+    post:
+      consumes:
+      - application/json
+      description: 'A declarative rule over the fields of the profile: a closed set
+        of operators, never code. 400 lists every problem with its path. The id is
+        generated when omitted.'
+      operationId: createQualityRule
+      parameters:
+      - description: Rule
+        in: body
+        name: rule
+        required: true
+        schema:
+          $ref: '#/definitions/QualityRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/QualityCustomRule'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/QualityRuleError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Create a custom quality rule
+      tags:
+      - quality
+  /api/v1/quality/rules/{id}:
+    delete:
+      operationId: deleteQualityRule
+      parameters:
+      - description: Rule ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Delete a custom quality rule
+      tags:
+      - quality
+    put:
+      consumes:
+      - application/json
+      description: Replaces a custom rule. Requires If-Match with the version read;
+        412 when someone changed it first. The rules of the profile cannot be changed
+        here.
+      operationId: updateQualityRule
+      parameters:
+      - description: Rule ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Version read, quoted
+        in: header
+        name: If-Match
+        required: true
+        type: string
+      - description: Rule
+        in: body
+        name: rule
+        required: true
+        schema:
+          $ref: '#/definitions/QualityRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/QualityCustomRule'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/QualityRuleError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "412":
+          description: Precondition Failed
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "428":
+          description: Precondition Required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Change a custom quality rule
+      tags:
+      - quality
+  /api/v1/quality/runs:
+    get:
+      description: Newest first, with the summary of the finished ones.
+      operationId: listQualityRuns
+      parameters:
+      - default: 20
+        description: Page size, up to 100
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/QualityRunsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: List quality audit runs
+      tags:
+      - quality
+    post:
+      description: 'Audits every asset of the catalog in the background, with the
+        saved settings and the effective metamodel. One run at a time: a second request
+        gets 409 with the run in progress.'
+      operationId: startQualityRun
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/QualityRun'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/QualityRunConflict'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Start a quality audit run
+      tags:
+      - quality
+  /api/v1/quality/runs/{id}:
+    get:
+      description: The run with its progress, the settings it used and, once finished,
+        its summary.
+      operationId: getQualityRun
+      parameters:
+      - description: Run ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/QualityRun'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Get a quality audit run
+      tags:
+      - quality
+  /api/v1/quality/runs/{id}/results:
+    get:
+      description: One entry per audited asset, weakest first. The findings of each
+        asset are only kept for the last successful run.
+      operationId: getQualityRunResults
+      parameters:
+      - description: Run ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: compliant, warning or noncompliant
+        in: query
+        name: status
+        type: string
+      - description: A domain ID, or unassigned
+        in: query
+        name: domain
+        type: string
+      - description: Asset type
+        in: query
+        name: type
+        type: string
+      - description: Text in the asset name or MRN
+        in: query
+        name: q
+        type: string
+      - description: quality (default) or name
+        in: query
+        name: sort
+        type: string
+      - default: 50
+        description: Page size, up to 500
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/QualityResultsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: List the results of a quality audit run
+      tags:
+      - quality
+  /api/v1/quality/settings:
+    get:
+      description: The criterion the platform's quality scores are computed with.
+        Version 0 means the defaults, not yet saved.
+      operationId: getQualitySettings
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/QualitySettingsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Get the quality audit settings
+      tags:
+      - quality
+    put:
+      consumes:
+      - application/json
+      description: Replaces the settings. Requires If-Match with the version read;
+        412 when someone saved first.
+      operationId: putQualitySettings
+      parameters:
+      - description: Version read, quoted; \
+        in: header
+        name: If-Match
+        required: true
+        type: string
+      - description: Settings
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/QualitySettings'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/QualitySettingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/QualityValidationError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "412":
+          description: Precondition Failed
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "428":
+          description: Precondition Required
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      - BearerAuth: []
+      summary: Change the quality audit settings
+      tags:
+      - quality
   /api/v1/roles:
     get:
       description: List all active roles with user counts and permissions
@@ -10102,351 +11074,6 @@ paths:
       summary: Update user password
       tags:
       - users
-  /api/v1/workflows/definitions:
-    get:
-      description: Managers see every version; everybody else only published ones.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/workflow.Definition'
-            type: array
-      summary: List workflow definitions
-      tags:
-      - workflows
-    post:
-      consumes:
-      - application/json
-      description: Stores the BPMN as the next version of its process id. A draft
-        may have issues; they come back and block publishing.
-      parameters:
-      - description: BPMN document
-        in: body
-        name: definition
-        required: true
-        schema:
-          $ref: '#/definitions/v1_workflows.DefinitionRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/workflow.Definition'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/v1_workflows.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/v1_workflows.ErrorResponse'
-      summary: Create a workflow draft
-      tags:
-      - workflows
-  /api/v1/workflows/definitions/{id}:
-    delete:
-      parameters:
-      - description: Definition ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "204":
-          description: No Content
-        "409":
-          description: Not a draft
-          schema:
-            $ref: '#/definitions/v1_workflows.ErrorResponse'
-      summary: Delete a workflow draft
-      tags:
-      - workflows
-    get:
-      parameters:
-      - description: Definition ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/workflow.Definition'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1_workflows.ErrorResponse'
-      summary: Get a workflow definition
-      tags:
-      - workflows
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Definition ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: BPMN document
-        in: body
-        name: definition
-        required: true
-        schema:
-          $ref: '#/definitions/v1_workflows.DefinitionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/workflow.Definition'
-        "409":
-          description: Not a draft
-          schema:
-            $ref: '#/definitions/v1_workflows.ErrorResponse'
-      summary: Replace a workflow draft
-      tags:
-      - workflows
-  /api/v1/workflows/definitions/{id}/bpmn:
-    get:
-      parameters:
-      - description: Definition ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - text/xml
-      responses:
-        "200":
-          description: BPMN 2.0 XML
-          schema:
-            type: string
-      summary: Export a workflow definition as BPMN
-      tags:
-      - workflows
-  /api/v1/workflows/definitions/{id}/publish:
-    post:
-      parameters:
-      - description: Definition ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/workflow.Definition'
-        "400":
-          description: The diagram cannot run
-          schema:
-            $ref: '#/definitions/v1_workflows.ErrorResponse'
-      summary: Publish a workflow draft
-      tags:
-      - workflows
-  /api/v1/workflows/definitions/{id}/retire:
-    post:
-      parameters:
-      - description: Definition ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/workflow.Definition'
-      summary: Retire a published workflow version
-      tags:
-      - workflows
-  /api/v1/workflows/definitions/validate:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: BPMN document
-        in: body
-        name: definition
-        required: true
-        schema:
-          $ref: '#/definitions/v1_workflows.DefinitionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1_workflows.ValidateResponse'
-      summary: Validate a BPMN document
-      tags:
-      - workflows
-  /api/v1/workflows/instances:
-    get:
-      description: Runs the caller started or has a task in; all=true lists every
-        run and needs workflows/manage.
-      parameters:
-      - description: Every run
-        in: query
-        name: all
-        type: boolean
-      - description: running, completed, failed or cancelled
-        in: query
-        name: status
-        type: string
-      - description: Target kind
-        in: query
-        name: target_kind
-        type: string
-      - description: Target ID
-        in: query
-        name: target_id
-        type: string
-      - description: At most 200
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/workflow.Instance'
-            type: array
-      summary: List workflow runs
-      tags:
-      - workflows
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Definition and optional target asset
-        in: body
-        name: run
-        required: true
-        schema:
-          $ref: '#/definitions/v1_workflows.StartRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/workflow.Instance'
-        "409":
-          description: Not published
-          schema:
-            $ref: '#/definitions/v1_workflows.ErrorResponse'
-      summary: Start a workflow run
-      tags:
-      - workflows
-  /api/v1/workflows/instances/{id}:
-    get:
-      description: With its tasks, audit events and diagram. Only for managers, its
-        initiator and its participants.
-      parameters:
-      - description: Run ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/workflow.InstanceDetail'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/v1_workflows.ErrorResponse'
-      summary: Get a workflow run
-      tags:
-      - workflows
-  /api/v1/workflows/instances/{id}/cancel:
-    post:
-      parameters:
-      - description: Run ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/workflow.Instance'
-      summary: Cancel a workflow run
-      tags:
-      - workflows
-  /api/v1/workflows/tasks:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/workflow.Task'
-            type: array
-      summary: List my open workflow tasks
-      tags:
-      - workflows
-  /api/v1/workflows/tasks/{id}/complete:
-    post:
-      consumes:
-      - application/json
-      description: The caller must be a candidate for the task now, not only when
-        it was created.
-      parameters:
-      - description: Task ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Decision and comment
-        in: body
-        name: decision
-        required: true
-        schema:
-          $ref: '#/definitions/v1_workflows.CompleteRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/workflow.Instance'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/v1_workflows.ErrorResponse'
-        "409":
-          description: Already decided or the run ended
-          schema:
-            $ref: '#/definitions/v1_workflows.ErrorResponse'
-      summary: Complete a workflow task
-      tags:
-      - workflows
   /auth-providers:
     get:
       description: Returns the enabled auth providers without sensitive data
