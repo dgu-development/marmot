@@ -13,7 +13,8 @@
 	import { locale } from '$lib/i18n';
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import { nativeMessage } from '$lib/metamodel/i18n';
-	import { valueLabel } from '$lib/metamodel/labels';
+	import { resolveMessage, valueLabel } from '$lib/metamodel/labels';
+	import { ALPHABETICAL_FROM, groupedValues } from '$lib/metamodel/values';
 	import type { MetamodelSchema } from '$lib/metamodel/types';
 
 	let name = $state('');
@@ -37,6 +38,24 @@
 	});
 	const manualLabel = (value: string) =>
 		(typeField && valueLabel(typeField, value, labelContext)) ?? value;
+
+	let typeQuery = $state('');
+	const fold = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+	const typeGroups = $derived.by(() => {
+		if (!manual || !typeField || !schema) return groupedValues([], [], '');
+		const query = fold(typeQuery.trim());
+		const matching = manual.values.filter((value) => fold(manualLabel(value)).includes(query));
+		return groupedValues(matching, schema.fields, typeField.id);
+	});
+	const groupLabel = (group: string) =>
+		(typeGroups.by && valueLabel(typeGroups.by, group, labelContext)) ?? group;
+	// The profile describes a value under the key of its label plus `.help`.
+	const manualHelp = $derived(
+		resolveMessage(
+			manualType && `${typeField?.presentation?.valueLabelKeys?.[manualType]}.help`,
+			labelContext
+		)
+	);
 
 	$effect(() => {
 		fetchMetamodel()
@@ -496,33 +515,70 @@
 		<div
 			class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6"
 		>
-			<h3 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-				<IconifyIcon
-					icon="material-symbols:category"
-					class="h-5 w-5 mr-2 text-earthy-terracotta-600"
-				/>
-				{m.assetnew_manual_type_heading()}
-			</h3>
-			<div role="radiogroup" aria-label={m.common_type()} class="grid gap-2 sm:grid-cols-2">
-				{#each manual.values as value (value)}
-					<label
-						class="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-earthy-terracotta-600 {manualType ===
-						value
-							? 'border-earthy-terracotta-600 bg-earthy-terracotta-50 dark:bg-earthy-terracotta-900/20'
-							: 'border-gray-300 dark:border-gray-600'}"
-					>
-						<input
-							type="radio"
-							name="manual-type"
-							class="sr-only"
-							{value}
-							checked={manualType === value}
-							onchange={() => (manualType = value)}
-						/>
-						{manualLabel(value)}
-					</label>
+			<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+				<h3 class="text-base font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+					<IconifyIcon
+						icon="material-symbols:category"
+						class="h-5 w-5 mr-2 text-earthy-terracotta-600"
+					/>
+					{m.assetnew_manual_type_heading()}
+				</h3>
+				{#if manual.values.length >= ALPHABETICAL_FROM}
+					<input
+						type="search"
+						bind:value={typeQuery}
+						placeholder={m.common_search()}
+						aria-label={m.common_search()}
+						class="w-full sm:w-64 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-earthy-terracotta-600"
+					/>
+				{/if}
+			</div>
+			<div role="radiogroup" aria-label={m.assetnew_manual_type_heading()} class="space-y-4">
+				{#each typeGroups.groups as entry (entry.group ?? '')}
+					<div role="group" aria-label={entry.group ? groupLabel(entry.group) : undefined}>
+						{#if entry.group}
+							<p
+								class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+							>
+								{groupLabel(entry.group)}
+							</p>
+						{/if}
+						<div class="flex flex-wrap gap-2">
+							{#each entry.values as value (value)}
+								<label
+									class="cursor-pointer rounded-full border px-3 py-1.5 text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-earthy-terracotta-600 {manualType ===
+									value
+										? 'border-earthy-terracotta-600 bg-earthy-terracotta-50 font-medium text-earthy-terracotta-700 dark:bg-earthy-terracotta-900/20 dark:text-earthy-terracotta-200'
+										: 'border-gray-300 text-gray-700 hover:border-gray-400 dark:border-gray-600 dark:text-gray-200'}"
+								>
+									<input
+										type="radio"
+										name="manual-type"
+										class="sr-only"
+										{value}
+										checked={manualType === value}
+										onchange={() => (manualType = value)}
+									/>
+									{manualLabel(value)}
+								</label>
+							{/each}
+						</div>
+					</div>
+				{:else}
+					<p class="text-sm text-gray-500 dark:text-gray-400">{m.common_no_results()}</p>
 				{/each}
 			</div>
+			{#if manualHelp}
+				<p
+					aria-live="polite"
+					class="mt-4 rounded-lg bg-gray-50 dark:bg-gray-900/40 px-3 py-2 text-sm text-gray-600 dark:text-gray-300"
+				>
+					<span class="font-medium text-gray-900 dark:text-gray-100"
+						>{manualLabel(manualType)}.</span
+					>
+					{manualHelp}
+				</p>
+			{/if}
 		</div>
 	{/if}
 

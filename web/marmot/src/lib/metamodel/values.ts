@@ -386,3 +386,29 @@ export function orderedValues(
 	const collator = new Intl.Collator(locale || undefined, { sensitivity: 'base', numeric: true });
 	return [...list].sort((a, b) => collator.compare(label(a), label(b)));
 }
+
+export interface ValueGroup {
+	/** The value of the derived field these values map to; null for the ones it leaves out. */
+	group: string | null;
+	values: string[];
+}
+
+/**
+ * The values of an enum under the field the profile derives from it (asset types under their
+ * family), in the order that field lists its own values. Without such a field there is one group.
+ */
+export function groupedValues(
+	values: string[],
+	fields: MetamodelField[],
+	sourceId: string
+): { by?: MetamodelField; groups: ValueGroup[] } {
+	const by = fields.find((field) => field.derive?.from === sourceId);
+	if (!by?.derive) return { groups: [{ group: null, values }] };
+	const map = by.derive.map;
+	const groups: ValueGroup[] = (by.values ?? [])
+		.map((group) => ({ group, values: values.filter((value) => map[value] === group) }))
+		.filter((entry) => entry.values.length > 0);
+	const rest = values.filter((value) => !(by.values ?? []).includes(map[value]));
+	if (rest.length > 0) groups.push({ group: null, values: rest });
+	return { by, groups };
+}
