@@ -235,7 +235,7 @@
 	"assetnew_error_name_too_short": "El nombre debe tener al menos 2 caracteres",
 	"assetnew_error_provider_required": "Se requiere al menos un proveedor",
 	"assetnew_error_type_required": "El tipo del activo es obligatorio",
-	"assetnew_name_hint": "Un identificador único para este activo en el catálogo",
+	"assetnew_name_hint": "Un título para este activo en el catálogo",
 	"assetnew_name_label": "Nombre del activo",
 	"assetnew_name_placeholder": "p. ej., eventos_usuario, tabla_pedidos",
 	"assetnew_optional_suffix": "(Opcional)",
