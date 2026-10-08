@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	extquality "github.com/marmotdata/marmot/pkg/extension/quality"
 )
 
 // Quality rules are checks on the metadata of an asset that the audit applies and reports as
@@ -18,18 +20,23 @@ import (
 // itself defines (required fields, valid values) and the structure of the external links.
 var BuiltinQualityRules = []string{"required", "validation", "externalLinkInvalid", "externalLinkEmpty"}
 
-// Quality dimensions group the checks of the audit by what they measure. Each has a score of its
-// own and a weight in the overall one. Uniqueness and accuracy are not here: the first compares
-// assets with each other and the second needs a truth outside the catalog, and a rule judges one
-// asset on its metadata.
+// The data of the audit lives in pkg/extension/quality, which extensions share with the server.
 const (
-	DimensionCompleteness = "completeness" // the values that should be there are
-	DimensionValidity     = "validity"     // the values there are well formed and allowed
-	DimensionConsistency  = "consistency"  // the values agree with each other
-	DimensionTimeliness   = "timeliness"   // the values are current
+	DimensionCompleteness = extquality.DimensionCompleteness
+	DimensionValidity     = extquality.DimensionValidity
+	DimensionConsistency  = extquality.DimensionConsistency
+	DimensionTimeliness   = extquality.DimensionTimeliness
+	Today                 = extquality.Today
 )
 
-var QualityDimensions = []string{DimensionCompleteness, DimensionValidity, DimensionConsistency, DimensionTimeliness}
+var QualityDimensions = extquality.Dimensions
+
+type (
+	QualityCondition   = extquality.Condition
+	QualityRule        = extquality.Rule
+	QualityRuleProblem = extquality.RuleProblem
+	QualityRuleError   = extquality.RuleError
+)
 
 // BuiltinRuleDimension is the dimension each built-in rule counts under.
 var BuiltinRuleDimension = map[string]string{
@@ -68,68 +75,6 @@ const (
 
 var ruleIDPattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]{0,59}$`)
 var ruleCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,59}$`)
-
-// QualityCondition is one test on one field.
-type QualityCondition struct {
-	Field string `json:"field"`
-	Op    string `json:"op"`
-	// Value is what the operator compares with; set and unset take none.
-	Value any `json:"value,omitempty"`
-	// Days moves the date a date operator compares with, from today or from the given date.
-	Days int `json:"days,omitempty"`
-	// Optional, in a check, lets an empty field pass instead of failing: nothing to judge.
-	Optional bool `json:"optional,omitempty"`
-} // @name QualityCondition
-
-// QualityRule is a rule as the profile or a person declares it.
-type QualityRule struct {
-	ID string `json:"id"`
-	// Code is the finding code the audit reports, which clients translate; it defaults to a
-	// snake_case form of the id.
-	Code string `json:"code,omitempty"`
-	// Name and Description are text in the language of whoever wrote the rule. A profile rule
-	// uses LabelKey and DescriptionKey, which resolve through the profile's messages.
-	Name           string `json:"name,omitempty"`
-	Description    string `json:"description,omitempty"`
-	LabelKey       string `json:"labelKey,omitempty"`
-	DescriptionKey string `json:"descriptionKey,omitempty"`
-	// Dimension is the quality dimension whose score the rule's checks feed.
-	Dimension string `json:"dimension" enums:"completeness,validity,consistency,timeliness"`
-	// Severity is what a finding of the rule counts as: error or warning.
-	Severity string             `json:"severity"`
-	When     []QualityCondition `json:"when,omitempty"`
-	Checks   []QualityCondition `json:"checks"`
-} // @name QualityRule
-
-// QualityRuleProblem says what is wrong with a rule and where, by path (`checks[1].value`).
-type QualityRuleProblem struct {
-	Path string `json:"path"`
-	Code string `json:"code"`
-} // @name QualityRuleProblem
-
-// QualityRuleError carries every problem of a rule at once.
-type QualityRuleError struct {
-	Problems []QualityRuleProblem `json:"problems"`
-} // @name QualityRuleError
-
-func (e *QualityRuleError) Error() string { return "quality rule validation failed" }
-
-// Today is the date `today` stands for in a date operator.
-const Today = "today"
-
-// DateOperand is the date a date condition compares with, given today.
-func (c QualityCondition) DateOperand(today time.Time) (time.Time, bool) {
-	text, _ := c.Value.(string)
-	base := today
-	if text != Today {
-		parsed, err := time.Parse(time.DateOnly, text)
-		if err != nil {
-			return time.Time{}, false
-		}
-		base = parsed
-	}
-	return base.AddDate(0, 0, c.Days), true
-}
 
 func isNumberType(t string) bool { return t == "number" || t == "integer" }
 

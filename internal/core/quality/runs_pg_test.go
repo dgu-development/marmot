@@ -373,8 +373,8 @@ func TestCustomRulesAreStoredWithCompareAndSet(t *testing.T) {
 	repo := quality.NewPostgresRuleRepository(pool)
 	ctx := context.Background()
 	rule := quality.CustomRule{
-		QualityRule: metamodel.QualityRule{ID: "rule_a", Name: "Steward", Dimension: "validity", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "data_steward", Op: metamodel.OpSet}}},
-		Enabled:     true, CreatedBy: "", UpdatedBy: "",
+		Rule:    metamodel.QualityRule{ID: "rule_a", Name: "Steward", Dimension: "validity", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "data_steward", Op: metamodel.OpSet}}},
+		Enabled: true, CreatedBy: "", UpdatedBy: "",
 	}
 
 	created, err := repo.Create(ctx, rule)
@@ -419,8 +419,8 @@ func TestARunAppliesTheCustomRulesAndKeepsTheOnesItUsed(t *testing.T) {
 	ctx := context.Background()
 	rules := quality.NewPostgresRuleRepository(e.pool)
 	if _, err := rules.Create(ctx, quality.CustomRule{
-		QualityRule: metamodel.QualityRule{ID: "rule_a", Name: "Retention present", Dimension: "validity", Severity: "error", Checks: []metamodel.QualityCondition{{Field: "retention", Op: metamodel.OpAtLeast, Value: 100.0}}},
-		Enabled:     true,
+		Rule:    metamodel.QualityRule{ID: "rule_a", Name: "Retention present", Dimension: "validity", Severity: "error", Checks: []metamodel.QualityCondition{{Field: "retention", Op: metamodel.OpAtLeast, Value: 100.0}}},
+		Enabled: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -459,7 +459,7 @@ func TestARunAppliesTheCustomRulesAndKeepsTheOnesItUsed(t *testing.T) {
 	}
 
 	// Changing the rule afterwards does not rewrite what the run says it applied.
-	if _, err := rules.Update(ctx, quality.CustomRule{QualityRule: metamodel.QualityRule{ID: "rule_a", Name: "Other", Dimension: "validity", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "retention", Op: metamodel.OpUnset}}}, Enabled: false}, 1); err != nil {
+	if _, err := rules.Update(ctx, quality.CustomRule{Rule: metamodel.QualityRule{ID: "rule_a", Name: "Other", Dimension: "validity", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "retention", Op: metamodel.OpUnset}}}, Enabled: false}, 1); err != nil {
 		t.Fatal(err)
 	}
 	again, _ := svc.Run(ctx, run.ID)

@@ -166,8 +166,8 @@ func TestTheSettingsDecideWhetherAProfileRuleAppliesAndHowSevere(t *testing.T) {
 
 func custom(id string, enabled bool, severity string, checks ...metamodel.QualityCondition) quality.CustomRule {
 	return quality.CustomRule{
-		QualityRule: metamodel.QualityRule{ID: id, Name: "Mine", Dimension: metamodel.DimensionValidity, Severity: severity, Checks: checks},
-		Enabled:     enabled, Version: 1,
+		Rule:    metamodel.QualityRule{ID: id, Name: "Mine", Dimension: metamodel.DimensionValidity, Severity: severity, Checks: checks},
+		Enabled: enabled, Version: 1,
 	}
 }
 
@@ -362,7 +362,7 @@ func TestACustomRuleCannotTakeTheIdOfAProfileRuleOrExceedTheLimit(t *testing.T) 
 
 func TestRulesListsEveryRuleWithItsSourceAndAProblemForOneThatNoLongerFits(t *testing.T) {
 	svc, store, _ := ruleServiceFor(t, "  - {id: stewardSet, labelKey: r.steward, descriptionKey: r.steward.help, dimension: validity, severity: error, checks: [{field: steward, op: set}]}\n")
-	store.rules["rule_old"] = quality.CustomRule{QualityRule: metamodel.QualityRule{ID: "rule_old", Name: "Old", Dimension: "validity", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "gone", Op: metamodel.OpSet}}}, Enabled: true, Version: 3}
+	store.rules["rule_old"] = quality.CustomRule{Rule: metamodel.QualityRule{ID: "rule_old", Name: "Old", Dimension: "validity", Severity: "warning", Checks: []metamodel.QualityCondition{{Field: "gone", Op: metamodel.OpSet}}}, Enabled: true, Version: 3}
 	rules, err := svc.Rules(context.Background())
 	if err != nil {
 		t.Fatal(err)

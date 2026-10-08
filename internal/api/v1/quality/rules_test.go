@@ -30,7 +30,7 @@ func (f *fakeRuleService) Create(_ context.Context, rule metamodel.QualityRule, 
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &quality.CustomRule{QualityRule: rule, Enabled: enabled, Version: 1}, nil
+	return &quality.CustomRule{Rule: rule, Enabled: enabled, Version: 1}, nil
 }
 
 func (f *fakeRuleService) Update(_ context.Context, id string, rule metamodel.QualityRule, enabled bool, expected int64, _ string) (*quality.CustomRule, error) {
@@ -38,7 +38,7 @@ func (f *fakeRuleService) Update(_ context.Context, id string, rule metamodel.Qu
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &quality.CustomRule{QualityRule: rule, Enabled: enabled, Version: expected + 1}, nil
+	return &quality.CustomRule{Rule: rule, Enabled: enabled, Version: expected + 1}, nil
 }
 
 func (f *fakeRuleService) Delete(_ context.Context, id string) error { f.id = id; return f.err }

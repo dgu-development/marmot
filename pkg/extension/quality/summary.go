@@ -2,9 +2,8 @@ package quality
 
 import (
 	"cmp"
+	"math"
 	"slices"
-
-	"github.com/marmotdata/marmot/internal/core/metamodel"
 )
 
 const topFields = 8
@@ -101,14 +100,14 @@ func (a *Aggregator) Add(r AssetResult) {
 		a.fields[issue.FieldID]++
 	}
 	for key, stat := range r.Sections {
-		scores := map[string]float64{metamodel.DimensionCompleteness: 100, metamodel.DimensionValidity: 100}
+		scores := map[string]float64{DimensionCompleteness: 100, DimensionValidity: 100}
 		if stat.Total > 0 {
-			scores[metamodel.DimensionCompleteness] = float64(stat.Filled) / float64(stat.Total) * 100
+			scores[DimensionCompleteness] = float64(stat.Filled) / float64(stat.Total) * 100
 		}
 		if stat.Filled > 0 {
-			scores[metamodel.DimensionValidity] = float64(stat.Valid) / float64(stat.Filled) * 100
+			scores[DimensionValidity] = float64(stat.Valid) / float64(stat.Filled) * 100
 		}
-		bump(a.sections, key, a.weights.mix(scores))
+		bump(a.sections, key, a.weights.Mix(scores))
 	}
 	bump(a.types, r.Type, r.Quality)
 	bump(a.domains, r.DomainID, r.Quality)
@@ -117,7 +116,7 @@ func (a *Aggregator) Add(r AssetResult) {
 // dimensionRanking lists the dimensions that applied to some asset, in the order of the metamodel.
 func dimensionRanking(groups map[string]*mean) []GroupStat {
 	out := []GroupStat{}
-	for _, dimension := range metamodel.QualityDimensions {
+	for _, dimension := range Dimensions {
 		if m := groups[dimension]; m != nil {
 			out = append(out, GroupStat{Key: dimension, Value: m.value(), Count: m.count})
 		}
@@ -164,3 +163,5 @@ func (a *Aggregator) Summary() Summary {
 		ByDomain:     ranked(a.domains),
 	}
 }
+
+func round(value float64) float64 { return math.Round(value*10) / 10 }
