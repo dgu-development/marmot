@@ -22,7 +22,11 @@ const (
 const UnassignedDomain = "unassigned"
 
 // outputFields are written by the audit, not read: publishing a score must not change the score.
-var outputFields = []string{"quality_score", "quality_run", "quality_scored_at", "quality_dimensions", "quality_evaluated_at"}
+var outputFields = []string{
+	"metadata_quality_score", "metadata_quality_dimensions", "metadata_quality_evaluated_at",
+	// The names these fields had before; a profile that still declares them is not audited on them.
+	"quality_score", "quality_dimensions", "quality_evaluated_at", "quality_run", "quality_scored_at",
+}
 
 // Issue is one finding on one field of one asset.
 type Issue struct {

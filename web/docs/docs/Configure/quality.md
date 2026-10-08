@@ -64,7 +64,7 @@ Completeness and validity always apply. Consistency and timeliness exist only th
 
 Uniqueness and accuracy are not dimensions here. The first compares assets with each other and the second needs a source of truth outside the catalog, and a rule judges one asset on its metadata.
 
-The `dimensions` of an evaluated asset, and the `quality_dimensions` field, are something else: the checks of the card of the asset (description, tags, ownership...). Their scores by dimension are `scores`.
+The `dimensions` of an evaluated asset, and the `metadata_quality_dimensions` field, are something else: the checks of the card of the asset (description, tags, ownership...). Their scores by dimension are `scores`.
 
 ### Rules and findings
 
@@ -172,18 +172,18 @@ A check every 30 seconds, on a singleton task like the ingestion scheduler's, st
 
 ## Scores on the assets
 
-Each run writes the score it computed on the assets, as the platform: `quality_score` (a fraction between 0 and 1 with three decimals), `quality_dimensions` (the checks the asset meets: description, tags, ownership, classification, review, documentation, resource, completeness and conformity) and `quality_evaluated_at` (the day it was judged). Each is written only when the profile has the field, so a profile without them audits and writes nothing.
+Each run writes the score it computed on the assets, as the platform: `metadata_quality_score` (a fraction between 0 and 1 with three decimals), `metadata_quality_dimensions` (the checks the asset meets: description, tags, ownership, classification, review, documentation, resource, completeness and conformity) and `metadata_quality_evaluated_at` (the day it was judged). Each is written only when the profile has the field, so a profile without them audits and writes nothing.
 
 - Only what changed is written. An asset whose score and checks already say what the audit found is left alone, and the date alone never forces a write, so its version does not move run after run. `updated_at` and `version` do advance when a score changes: it is a real write.
 - The write is made against the version the audit read. An asset edited in between is skipped (`score_conflicts` in the run) and scored by the next run.
 - It does not notify whoever follows the asset, and it is not judged against the rest of the asset: an asset with an invalid value elsewhere is exactly the one the audit has to be able to score.
-- `documentation` means there is something to read in the first tab of the asset: a page written in the platform, the older per-source documentation, or a markdown body that a source ingested (`metadata.dgu.body`). `resource` means the asset links out to a resource, an external link with a URL. They are separate checks; a check the profile's `quality_dimensions` does not list yet is left out of the write instead of failing it.
+- `documentation` means there is something to read in the first tab of the asset: a page written in the platform, the older per-source documentation, or a markdown body that a source ingested (`metadata.dgu.body`). `resource` means the asset links out to a resource, an external link with a URL. They are separate checks; a check the profile's `metadata_quality_dimensions` does not list yet is left out of the write instead of failing it.
 - Placeholders created by lineage (stubs) are never written.
 - `scores_written`, `score_conflicts` and `score_failures` in the run say how it went.
 
 ### System fields
 
-A field marked `system: true` in the metamodel profile is written only by the platform. It must be bound to `metadata.*`, apply to assets only and be neither required, derived nor defaulted. The API refuses a write to it with the code `system` (a `PATCH`, like a derived field's `derived`); a whole-asset update, a creation or a discovery run leaves it as it was whatever they send, so a client that sends back the asset it read changes nothing. The interface shows it read-only. Mark `quality_score`, `quality_dimensions` and `quality_evaluated_at` with it in the profile; a server that does not know the key refuses the profile, so the profile and the server version go together.
+A field marked `system: true` in the metamodel profile is written only by the platform. It must be bound to `metadata.*`, apply to assets only and be neither required, derived nor defaulted. The API refuses a write to it with the code `system` (a `PATCH`, like a derived field's `derived`); a whole-asset update, a creation or a discovery run leaves it as it was whatever they send, so a client that sends back the asset it read changes nothing. The interface shows it read-only. Mark `metadata_quality_score`, `metadata_quality_dimensions` and `metadata_quality_evaluated_at` with it in the profile; a server that does not know the key refuses the profile, so the profile and the server version go together.
 
 ## Not included yet
 
