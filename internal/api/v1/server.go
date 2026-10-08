@@ -43,10 +43,10 @@ import (
 	"github.com/marmotdata/marmot/internal/background"
 	agentService "github.com/marmotdata/marmot/internal/core/agent"
 	"github.com/marmotdata/marmot/internal/core/asset"
-	"github.com/marmotdata/marmot/internal/core/contentpack"
 	"github.com/marmotdata/marmot/internal/core/assetdocs"
 	assetruleService "github.com/marmotdata/marmot/internal/core/assetrule"
 	authService "github.com/marmotdata/marmot/internal/core/auth"
+	"github.com/marmotdata/marmot/internal/core/contentpack"
 	dataproductService "github.com/marmotdata/marmot/internal/core/dataproduct"
 	docsService "github.com/marmotdata/marmot/internal/core/docs"
 	domainService "github.com/marmotdata/marmot/internal/core/domain"
@@ -123,6 +123,7 @@ type Server struct {
 
 	// Workflow task timers (fork-only)
 	workflowTimers  *background.SingletonTask
+	extensionTasks  []*background.SingletonTask
 	qualityRuns     quality.RunService
 	qualitySchedule *background.SingletonTask
 
@@ -648,11 +649,15 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	}
 
 	// Capabilities compiled in from outside this repository; see pkg/extension.
-	extensionHandler, err := extensionRoutes(db, domainSvc, userSvc, authSvc, config)
+	extensionHandler, extensionTasks, err := extensionRoutes(extensionServices{
+		db: db, domains: domainSvc, users: userSvc, teams: teamSvc, assets: assetSvc, registry: metamodelRegistry,
+		glossary: glossarySvc, rules: assetRuleSvc, notifications: notificationSvc,
+	}, authSvc, config)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to register extensions")
 	}
 	server.handlers = append(server.handlers, extensionHandler)
+	server.extensionTasks = extensionTasks
 
 	if config.Workflows.Enabled {
 		var workflowDomains workflowService.Domains
@@ -750,6 +755,9 @@ func (s *Server) Stop() {
 	}
 	if s.workflowTimers != nil {
 		s.workflowTimers.Stop()
+	}
+	for _, task := range s.extensionTasks {
+		task.Stop()
 	}
 	if s.operatorSyncer != nil {
 		s.operatorSyncer.Stop()
