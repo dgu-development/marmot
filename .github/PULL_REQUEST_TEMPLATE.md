@@ -38,6 +38,8 @@ EN: Short list. Keep generic kernel work (registry, API, native UI) separate fro
 
 ## Checklist
 
+- [ ] This changes the behaviour of the core; a capability with its own routes or tables is an extension ([EXTENSIONS.md](../EXTENSIONS.md)), not a patch here
+- [ ] If `pkg/extension` changed: `EXTENSIONS.md` is updated and an extension proves the need
 - [ ] `make test` (or `go test` of the packages touched)
 - [ ] `make server-lint` if Go changed
 - [ ] `make frontend-lint` if `web/marmot` changed

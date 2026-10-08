@@ -24,8 +24,8 @@ EN: What is broken, in one or two sentences. No secrets or tenant data.
 ## Expected behaviour
 
 <!--
-ES: Qué debería ocurrir en Marmot (API o Discover), no en un overlay corporativo.
-EN: What Marmot should do (API or Discover), not a corporate overlay.
+ES: Qué debería ocurrir en Marmot (API o Discover), no en un overlay corporativo ni en una extensión (`/api/v1/ext/<id>/`): esas se reportan en su repositorio.
+EN: What Marmot should do (API or Discover), not a corporate overlay or an extension (`/api/v1/ext/<id>/`): report those in their own repository.
 -->
 
 

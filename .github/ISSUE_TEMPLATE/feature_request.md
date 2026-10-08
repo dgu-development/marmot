@@ -9,8 +9,8 @@ assignees: ''
 ## Problem
 
 <!--
-ES: Qué no puedes hacer hoy con Marmot. No pidas un módulo web`/dgu/*` ni un overlay: eso es la distribución.
-EN: What you cannot do in Marmot today. Do not ask for a `/dgu/*` web-module or overlay: that belongs in the consuming distribution.
+ES: Qué no puedes hacer hoy con Marmot. No pidas una extensión (`dguext-<id>`) ni un overlay: van en su repositorio y en la distribución.
+EN: What you cannot do in Marmot today. Do not ask for an extension (`dguext-<id>`) or an overlay: those live in their own repository and in the consuming distribution.
 -->
 
 
@@ -28,12 +28,13 @@ EN: Reusable generic behaviour. For example, corporate YAML metamodel profile an
 
 - [ ] Native data already (asset types, metadata, glossary, products, rules, lineage) — maybe docs or a small API/UI fix. Product PRs still target `dgu`.
 - [ ] Discovery plugin (`plugin-sdk`, ingest only: no HTTP, no UI, no RBAC)
-- [ ] Kernel Go (service, store, migration, `/api/v1`)
+- [ ] Extension (`dguext-<id>`, compiled in through `pkg/extension`: own routes under `/api/v1/ext/<id>/`, own `ext_<id>_*` tables) — not this repo, unless the contract has to grow
+- [ ] Kernel Go (service, store, migration, `/api/v1`): it changes the behaviour of the core
 - [ ] Discover UI (`web/marmot`, Svelte 5; no second UI framework)
 
 <!--
-ES: Un plugin no registra rutas ni autorización. 
-EN: A plugin does not register routes or authorization.
+ES: Un plugin no registra rutas ni autorización. Una extensión añade; no modifica el núcleo (EXTENSIONS.md).
+EN: A plugin does not register routes or authorization. An extension adds; it does not modify the core (EXTENSIONS.md).
 -->
 
 Why a thinner option is not enough:
