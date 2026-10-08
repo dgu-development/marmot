@@ -58,11 +58,11 @@ fields:
     presentation:
       labelKey: audit.retention
       section: lifecycle
-  - id: quality_score
+  - id: metadata_quality_score
     type: number
     core: true
     required: true
-    storage: metadata.dgu.quality_score
+    storage: metadata.dgu.metadata_quality_score
     presentation:
       labelKey: audit.score
       section: output
@@ -137,7 +137,7 @@ func TestACompleteAssetScoresFullAndIgnoresTheOutputFields(t *testing.T) {
 	if r.Quality != 100 || r.Status != quality.StatusCompliant || r.IssueCount != 0 {
 		t.Fatalf("%+v", r)
 	}
-	// quality_score is required in the profile but is written by the audit, so it is no gap.
+	// metadata_quality_score is required in the profile but is written by the audit, so it is no gap.
 	if _, ok := r.Sections["output"]; ok {
 		t.Fatalf("an output field was audited: %+v", r.Sections)
 	}

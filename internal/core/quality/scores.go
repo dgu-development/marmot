@@ -15,9 +15,9 @@ import (
 // The fields the audit writes on an asset, by their id in the metamodel profile. Each is written
 // only when the profile has it, so a profile without them audits and writes nothing.
 const (
-	fieldScore      = "quality_score"
-	fieldDimensions = "quality_dimensions"
-	fieldEvaluated  = "quality_evaluated_at"
+	fieldScore      = "metadata_quality_score"
+	fieldDimensions = "metadata_quality_dimensions"
+	fieldEvaluated  = "metadata_quality_evaluated_at"
 )
 
 // ScoreValue is a quality out of 100 as the profile's field holds it: a fraction with three decimals.

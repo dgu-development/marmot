@@ -311,14 +311,14 @@ func TestARunWritesTheScoresOnTheAssetsAndAnUnchangedAssetIsLeftAlone(t *testing
 		t.Fatalf("run = %+v", first)
 	}
 	for _, id := range []string{"id-pg0", "id-pg1", "id-pg2", "id-pg3"} {
-		if storedAt(t, e, id, "quality_score") == nil || storedAt(t, e, id, "quality_dimensions") == nil || storedAt(t, e, id, "quality_evaluated_at") == nil {
+		if storedAt(t, e, id, "metadata_quality_score") == nil || storedAt(t, e, id, "metadata_quality_dimensions") == nil || storedAt(t, e, id, "metadata_quality_evaluated_at") == nil {
 			t.Fatalf("%s was not scored", id)
 		}
 	}
-	if storedAt(t, e, "id-pg0", "quality_score") != 1.0 {
-		t.Fatalf("score of a complete asset: %v", storedAt(t, e, "id-pg0", "quality_score"))
+	if storedAt(t, e, "id-pg0", "metadata_quality_score") != 1.0 {
+		t.Fatalf("score of a complete asset: %v", storedAt(t, e, "id-pg0", "metadata_quality_score"))
 	}
-	if storedAt(t, e, "id-pg4", "quality_score") != nil {
+	if storedAt(t, e, "id-pg4", "metadata_quality_score") != nil {
 		t.Fatal("a stub was scored")
 	}
 
@@ -341,8 +341,8 @@ func TestARunWritesTheScoresOnTheAssetsAndAnUnchangedAssetIsLeftAlone(t *testing
 		t.Fatal(err)
 	}
 	third := e.runToEnd(t)
-	if third.ScoresWritten != 1 || storedAt(t, e, "id-pg0", "quality_score") == 1.0 {
-		t.Fatalf("run = %+v, score %v", third, storedAt(t, e, "id-pg0", "quality_score"))
+	if third.ScoresWritten != 1 || storedAt(t, e, "id-pg0", "metadata_quality_score") == 1.0 {
+		t.Fatalf("run = %+v, score %v", third, storedAt(t, e, "id-pg0", "metadata_quality_score"))
 	}
 }
 

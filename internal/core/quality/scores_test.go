@@ -11,31 +11,31 @@ import (
 	"github.com/marmotdata/marmot/internal/core/quality"
 )
 
-const scoreProfile = auditFields + `  - id: quality_dimensions
+const scoreProfile = auditFields + `  - id: metadata_quality_dimensions
     type: list
     itemType: enum
     values: [description, tags, ownership, classification, review, documentation, resource, completeness, conformity]
     core: true
     nullable: true
     system: true
-    storage: metadata.dgu.quality_dimensions
+    storage: metadata.dgu.metadata_quality_dimensions
     presentation:
       labelKey: audit.dimensions
-  - id: quality_evaluated_at
+  - id: metadata_quality_evaluated_at
     type: date
     core: true
     nullable: true
     system: true
-    storage: metadata.dgu.quality_evaluated_at
+    storage: metadata.dgu.metadata_quality_evaluated_at
     presentation:
       labelKey: audit.evaluated
 ` + auditRules
 
-// The audit profile asks for quality_score as required, which a system field cannot be; this one
+// The audit profile asks for metadata_quality_score as required, which a system field cannot be; this one
 // has it the way the distribution does.
 func scoreRegistry(t *testing.T) *metamodel.Registry {
 	t.Helper()
-	profile := strings.Replace(scoreProfile, "    required: true\n    storage: metadata.dgu.quality_score", "    nullable: true\n    system: true\n    storage: metadata.dgu.quality_score", 1)
+	profile := strings.Replace(scoreProfile, "    required: true\n    storage: metadata.dgu.metadata_quality_score", "    nullable: true\n    system: true\n    storage: metadata.dgu.metadata_quality_score", 1)
 	r, err := metamodel.Load(strings.NewReader(profile))
 	if err != nil {
 		t.Fatal(err)
@@ -54,22 +54,22 @@ func TestAnAssetWithoutAScoreIsWrittenOneWithTheScoreItDeservesIsNot(t *testing.
 	result := auditor.Audit(a)
 
 	changes := auditor.ScoreChanges(a, result)
-	if changes["quality_score"] != 1.0 || changes["quality_evaluated_at"] != "2026-10-01" {
+	if changes["metadata_quality_score"] != 1.0 || changes["metadata_quality_evaluated_at"] != "2026-10-01" {
 		t.Fatalf("changes = %v", changes)
 	}
-	if dims, _ := changes["quality_dimensions"].([]string); len(dims) != 7 {
-		t.Fatalf("dimensions = %v", changes["quality_dimensions"])
+	if dims, _ := changes["metadata_quality_dimensions"].([]string); len(dims) != 7 {
+		t.Fatalf("dimensions = %v", changes["metadata_quality_dimensions"])
 	}
 
-	a.Metadata["dgu"].(map[string]any)["quality_score"] = 1.0
-	a.Metadata["dgu"].(map[string]any)["quality_dimensions"] = []any{"description", "tags", "ownership", "classification", "review", "completeness", "conformity"}
-	a.Metadata["dgu"].(map[string]any)["quality_evaluated_at"] = "2026-09-01"
+	a.Metadata["dgu"].(map[string]any)["metadata_quality_score"] = 1.0
+	a.Metadata["dgu"].(map[string]any)["metadata_quality_dimensions"] = []any{"description", "tags", "ownership", "classification", "review", "completeness", "conformity"}
+	a.Metadata["dgu"].(map[string]any)["metadata_quality_evaluated_at"] = "2026-09-01"
 	if changes := auditor.ScoreChanges(a, result); changes != nil {
 		t.Fatalf("what it says already: the date alone never forces a write: %v", changes)
 	}
 
-	a.Metadata["dgu"].(map[string]any)["quality_score"] = 0.9
-	if changes := auditor.ScoreChanges(a, result); changes["quality_score"] != 1.0 || changes["quality_evaluated_at"] != "2026-10-01" || changes["quality_dimensions"] != nil {
+	a.Metadata["dgu"].(map[string]any)["metadata_quality_score"] = 0.9
+	if changes := auditor.ScoreChanges(a, result); changes["metadata_quality_score"] != 1.0 || changes["metadata_quality_evaluated_at"] != "2026-10-01" || changes["metadata_quality_dimensions"] != nil {
 		t.Fatalf("only what moved, and the day it was judged: %v", changes)
 	}
 }
@@ -87,7 +87,7 @@ func TestAProfileWithoutTheFieldsIsAuditedAndWritesNothing(t *testing.T) {
 	auditor := quality.NewAuditor(registry(t), quality.DefaultSettings(), now)
 	a := newAsset("a", complete())
 	if changes := auditor.ScoreChanges(a, auditor.Audit(a)); len(changes) != 1 {
-		// The audit profile declares quality_score, nothing else: only that one is written.
+		// The audit profile declares metadata_quality_score, nothing else: only that one is written.
 		t.Fatalf("%v", changes)
 	}
 }
@@ -120,9 +120,9 @@ func TestARunWritesOnlyWhatChangedAsThePlatformAndCountsHowItWent(t *testing.T) 
 		a.Version = int64(10 + i)
 	}
 	said := source.assets[2].Metadata["dgu"].(map[string]any)
-	said["quality_score"] = 1.0
-	said["quality_dimensions"] = []any{"description", "tags", "ownership", "classification", "review", "completeness", "conformity"}
-	said["quality_evaluated_at"] = "2026-09-01"
+	said["metadata_quality_score"] = 1.0
+	said["metadata_quality_dimensions"] = []any{"description", "tags", "ownership", "classification", "review", "completeness", "conformity"}
+	said["metadata_quality_evaluated_at"] = "2026-09-01"
 	repo := newMemoryRuns()
 	writes := &recordedWrites{conflict: map[string]bool{"id-a03": true}, fail: map[string]bool{"id-a04": true}}
 	svc := quality.NewRunService(fixedSettings{settings}, repo, source, scoreRegistry(t), quality.WithScoreWriter(writes))
@@ -144,7 +144,7 @@ func TestARunWritesOnlyWhatChangedAsThePlatformAndCountsHowItWent(t *testing.T) 
 	if !first.SystemWrite || !first.SkipNotification || first.ExpectedVersion == nil || *first.ExpectedVersion != 10 {
 		t.Fatalf("it writes as the platform, quietly, against the version it read: %+v", first)
 	}
-	if first.Metadata != nil || first.GovernedFields["quality_score"] != 1.0 {
+	if first.Metadata != nil || first.GovernedFields["metadata_quality_score"] != 1.0 {
 		t.Fatalf("it patches fields, not the whole asset: %+v", first)
 	}
 	if repo.counts != (quality.ScoreCounts{Written: 1, Conflicts: 1, Failed: 1}) {
@@ -167,7 +167,7 @@ func TestARunWithoutAWriterOnlyRecords(t *testing.T) {
 
 func TestAProfileThatDoesNotListACheckYetNeverReceivesIt(t *testing.T) {
 	older := strings.Replace(scoreProfile, "documentation, resource, completeness", "documentation, completeness", 1)
-	older = strings.Replace(older, "    required: true\n    storage: metadata.dgu.quality_score", "    nullable: true\n    system: true\n    storage: metadata.dgu.quality_score", 1)
+	older = strings.Replace(older, "    required: true\n    storage: metadata.dgu.metadata_quality_score", "    nullable: true\n    system: true\n    storage: metadata.dgu.metadata_quality_score", 1)
 	registry, err := metamodel.Load(strings.NewReader(older))
 	if err != nil {
 		t.Fatal(err)
@@ -176,7 +176,7 @@ func TestAProfileThatDoesNotListACheckYetNeverReceivesIt(t *testing.T) {
 	a := newAsset("a", complete())
 	a.ExternalLinks = []asset.ExternalLink{{Name: "wiki", URL: "https://wiki"}}
 	changes := auditor.ScoreChanges(a, auditor.AuditWithDocs(a, true))
-	dims, _ := changes["quality_dimensions"].([]string)
+	dims, _ := changes["metadata_quality_dimensions"].([]string)
 	for _, d := range dims {
 		if d == "resource" {
 			t.Fatalf("a value the profile does not have would fail the write: %v", dims)
