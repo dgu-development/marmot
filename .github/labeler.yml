@@ -5,6 +5,13 @@ area/server:
           - cmd/**
           - pkg/**
 
+area/extensions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - pkg/extension/**
+          - internal/extensions/**
+          - EXTENSIONS.md
+
 area/frontend:
   - changed-files:
       - any-glob-to-any-file:
