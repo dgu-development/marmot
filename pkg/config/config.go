@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/spf13/viper"
 )
@@ -190,13 +189,6 @@ type Config struct {
 		WriteEnforcement bool `mapstructure:"write_enforcement"`
 	} `mapstructure:"domains"`
 
-	// Workflows is fork-only: BPMN governance workflows. Role groups in a
-	// workflow resolve through domains, so they name nobody without them.
-	Workflows struct {
-		Enabled bool `mapstructure:"enabled"`
-		// TimerInterval is how often due task timers are checked.
-		TimerInterval time.Duration `mapstructure:"timer_interval"`
-	} `mapstructure:"workflows"`
 	// Quality is fork-only: the quality audit and its settings.
 	Quality struct {
 		Enabled bool `mapstructure:"enabled"`
@@ -438,8 +430,6 @@ func loadConfig(configPath string) error {
 	v.BindEnv("metamodel.packs")
 	v.BindEnv("domains.enabled")
 	v.BindEnv("domains.write_enforcement")
-	v.BindEnv("workflows.enabled")
-	v.BindEnv("workflows.timer_interval")
 	v.BindEnv("quality.enabled")
 
 	// Set defaults
@@ -586,8 +576,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("domains.enabled", false)
 	v.SetDefault("domains.write_enforcement", false)
 
-	v.SetDefault("workflows.enabled", false)
-	v.SetDefault("workflows.timer_interval", time.Minute)
 	v.SetDefault("quality.enabled", false)
 }
 

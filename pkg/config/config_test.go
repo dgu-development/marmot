@@ -2,7 +2,6 @@ package config
 
 import (
 	"testing"
-	"time"
 )
 
 // Load runs once per process, so this must stay the only test calling it.
@@ -11,8 +10,6 @@ func TestLoad_DCRAllowedRedirectHostsFromEnv(t *testing.T) {
 	t.Setenv("MARMOT_METAMODEL_PROFILE", "/etc/marmot/metamodel.yaml")
 	t.Setenv("MARMOT_DOMAINS_ENABLED", "true")
 	t.Setenv("MARMOT_DOMAINS_WRITE_ENFORCEMENT", "true")
-	t.Setenv("MARMOT_WORKFLOWS_ENABLED", "true")
-	t.Setenv("MARMOT_WORKFLOWS_TIMER_INTERVAL", "30s")
 	t.Setenv("MARMOT_AUTH_TOTP_ENABLED", "true")
 	t.Setenv("MARMOT_AUTH_TOTP_REQUIRED", "true")
 	t.Setenv("MARMOT_SERVER_ENCRYPTION_KEY", "configured")
@@ -36,9 +33,6 @@ func TestLoad_DCRAllowedRedirectHostsFromEnv(t *testing.T) {
 	}
 	if !cfg.Domains.Enabled || !cfg.Domains.WriteEnforcement {
 		t.Fatalf("domains not read from env: %+v", cfg.Domains)
-	}
-	if !cfg.Workflows.Enabled || cfg.Workflows.TimerInterval != 30*time.Second {
-		t.Fatalf("workflows not read from env: %+v", cfg.Workflows)
 	}
 	if cfg.UI.DomainLandingURL != "/dgu/landing/domains/{id}" {
 		t.Fatalf("unexpected domain landing url from env: %q", cfg.UI.DomainLandingURL)

@@ -39,6 +39,6 @@ Grow `Host` when an extension needs something, with that extension as the proof.
 
 The versions of a domain's ontology were added here first (`ontology_versions`, `/api/v1/ontologies/...`) and moved out to the `dguext-ontology` extension, which owns `ext_ontology_versions` and serves under `/api/v1/ext/ontology/`. Fork migration `020` drops the table they left behind.
 
-The users, teams, assets, glossary, queries, notifications, `As` and `Schedule` of the host were added for the workflow engine, which needs all of them to assign tasks, write the target asset as the person who decided and run its timers.
+The users, teams, assets, glossary, queries, notifications, `As` and `Schedule` of the host were added for the workflow engine, which needs all of them to assign tasks, write the target asset as the person who decided and run its timers. It moved out to `dguext-workflows` ([WORKFLOWS.md](WORKFLOWS.md)), which takes over the `workflow_*` tables as `ext_workflows_*`.
 
 A new extension starts from [dguext-template](https://github.com/dgu-development/dguext-template).

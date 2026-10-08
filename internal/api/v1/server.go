@@ -39,7 +39,6 @@ import (
 	"github.com/marmotdata/marmot/internal/api/v1/ui"
 	"github.com/marmotdata/marmot/internal/api/v1/users"
 	webhooksAPI "github.com/marmotdata/marmot/internal/api/v1/webhooks"
-	workflowsAPI "github.com/marmotdata/marmot/internal/api/v1/workflows"
 	"github.com/marmotdata/marmot/internal/background"
 	agentService "github.com/marmotdata/marmot/internal/core/agent"
 	"github.com/marmotdata/marmot/internal/core/asset"
@@ -66,7 +65,6 @@ import (
 	teamService "github.com/marmotdata/marmot/internal/core/team"
 	userService "github.com/marmotdata/marmot/internal/core/user"
 	webhookService "github.com/marmotdata/marmot/internal/core/webhook"
-	workflowService "github.com/marmotdata/marmot/internal/core/workflow"
 	"github.com/marmotdata/marmot/internal/metrics"
 	marmotOAuth2 "github.com/marmotdata/marmot/internal/oauth2"
 	operatorSync "github.com/marmotdata/marmot/internal/operator/sync"
@@ -121,8 +119,6 @@ type Server struct {
 	// Operator Run CRD syncer
 	operatorSyncer *operatorSync.Syncer
 
-	// Workflow task timers (fork-only)
-	workflowTimers  *background.SingletonTask
 	extensionTasks  []*background.SingletonTask
 	qualityRuns     quality.RunService
 	qualitySchedule *background.SingletonTask
@@ -659,27 +655,6 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	server.handlers = append(server.handlers, extensionHandler)
 	server.extensionTasks = extensionTasks
 
-	if config.Workflows.Enabled {
-		var workflowDomains workflowService.Domains
-		if domainSvc != nil {
-			workflowDomains = domainSvc
-		}
-		workflowSvc := workflowService.NewService(workflowService.NewPostgresRepository(db), userSvc, teamSvc, workflowDomains, assetSvc, notificationSvc).
-			WithQueries(workflowsAPI.NewQueryMatcher(assetRuleSvc)).
-			WithGlossary(glossarySvc).
-			WithPrincipalContext(func(ctx context.Context, p authService.Principal) context.Context {
-				return context.WithValue(ctx, common.PrincipalContextKey, p)
-			})
-		server.workflowTimers = background.NewSingletonTask(background.SingletonConfig{
-			Name:     "workflow-timers",
-			DB:       db,
-			Interval: config.Workflows.TimerInterval,
-			TaskFn:   workflowSvc.RunTimers,
-		})
-		server.workflowTimers.Start(context.Background())
-		server.handlers = append(server.handlers, workflowsAPI.NewHandler(workflowSvc, userSvc, authSvc, config))
-	}
-
 	if config.Quality.Enabled {
 		qualityRepo := quality.NewPostgresRepository(db)
 		qualitySvc := quality.NewService(qualityRepo, quality.WithRegistry(metamodelRegistry))
@@ -752,9 +727,6 @@ func (s *Server) Stop() {
 	}
 	if s.qualityRuns != nil {
 		s.qualityRuns.Shutdown()
-	}
-	if s.workflowTimers != nil {
-		s.workflowTimers.Stop()
 	}
 	for _, task := range s.extensionTasks {
 		task.Stop()
