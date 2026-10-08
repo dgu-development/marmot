@@ -14,7 +14,15 @@ An extension is a Go module that calls `extension.Register` from an `init` funct
 | Tables | Its own migration track (`public.ext_<id>_schema_version`, tern format), applied after the core and fork tracks. Tables are named `ext_<id>_*` |
 | `Host.DB()` | The pool. Core tables are read through it; writing them from an extension is an exception to justify in its own repository, not the rule |
 | `Host.Principal` | Who is calling |
-| `Host.Domains()` | Whether the caller may write in or administer a domain; nil on a server without domains |
+| `Host.Domains()` | Whether the caller may write in or administer a domain, the domain of an entity and who holds each role in it; nil on a server without domains |
+| `Host.Users()`, `Host.Teams()` | People and teams by ID or name, and the members of a team |
+| `Host.Assets()` | An asset by ID and the writes of the API: profile fields with the version check, tags and glossary terms. They run the same guards as the API, as the person the context carries |
+| `Host.Glossary()`, `Host.Queries()` | A term by name; the assets a Discover query matches |
+| `Host.Notifications()` | In-app notifications, delivered through the channels each recipient chose |
+| `Host.As` | A person's identity for work without a request: the principal and a context the write guards read |
+| `Host.Schedule` | A task repeated on one replica at a time, stopped with the server |
+
+The host's services answer with the contract's own types and errors (`ErrNotFound`, `ErrForbidden`, `ErrVersionConflict`, `*FieldsError`), never with types of `internal/`. An extension does not declare permissions: a route names one that exists.
 
 Grow `Host` when an extension needs something, with that extension as the proof. Behaviour of the core itself (search, metamodel validation, domain enforcement) is not an extension: it stays a patch here.
 
@@ -30,5 +38,7 @@ Grow `Host` when an extension needs something, with that extension as the proof.
 ## In use
 
 The versions of a domain's ontology were added here first (`ontology_versions`, `/api/v1/ontologies/...`) and moved out to the `dguext-ontology` extension, which owns `ext_ontology_versions` and serves under `/api/v1/ext/ontology/`. Fork migration `020` drops the table they left behind.
+
+The users, teams, assets, glossary, queries, notifications, `As` and `Schedule` of the host were added for the workflow engine, which needs all of them to assign tasks, write the target asset as the person who decided and run its timers.
 
 A new extension starts from [dguext-template](https://github.com/dgu-development/dguext-template).

@@ -46,6 +46,12 @@ type Route struct {
 type Principal interface {
 	ID() string
 	DisplayName() string
+	// AuditSubject is a readable identifier for logs, such as "user:alice".
+	AuditSubject() string
+	// IsUser reports a person, as opposed to a service account.
+	IsUser() bool
+	// IsAdmin bypasses the permission checks.
+	IsAdmin() bool
 	HasPermission(resource, action string) bool
 }
 
@@ -59,6 +65,11 @@ type Domains interface {
 	MayWrite(r *http.Request, id string) (bool, error)
 	// MayAdminister: change the domain itself.
 	MayAdminister(r *http.Request, id string) (bool, error)
+	// DomainOf returns the domain an entity of that kind ("asset",
+	// "glossary_term", "data_product") belongs to, or "" when it has none.
+	DomainOf(ctx context.Context, kind, entityID string) (string, error)
+	// Roles lists who holds a role in the domain. A missing domain is ErrNotFound.
+	Roles(ctx context.Context, domainID string) ([]RoleAssignment, error)
 }
 
 // Host is what the server hands an extension.
@@ -66,6 +77,19 @@ type Host interface {
 	DB() *pgxpool.Pool
 	Principal(r *http.Request) (Principal, bool)
 	Domains() Domains
+	Users() Users
+	Teams() Teams
+	Assets() Assets
+	Glossary() Glossary
+	Queries() Queries
+	Notifications() Notifier
+	// As returns the person with that ID as they are now, and a context in
+	// which the host's write guards see them. Work without a request, such as
+	// a Task, has no identity until it takes one. ok is false for a missing
+	// or inactive user.
+	As(ctx context.Context, userID string) (p Principal, as context.Context, ok bool)
+	// Schedule starts a Task. Call it from Routes; it runs until the server stops.
+	Schedule(task Task)
 }
 
 var (
