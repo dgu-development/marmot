@@ -3,7 +3,10 @@
 // stores, schedules and serves. Both speak these types.
 package quality
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Quality dimensions group the checks of the audit by what they measure. Each has a score of its
 // own and a weight in the overall one. Uniqueness and accuracy are not here: the first compares
@@ -78,4 +81,32 @@ func (c Condition) DateOperand(today time.Time) (time.Time, bool) {
 		base = parsed
 	}
 	return base.AddDate(0, 0, c.Days), true
+}
+
+// BuiltinDimension is the dimension each built-in rule counts under.
+var BuiltinDimension = map[string]string{
+	"required":            DimensionCompleteness,
+	"validation":          DimensionValidity,
+	"externalLinkInvalid": DimensionValidity,
+	"externalLinkEmpty":   DimensionCompleteness,
+}
+
+// FindingCode is the code the audit reports for the rule, which clients translate: its Code, or
+// a snake_case form of its ID.
+func (r Rule) FindingCode() string {
+	if r.Code != "" {
+		return r.Code
+	}
+	var out strings.Builder
+	for i, c := range r.ID {
+		if c >= 'A' && c <= 'Z' {
+			if i > 0 {
+				out.WriteByte('_')
+			}
+			out.WriteRune(c + 'a' - 'A')
+			continue
+		}
+		out.WriteRune(c)
+	}
+	return out.String()
 }

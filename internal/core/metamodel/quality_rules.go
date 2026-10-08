@@ -39,12 +39,7 @@ type (
 )
 
 // BuiltinRuleDimension is the dimension each built-in rule counts under.
-var BuiltinRuleDimension = map[string]string{
-	"required":            DimensionCompleteness,
-	"validation":          DimensionValidity,
-	"externalLinkInvalid": DimensionValidity,
-	"externalLinkEmpty":   DimensionCompleteness,
-}
+var BuiltinRuleDimension = extquality.BuiltinDimension
 
 // Operators of a condition, by the value they take.
 const (

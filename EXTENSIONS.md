@@ -18,6 +18,7 @@ An extension is a Go module that calls `extension.Register` from an `init` funct
 | `Host.Users()`, `Host.Teams()` | People and teams by ID or name, and the members of a team |
 | `Host.Assets()` | An asset by ID and the writes of the API: profile fields with the version check, tags and glossary terms. They run the same guards as the API, as the person the context carries |
 | `Host.Glossary()`, `Host.Queries()` | A term by name; the assets a Discover query matches |
+| `Host.Quality()` | The evaluating half of the metadata quality audit: the profile in force and its rules, validating a rule a person wrote, and judging a batch of assets with given settings and custom rules, writing their scores as the platform. Its data is `pkg/extension/quality` |
 | `Host.Notifications()` | In-app notifications, delivered through the channels each recipient chose |
 | `Host.As` | A person's identity for work without a request: the principal and a context the write guards read |
 | `Host.Schedule` | A task repeated on one replica at a time, stopped with the server |
