@@ -177,6 +177,10 @@ type Config struct {
 		// Profile is the path to a configurable-metadata-fields YAML file.
 		// Empty keeps the native-only schema.
 		Profile string `mapstructure:"profile"`
+		// Packs is fork-only: a directory of content packs, YAML files of
+		// reference assets created at start-up when they are missing. See
+		// CONTENT_PACKS.md.
+		Packs string `mapstructure:"packs"`
 	} `mapstructure:"metamodel"`
 
 	// Domains is fork-only; see DOMAINS.md.
@@ -431,6 +435,7 @@ func loadConfig(configPath string) error {
 	v.BindEnv("search.elasticsearch.tls.key_path")
 
 	v.BindEnv("metamodel.profile")
+	v.BindEnv("metamodel.packs")
 	v.BindEnv("domains.enabled")
 	v.BindEnv("domains.write_enforcement")
 	v.BindEnv("workflows.enabled")
@@ -576,6 +581,7 @@ func setDefaults(v *viper.Viper) {
 
 	// Metamodel defaults
 	v.SetDefault("metamodel.profile", "")
+	v.SetDefault("metamodel.packs", "")
 
 	v.SetDefault("domains.enabled", false)
 	v.SetDefault("domains.write_enforcement", false)
