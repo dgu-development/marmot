@@ -8,6 +8,8 @@ export interface EntityRef {
 	kind: EntityKind;
 	id: string;
 	mrn?: string;
+	/** The profile's asset type of an asset, when it has one. */
+	assetType?: string;
 }
 
 /**
@@ -25,6 +27,10 @@ export type PanelPlacement = 'side' | 'tab' | 'header' | 'references';
 export interface EntityPanel {
 	id: string;
 	kinds?: EntityKind[];
+	/** Profile asset types the panel is for; empty shows it on every asset. */
+	assetTypes?: string[];
+	/** Profile fields the panel edits itself: the metadata sheet leaves them out where it shows. */
+	fields?: string[];
 	placement?: PanelPlacement;
 	/** Label and icon of the tab; `label` is read on render so it follows the locale. */
 	tab?: { label: () => string; icon: string };
@@ -41,16 +47,33 @@ export function registerEntityPanel(panel: EntityPanel): () => void {
 	return () => entityPanels.update((panels) => panels.filter((item) => item !== panel));
 }
 
-export function panelsFor(panels: EntityPanel[], kind: EntityKind, placement: PanelPlacement) {
+function applies(panel: EntityPanel, kind: EntityKind, assetType?: string): boolean {
+	if (panel.kinds && !panel.kinds.includes(kind)) return false;
+	if (!panel.assetTypes?.length) return true;
+	return kind === 'asset' && !!assetType && panel.assetTypes.includes(assetType);
+}
+
+export function panelsFor(
+	panels: EntityPanel[],
+	kind: EntityKind,
+	placement: PanelPlacement,
+	assetType?: string
+) {
 	return panels.filter(
-		(panel) =>
-			(!panel.kinds || panel.kinds.includes(kind)) && (panel.placement ?? 'side') === placement
+		(panel) => applies(panel, kind, assetType) && (panel.placement ?? 'side') === placement
 	);
 }
 
+/** Ids of the profile fields that the panels shown for this entity edit themselves. */
+export function panelFields(panels: EntityPanel[], kind: EntityKind, assetType?: string): string[] {
+	return panels
+		.filter((panel) => applies(panel, kind, assetType))
+		.flatMap((panel) => panel.fields ?? []);
+}
+
 /** Tab entries for a page's tab bar; their ids start with `ext-`. */
-export function panelTabs(panels: EntityPanel[], kind: EntityKind) {
-	return panelsFor(panels, kind, 'tab').map((panel) => ({
+export function panelTabs(panels: EntityPanel[], kind: EntityKind, assetType?: string) {
+	return panelsFor(panels, kind, 'tab', assetType).map((panel) => ({
 		id: `ext-${panel.id}`,
 		label: panel.tab?.label() ?? panel.id,
 		icon: panel.tab?.icon ?? 'material-symbols:extension'

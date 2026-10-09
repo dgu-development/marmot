@@ -29,12 +29,21 @@ export function metadataPath(storage: string): string[] {
  * Keeps the fields that apply to the asset's type. A field scoped by `appliesTo.assetTypes`
  * disappears from an untyped asset or one of another type, as the server ignores it there.
  */
+/** The value of the profile's `asset_type` field on an asset, if the profile has one. */
+export function assetTypeOf(
+	fields: MetamodelField[],
+	metadata: Record<string, unknown> | undefined
+): string | undefined {
+	const typeField = fields.find((field) => field.id === 'asset_type');
+	const value = typeField ? readMetadataValue(metadata, typeField.storage) : undefined;
+	return typeof value === 'string' ? value : undefined;
+}
+
 export function fieldsForAssetType(
 	fields: MetamodelField[],
 	metadata: Record<string, unknown> | undefined
 ): MetamodelField[] {
-	const typeField = fields.find((field) => field.id === 'asset_type');
-	const assetType = typeField ? readMetadataValue(metadata, typeField.storage) : undefined;
+	const assetType = assetTypeOf(fields, metadata);
 	return fields.filter((field) => {
 		const scope = field.appliesTo?.assetTypes;
 		return !scope?.length || (typeof assetType === 'string' && scope.includes(assetType));

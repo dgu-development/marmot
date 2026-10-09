@@ -12,11 +12,16 @@
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import type { MetamodelSchema } from '$lib/metamodel/types';
 	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
-	import { fieldsForAssetType, governedFields, governedPaths } from '$lib/metamodel/values';
+	import {
+		assetTypeOf,
+		fieldsForAssetType,
+		governedFields,
+		governedPaths
+	} from '$lib/metamodel/values';
 	import Lineage from '$components/lineage/Lineage.svelte';
 	import EntityPanels from '$components/extensions/EntityPanels.svelte';
 	import EntityTab from '$components/extensions/EntityTab.svelte';
-	import { entityPanels, panelTabs } from '$lib/extensions/entity-panels';
+	import { entityPanels, panelFields, panelTabs } from '$lib/extensions/entity-panels';
 	import AssetContents from '$components/asset/AssetContents.svelte';
 	import SchemaEditor from '$components/schema/SchemaEditor.svelte';
 	import AssetEnvironmentsView from '$components/asset/AssetEnvironmentsView.svelte';
@@ -71,7 +76,14 @@
 	let canManageAssets = $derived(auth.hasPermission('assets', 'manage') && $domainWrite);
 	let metamodel = $state<MetamodelSchema | null>(null);
 	let allGoverned = $derived(metamodel?.enabled ? governedFields(metamodel.fields) : []);
-	let governed = $derived(fieldsForAssetType(allGoverned, asset?.metadata));
+	let governedType = $derived(assetTypeOf(allGoverned, asset?.metadata));
+	// A panel that edits fields of its own takes them out of the sheet.
+	let panelOwned = $derived(panelFields($entityPanels, 'asset', governedType));
+	let governed = $derived(
+		fieldsForAssetType(allGoverned, asset?.metadata).filter(
+			(field) => !panelOwned.includes(field.id)
+		)
+	);
 	let governedHidePaths = $derived(governedPaths(allGoverned));
 
 	let activeTab = $derived($page.url.searchParams.get('tab') || 'metadata');
@@ -316,7 +328,7 @@
 			return true;
 		})
 	);
-	let pageTabs = $derived([...visibleTabs, ...panelTabs($entityPanels, 'asset')]);
+	let pageTabs = $derived([...visibleTabs, ...panelTabs($entityPanels, 'asset', governedType)]);
 
 	$effect(() => {
 		if (assetType && assetService && assetName) {
@@ -544,7 +556,7 @@
 						</div>
 						<div class="hidden w-72 flex-shrink-0 lg:block">
 							<EntityPanels
-								entity={{ kind: 'asset', id: asset.id, mrn: asset.mrn }}
+								entity={{ kind: 'asset', id: asset.id, mrn: asset.mrn, assetType: governedType }}
 								placement="header"
 							/>
 						</div>
@@ -597,6 +609,7 @@
 													bind:asset
 													schema={metamodel}
 													fields={governed}
+													hiddenIncoming={panelOwned}
 													{editable}
 													onConflict={fetchAsset}
 												/>
@@ -668,7 +681,7 @@
 							<div class="mt-6">
 								<EntityTab
 									tab={activeTab}
-									entity={{ kind: 'asset', id: asset.id, mrn: asset.mrn }}
+									entity={{ kind: 'asset', id: asset.id, mrn: asset.mrn, assetType: governedType }}
 								/>
 							</div>
 						{:else}
