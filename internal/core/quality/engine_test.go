@@ -3,8 +3,11 @@ package quality_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"testing"
 
+	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/quality"
 	extquality "github.com/marmotdata/marmot/pkg/extension/quality"
@@ -72,4 +75,36 @@ func TestTheEngineNeedsAProfileAndRefusesARuleOnAFieldItLacks(t *testing.T) {
 	if err := engine.ValidateRule(rule); err != nil {
 		t.Fatalf("err = %v", err)
 	}
+}
+
+type memorySource struct{ assets []*asset.Asset }
+
+func (m *memorySource) Count(context.Context) (int, error) { return len(m.assets), nil }
+
+func (m *memorySource) ListByIDs(_ context.Context, ids []string) ([]*asset.Asset, error) {
+	var out []*asset.Asset
+	for _, a := range m.assets {
+		if slices.Contains(ids, a.ID) {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
+func (m *memorySource) ListAfter(_ context.Context, after string, limit int) ([]*asset.Asset, error) {
+	var out []*asset.Asset
+	for _, a := range m.assets {
+		if a.ID > after && len(out) < limit {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
+func catalog(n int) []*asset.Asset {
+	var out []*asset.Asset
+	for i := 0; i < n; i++ {
+		out = append(out, newAsset(fmt.Sprintf("a%02d", i), complete()))
+	}
+	return out
 }

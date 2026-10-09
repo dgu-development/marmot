@@ -33,7 +33,7 @@ func NewEngine(registry *metamodel.Registry, assets AssetSource, facts AssetFact
 }
 
 // NewAssetFacts reads the facts from the catalog's tables.
-func NewAssetFacts(db *pgxpool.Pool) AssetFacts { return &PostgresRepository{db: db} }
+func NewAssetFacts(db *pgxpool.Pool) AssetFacts { return &postgresFacts{db: db} }
 
 func (e *Engine) Profile() extquality.Profile {
 	schema := e.registry.Schema()

@@ -8,16 +8,7 @@ description: Audit how complete and valid the metadata of every asset is, on dem
 
 The audit scores every asset in the catalog against the effective [metamodel](asset-metadata.md): how many of its fields are filled and how many of those hold a valid value, plus the rules that check its values against each other and in time. Each of those is a [quality dimension](#quality-dimensions). It runs on the server, with the same field checks the API applies to writes, so a value the server would reject is a finding here.
 
-It is off by default.
-
-```yaml
-quality:
-  enabled: true
-```
-
-```
-MARMOT_QUALITY_ENABLED=true
-```
+It ships as the `metadata_quality` extension, compiled into the image: the kernel lends it the evaluator (`pkg/extension/quality`) and the extension keeps the settings, the custom rules, the runs and their history in its own tables. A build without the extension has none of these endpoints.
 
 Without a metamodel profile there is nothing to audit against: starting a run answers `422`.
 
@@ -33,19 +24,19 @@ Without a metamodel profile there is nothing to audit against: starting a run an
 
 ## Settings
 
-`GET`/`PUT /api/v1/quality/settings` read and replace one versioned row, with `If-Match`: a stale version answers `412`. They hold the weight of each quality dimension, the thresholds of a compliant and a warned asset, which rules apply and with what severity, the retention, the batch size and the time limit of a run.
+`GET`/`PUT /api/v1/ext/metadata_quality/settings` read and replace one versioned row, with `If-Match`: a stale version answers `412`. They hold the weight of each quality dimension, the thresholds of a compliant and a warned asset, which rules apply and with what severity, the retention, the batch size and the time limit of a run.
 
 ## Runs
 
-`POST /api/v1/quality/runs` starts a run in the background and answers `202` with the run. One run at a time: a second request answers `409` with the run in progress. Read it with `GET /api/v1/quality/runs/{id}`: `processed` over `total` is the progress.
+`POST /api/v1/ext/metadata_quality/runs` starts a run in the background and answers `202` with the run. One run at a time: a second request answers `409` with the run in progress. Read it with `GET /api/v1/ext/metadata_quality/runs/{id}`: `processed` over `total` is the progress.
 
 A run walks the catalog by key in batches (`batch_size`, 500 by default), so memory stays bounded to one batch. Each batch is stored in its own transaction, which means a failure leaves the earlier batches done. It ends `succeeded`, or `failed` with its reason: `timeout` when it passes `max_run_seconds`, `interrupted` when the server stops or stops reporting progress for five minutes, or the error. A crash never blocks the next run.
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/v1/quality/runs` | Runs, newest first, with the summary of the finished ones |
-| `GET /api/v1/quality/runs/{id}` | The run, the settings it used and the metamodel version and hash |
-| `GET /api/v1/quality/runs/{id}/results` | One entry per asset, weakest first; filters `status`, `domain` (an id, or `unassigned`), `type`, `q`; `sort=name`; `limit` (up to 500) and `offset` |
+| `GET /api/v1/ext/metadata_quality/runs` | Runs, newest first, with the summary of the finished ones |
+| `GET /api/v1/ext/metadata_quality/runs/{id}` | The run, the settings it used and the metamodel version and hash |
+| `GET /api/v1/ext/metadata_quality/runs/{id}/results` | One entry per asset, weakest first; filters `status`, `domain` (an id, or `unassigned`), `type`, `q`; `sort=name`; `limit` (up to 500) and `offset` |
 
 The summary has the totals, the status counts, the fields with most findings and the mean score of each quality dimension and the mean quality by section, asset type and domain. Domains are one more aggregate of the run, not a filter of it. Stubs, the placeholders lineage creates, are counted apart and never scored.
 
@@ -122,7 +113,7 @@ A finding of a declared rule counts for the status of the asset (an `error` keep
 
 #### Custom rules
 
-`GET /api/v1/quality/rules` lists every rule with its source, severity and whether it applies. `POST /api/v1/quality/rules` creates a custom rule, `PUT /api/v1/quality/rules/{id}` replaces it (with `If-Match`, like the settings; `412` when someone changed it first) and `DELETE` removes it. The body is the same declaration as above with literal `name` and `description` instead of message keys, plus `enabled`, `dimension` and `severity`:
+`GET /api/v1/ext/metadata_quality/rules` lists every rule with its source, severity and whether it applies. `POST /api/v1/ext/metadata_quality/rules` creates a custom rule, `PUT /api/v1/ext/metadata_quality/rules/{id}` replaces it (with `If-Match`, like the settings; `412` when someone changed it first) and `DELETE` removes it. The body is the same declaration as above with literal `name` and `description` instead of message keys, plus `enabled`, `dimension` and `severity`:
 
 ```json
 {
@@ -141,7 +132,7 @@ The profile and the custom rules are two sources on purpose: the profile ships w
 
 #### Evaluating assets now
 
-`POST /api/v1/quality/evaluate` with `{"asset_ids": [...]}` (up to 200) judges the assets as they are, with the current settings and rules, and records nothing: it is what the quality card of an asset or a data product shows. It returns the findings and the checks each asset meets; an id that is not an asset is left out.
+`POST /api/v1/ext/metadata_quality/evaluate` with `{"asset_ids": [...]}` (up to 200) judges the assets as they are, with the current settings and rules, and records nothing: it is what the quality card of an asset or a data product shows. It returns the findings and the checks each asset meets; an id that is not an asset is left out.
 
 The detail of the findings is kept for the last successful run only; every result carries its `issue_count`.
 
@@ -168,7 +159,7 @@ A check every 30 seconds, on a singleton task like the ingestion scheduler's, st
 - A schedule that has just been saved waits for its next slot; it does not fire for one that passed before it existed.
 - With several replicas only one checks at a time, and the single-run guard backs it up.
 
-`GET`/`PUT /api/v1/quality/settings` add `next_run` when a schedule is set. Runs started by it have `trigger` `schedule` and no `triggered_by`.
+`GET`/`PUT /api/v1/ext/metadata_quality/settings` add `next_run` when a schedule is set. Runs started by it have `trigger` `schedule` and no `triggered_by`.
 
 ## Scores on the assets
 

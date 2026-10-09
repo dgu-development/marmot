@@ -188,11 +188,6 @@ type Config struct {
 		// WriteEnforcement is the state of write enforcement until someone sets it through the API.
 		WriteEnforcement bool `mapstructure:"write_enforcement"`
 	} `mapstructure:"domains"`
-
-	// Quality is fork-only: the quality audit and its settings.
-	Quality struct {
-		Enabled bool `mapstructure:"enabled"`
-	} `mapstructure:"quality"`
 }
 
 type BannerConfig struct {
@@ -430,7 +425,6 @@ func loadConfig(configPath string) error {
 	v.BindEnv("metamodel.packs")
 	v.BindEnv("domains.enabled")
 	v.BindEnv("domains.write_enforcement")
-	v.BindEnv("quality.enabled")
 
 	// Set defaults
 	setDefaults(v)
@@ -576,7 +570,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("domains.enabled", false)
 	v.SetDefault("domains.write_enforcement", false)
 
-	v.SetDefault("quality.enabled", false)
 }
 
 // BuildDSN builds a PostgreSQL connection string from config
