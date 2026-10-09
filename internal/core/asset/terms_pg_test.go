@@ -1,10 +1,11 @@
-package asset
+package asset_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
+	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/metrics"
 	"github.com/marmotdata/marmot/internal/store/postgres/pgtest"
 )
@@ -31,7 +32,7 @@ func TestAssetsByTermListsTheTermAssets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assets, total, err := NewPostgresRepository(pool, noopRecorder{}).GetAssetsByTerm(ctx, termID, 10, 0)
+	assets, total, err := asset.NewPostgresRepository(pool, noopRecorder{}).GetAssetsByTerm(ctx, termID, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,6 +2,7 @@ package asset
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -57,6 +58,81 @@ func LinkIDs(value any) []string {
 		return ids
 	case []string:
 		return slices.DeleteFunc(slices.Clone(v), func(s string) bool { return s == "" })
+	}
+	return nil
+}
+
+// mrnPrefix marks a link written by something that only knows the target's MRN, such as a
+// connector: IDs are minted here, so a source cannot name them.
+const mrnPrefix = "mrn://"
+
+// HasLinkMRNs reports whether metadata holds an MRN anywhere a link could be.
+func HasLinkMRNs(value any) bool {
+	switch v := value.(type) {
+	case string:
+		return strings.HasPrefix(v, mrnPrefix)
+	case []any:
+		return slices.ContainsFunc(v, HasLinkMRNs)
+	case []string:
+		return slices.ContainsFunc(v, func(item string) bool { return strings.HasPrefix(item, mrnPrefix) })
+	case map[string]any:
+		for _, item := range v {
+			if HasLinkMRNs(item) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// resolveLinkMRNs replaces, in the asset-control fields, each MRN with the ID of the asset it
+// names, on a copy of the metadata. An MRN that names nothing is left out; with deferred, its whole field is, so that a run
+// which creates both ends can fill the field in one go on its second pass instead of leaving a
+// partial value that would then count as curated.
+func (s *service) resolveLinkMRNs(ctx context.Context, asset *Asset, deferred bool) error {
+	if !HasLinkMRNs(asset.Metadata) {
+		return nil
+	}
+	// The caller keeps its map as it sent it: a run sends the same metadata again on its second pass.
+	metadata, err := cloneMetadata(asset.Metadata)
+	if err != nil {
+		return err
+	}
+	asset.Metadata = metadata
+	for _, f := range LinkFields(s.registry()) {
+		value, present := metamodel.ValueAt(metadata, f.Storage)
+		if !present || !HasLinkMRNs(value) {
+			continue
+		}
+		raw := LinkIDs(value)
+		ids := make([]any, 0, len(raw))
+		missing := false
+		for _, item := range raw {
+			if !strings.HasPrefix(item, mrnPrefix) {
+				ids = append(ids, item)
+				continue
+			}
+			target, err := s.repo.GetByMRN(ctx, item)
+			if errors.Is(err, ErrNotFound) || errors.Is(err, ErrAssetNotFound) {
+				missing = true
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("resolving linked asset %s: %w", item, err)
+			}
+			ids = append(ids, target.ID)
+		}
+		var resolved any = ids
+		if _, single := value.(string); single && len(ids) > 0 {
+			resolved = ids[0]
+		}
+		if len(ids) == 0 || (missing && deferred) {
+			resolved = nil
+		}
+		parts := strings.Split(strings.TrimPrefix(f.Storage, "metadata."), ".")
+		if err := setMetadataValue(metadata, parts, resolved); err != nil {
+			return fmt.Errorf("field %q: %w", f.ID, err)
+		}
 	}
 	return nil
 }
