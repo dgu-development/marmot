@@ -75,6 +75,8 @@
 	let metadata = $state<Record<string, unknown>>(metadataProp || asset?.metadata || {});
 
 	let showAddRow = $state(false);
+	// Beside governed fields, the free-form entries are the long tail: folded until asked for.
+	let additionalOpen = $state(false);
 	let editingKey = $state<string | null>(null);
 	let editingValue = $state('');
 	let newKey = $state('');
@@ -397,36 +399,58 @@
 					</div>
 				{:else}
 					<table class="min-w-full">
-						<thead>
-							<tr class="border-b border-gray-200 dark:border-gray-700">
-								<th
-									class="px-4 py-2 text-left text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
-								>
-									{m.shared_metadata_key_header()}
-								</th>
-								<th
-									class="px-4 py-2 text-left text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
-								>
-									{m.shared_metadata_value_header()}
-								</th>
-								{#if canEdit()}
-									<th class="px-4 py-2 w-10"></th>
-								{/if}
-							</tr>
-						</thead>
+						{#if !hasLeadingRows}
+							<thead>
+								<tr class="border-b border-gray-200 dark:border-gray-700">
+									<th
+										class="px-4 py-2 text-left text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+									>
+										{m.shared_metadata_key_header()}
+									</th>
+									<th
+										class="px-4 py-2 text-left text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400"
+									>
+										{m.shared_metadata_value_header()}
+									</th>
+									{#if canEdit()}
+										<th class="px-4 py-2 w-10"></th>
+									{/if}
+								</tr>
+							</thead>
+						{/if}
 						<tbody>
 							{#if leadingRows}
 								{@render leadingRows(canEdit())}
-								<tr>
-									<td
-										colspan={canEdit() ? 3 : 2}
-										class="bg-gray-50/60 px-4 pt-4 pb-1.5 text-xs font-semibold tracking-wide text-gray-400 uppercase dark:bg-gray-900/40 dark:text-gray-500"
-									>
-										{m.metamodel_additional_metadata()}
-									</td>
-								</tr>
+								{#if metadataEntries.length > 0}
+									<tr data-additional-metadata>
+										<td
+											colspan={canEdit() ? 3 : 2}
+											class="border-b border-gray-200 p-0 dark:border-gray-700"
+										>
+											<button
+												type="button"
+												aria-expanded={additionalOpen}
+												onclick={() => (additionalOpen = !additionalOpen)}
+												class="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-earthy-terracotta-600 dark:hover:bg-gray-700/30"
+											>
+												<IconifyIcon
+													icon="material-symbols:chevron-right-rounded"
+													class="h-5 w-5 flex-shrink-0 text-gray-400 transition-transform {additionalOpen
+														? 'rotate-90'
+														: ''}"
+												/>
+												<span class="text-sm font-semibold text-gray-800 dark:text-gray-100">
+													{m.metamodel_additional_metadata()}
+												</span>
+												<span class="ml-auto text-xs text-gray-500 tabular-nums dark:text-gray-400">
+													{metadataEntries.length}
+												</span>
+											</button>
+										</td>
+									</tr>
+								{/if}
 							{/if}
-							{#each metadataEntries as [key, value] (key)}
+							{#each leadingRows && !additionalOpen ? [] : metadataEntries as [key, value] (key)}
 								<tr
 									class="group border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
 								>
