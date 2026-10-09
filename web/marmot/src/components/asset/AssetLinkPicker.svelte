@@ -9,6 +9,7 @@
 		ids,
 		multiple,
 		exclude = undefined,
+		assetTypes = [],
 		inputId,
 		labelledby,
 		describedby = undefined,
@@ -19,6 +20,8 @@
 		multiple: boolean;
 		/** An asset that may not be picked, such as the one being edited. */
 		exclude?: string;
+		/** The profile asset types the field may point at; empty for any. */
+		assetTypes?: string[];
 		inputId: string;
 		labelledby: string;
 		describedby?: string;
@@ -46,7 +49,9 @@
 		timer = setTimeout(async () => {
 			searching = true;
 			try {
-				results = (await findAssets(value)).filter((a) => a.id !== exclude && !ids.includes(a.id));
+				results = (await findAssets(value, assetTypes)).filter(
+					(a) => a.id !== exclude && !ids.includes(a.id)
+				);
 			} catch {
 				results = [];
 			} finally {

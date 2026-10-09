@@ -601,6 +601,7 @@
 					ids={assetLinkIds(draft)}
 					multiple={field.type === 'list'}
 					exclude={asset.id}
+					assetTypes={field.presentation?.targetAssetTypes}
 					inputId={controlId}
 					labelledby={`governed-label-${field.id}`}
 					describedby={described}
