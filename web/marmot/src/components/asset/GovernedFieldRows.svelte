@@ -72,6 +72,10 @@
 	// A plain, non-reactive dedupe guard for in-flight lookups; never read by the template.
 	const pendingLookups: Record<string, true> = {};
 
+	function isEmptyValue(value: unknown): boolean {
+		return isUnset(value) || (Array.isArray(value) && value.length === 0);
+	}
+
 	const context = $derived({
 		locale: $locale,
 		defaultLocale: schema.defaultLocale,
@@ -79,14 +83,27 @@
 		native: nativeMessage
 	});
 
-	const hasMultipleSections = $derived.by(() => {
-		const seen: string[] = [];
+	// What the reader chose to open; a section nobody touched opens only when it has something to say.
+	let toggled = $state<Record<string, boolean>>({});
+	let emptyShown = $state<Record<string, boolean>>({});
+
+	const sections = $derived.by(() => {
+		const out: { id: string; fields: MetamodelField[]; filled: number; missing: number }[] = [];
 		for (const field of fields) {
-			const section = field.presentation?.section ?? '';
-			if (!seen.includes(section)) seen.push(section);
+			const id = field.presentation?.section ?? '';
+			let section = out.find((candidate) => candidate.id === id);
+			if (!section) out.push((section = { id, fields: [], filled: 0, missing: 0 }));
+			section.fields.push(field);
+			if (!isEmptyValue(readMetadataValue(asset.metadata, field.storage))) section.filled++;
+			else if (field.required) section.missing++;
 		}
-		return seen.length > 1;
+		return out;
 	});
+	const missing = $derived(sections.reduce((total, section) => total + section.missing, 0));
+
+	function isOpen(section: { id: string; filled: number; missing: number }): boolean {
+		return toggled[section.id] ?? (sections.length === 1 || section.filled + section.missing > 0);
+	}
 
 	const neededOwnerIds = $derived.by(() => {
 		const ids: string[] = [];
@@ -131,10 +148,6 @@
 		if (label) return label;
 		if (typeof value === 'boolean') return value ? m.metamodel_yes() : m.metamodel_no();
 		return text(value);
-	}
-
-	function isEmptyValue(value: unknown): boolean {
-		return isUnset(value) || (Array.isArray(value) && value.length === 0);
 	}
 
 	function focusIf(node: HTMLElement, on: boolean) {
@@ -734,21 +747,8 @@
 
 <svelte:window onclick={handleWindowClick} />
 
-{#each fields as field, i (field.id)}
-	{@const section = field.presentation?.section ?? ''}
-	{@const previousSection = i > 0 ? (fields[i - 1].presentation?.section ?? '') : undefined}
-	{@const value = readMetadataValue(asset.metadata, field.storage)}
+{#snippet row(field: MetamodelField, value: unknown)}
 	{@const helpText = help(field)}
-	{#if hasMultipleSections && section !== previousSection}
-		<tr data-governed-section={section}>
-			<td
-				colspan={editable ? 3 : 2}
-				class="bg-gray-50/60 px-4 pt-4 pb-1.5 text-xs font-semibold tracking-wide text-gray-400 uppercase dark:bg-gray-900/40 dark:text-gray-500"
-			>
-				{section ? sectionLabel(section, context) : m.metamodel_other_section()}
-			</td>
-		</tr>
-	{/if}
 	<tr
 		class="group border-b border-gray-200 transition-colors dark:border-gray-700 {field.required
 			? 'bg-earthy-terracotta-50 dark:bg-earthy-terracotta-900/20'
@@ -775,10 +775,12 @@
 					</span>
 				{/if}
 			</div>
-			<div class="mt-0.5 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
-				<IconifyIcon icon={typeIcon(field)} class="h-3.5 w-3.5" />
-				{typeLabel(field)}
-			</div>
+			{#if editingId === field.id}
+				<div class="mt-0.5 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
+					<IconifyIcon icon={typeIcon(field)} class="h-3.5 w-3.5" />
+					{typeLabel(field)}
+				</div>
+			{/if}
 		</td>
 		<td class="px-4 py-3 text-sm align-top">
 			{#if editingId === field.id}
@@ -819,4 +821,76 @@
 			{/if}
 		</td>
 	</tr>
+{/snippet}
+
+{#if missing > 0}
+	<tr data-governed-missing>
+		<td
+			colspan={editable ? 3 : 2}
+			class="border-b border-gray-200 px-4 py-2 text-sm text-red-700 dark:border-gray-700 dark:text-red-400"
+		>
+			<span class="inline-flex items-center gap-1.5">
+				<IconifyIcon icon="material-symbols:error-outline-rounded" class="h-4 w-4" />
+				{m.metamodel_required_missing({ count: missing })}
+			</span>
+		</td>
+	</tr>
+{/if}
+{#each sections as section (section.id)}
+	{@const open = isOpen(section)}
+	{@const hidden = section.fields.length - section.filled - section.missing}
+	{#if sections.length > 1}
+		<tr data-governed-section={section.id}>
+			<td colspan={editable ? 3 : 2} class="bg-gray-50/60 p-0 dark:bg-gray-900/40">
+				<button
+					type="button"
+					aria-expanded={open}
+					onclick={() => (toggled[section.id] = !open)}
+					class="flex w-full items-center gap-2 px-4 pt-3 pb-2 text-left text-xs font-semibold tracking-wide text-gray-500 uppercase hover:text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-earthy-terracotta-600 dark:text-gray-400 dark:hover:text-gray-200"
+				>
+					<IconifyIcon
+						icon="material-symbols:chevron-right-rounded"
+						class="h-4 w-4 transition-transform {open ? 'rotate-90' : ''}"
+					/>
+					<span>{section.id ? sectionLabel(section.id, context) : m.metamodel_other_section()}</span
+					>
+					<span class="font-normal normal-case text-gray-400 dark:text-gray-500">
+						{section.filled}/{section.fields.length}
+					</span>
+					{#if section.missing > 0}
+						<span class="font-normal normal-case text-red-600 dark:text-red-400">
+							{m.metamodel_required_missing({ count: section.missing })}
+						</span>
+					{/if}
+				</button>
+			</td>
+		</tr>
+	{/if}
+	{#if open}
+		{#each section.fields as field (field.id)}
+			{@const value = readMetadataValue(asset.metadata, field.storage)}
+			{#if !isEmptyValue(value) || field.required || editingId === field.id || emptyShown[section.id]}
+				{@render row(field, value)}
+			{/if}
+		{/each}
+		{#if hidden > 0}
+			<tr data-governed-empty={section.id}>
+				<td
+					colspan={editable ? 3 : 2}
+					class="border-b border-gray-200 px-4 py-1.5 dark:border-gray-700"
+				>
+					<button
+						type="button"
+						aria-expanded={!!emptyShown[section.id]}
+						onclick={() => (emptyShown[section.id] = !emptyShown[section.id])}
+						class="rounded text-xs text-gray-500 underline-offset-2 hover:text-earthy-terracotta-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 dark:text-gray-400 dark:hover:text-earthy-terracotta-500"
+					>
+						{emptyShown[section.id]
+							? m.metamodel_hide_empty()
+							: m.metamodel_show_empty({ count: hidden })}
+					</button>
+				</td>
+			</tr>
+		{/if}
+	{/if}
 {/each}
