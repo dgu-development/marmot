@@ -82,8 +82,9 @@ type ListResult struct {
 var (
 	ErrInvalidInput = errors.New("invalid input")
 	ErrTermNotFound = errors.New("glossary term not found")
-	ErrTermExists   = errors.New("glossary term already exists")
-	ErrCircularRef  = errors.New("circular reference detected in term hierarchy")
+	// ErrTermExists is a live term with that name under the same parent, whatever the case.
+	ErrTermExists  = ErrConflict
+	ErrCircularRef = errors.New("circular reference detected in term hierarchy")
 )
 
 type Service interface {
