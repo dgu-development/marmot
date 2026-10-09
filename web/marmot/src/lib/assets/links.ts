@@ -86,16 +86,21 @@ export async function assetReferences(id: string): Promise<AssetReferences[]> {
 	return response.json();
 }
 
-export async function findAssets(query: string, limit = 8): Promise<AssetRef[]> {
-	const params = new URLSearchParams({ q: query, limit: String(limit) });
-	const response = await fetchApi(`/assets/search?${params}`);
+/**
+ * Assets matching what was typed, through the catalog search: the same ranking and accent folding
+ * as the search box. `assetTypes` keeps only the profile asset types a field may point at.
+ */
+export async function findAssets(
+	query: string,
+	assetTypes: string[] = [],
+	limit = 8
+): Promise<AssetRef[]> {
+	const params = new URLSearchParams({ q: query, types: 'asset', limit: String(limit) });
+	if (assetTypes.length > 0) params.set('governed.asset_type', assetTypes.join(','));
+	const response = await fetchApi(`/search?${params}`);
 	if (!response.ok) throw new Error('Failed to search assets');
-	const body = (await response.json()) as { assets?: AssetRef[] };
-	return (body.assets ?? []).map(({ id, name, type, providers, mrn }) => ({
-		id,
-		name,
-		type,
-		providers: providers ?? [],
-		mrn
-	}));
+	const body = (await response.json()) as { results?: { id: string }[] };
+	const ids = (body.results ?? []).map((result) => result.id);
+	const refs = await resolveAssets(ids);
+	return ids.map((id) => refs.get(id)).filter((ref): ref is AssetRef => !!ref);
 }
