@@ -48,12 +48,15 @@
 		schema,
 		fields,
 		editable = false,
+		hiddenIncoming = [],
 		onConflict
 	}: {
 		asset: Asset;
 		schema: MetamodelSchema;
 		fields: MetamodelField[];
 		editable?: boolean;
+		/** Fields whose incoming links are shown elsewhere on the page. */
+		hiddenIncoming?: string[];
 		onConflict?: () => void;
 	} = $props();
 
@@ -123,7 +126,7 @@
 			.then((found) => {
 				if (cancelled) return;
 				for (const group of found) group.assets.forEach(rememberAsset);
-				incoming = found;
+				incoming = found.filter((group) => !hiddenIncoming.includes(group.field));
 			})
 			.catch(() => {});
 		return () => {

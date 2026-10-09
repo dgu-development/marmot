@@ -23,10 +23,10 @@
 	const shown = $derived(
 		placement === 'side'
 			? [
-					...panelsFor($entityPanels, entity.kind, 'side'),
-					...(withTabs ? panelsFor($entityPanels, entity.kind, 'tab') : [])
+					...panelsFor($entityPanels, entity.kind, 'side', entity.assetType),
+					...(withTabs ? panelsFor($entityPanels, entity.kind, 'tab', entity.assetType) : [])
 				]
-			: panelsFor($entityPanels, entity.kind, placement)
+			: panelsFor($entityPanels, entity.kind, placement, entity.assetType)
 	);
 </script>
 
