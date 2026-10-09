@@ -9,7 +9,6 @@
 	import AssetSources from '$components/asset/AssetSources.svelte';
 	import MetadataView from '$components/shared/MetadataView.svelte';
 	import GovernedFieldRows from '$components/asset/GovernedFieldRows.svelte';
-	import AssetReferences from '$components/asset/AssetReferences.svelte';
 	import { fetchMetamodel } from '$lib/metamodel/api';
 	import type { MetamodelSchema } from '$lib/metamodel/types';
 	import FieldBadges from '$components/metamodel/FieldBadges.svelte';
@@ -604,11 +603,6 @@
 											{/if}
 										{/snippet}
 									</MetadataView>
-								{/if}
-								{#if metamodel}
-									<div class="mt-6 space-y-4">
-										<AssetReferences assetId={asset.id} schema={metamodel} />
-									</div>
 								{/if}
 								{#if asset.sources && Array.isArray(asset.sources) && asset.sources.length > 0}
 									<h3 class="pt-4 text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
