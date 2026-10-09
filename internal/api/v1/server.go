@@ -28,7 +28,6 @@ import (
 	metricsAPI "github.com/marmotdata/marmot/internal/api/v1/metrics"
 	notificationsAPI "github.com/marmotdata/marmot/internal/api/v1/notifications"
 	"github.com/marmotdata/marmot/internal/api/v1/plugins"
-	qualityAPI "github.com/marmotdata/marmot/internal/api/v1/quality"
 	rolesAPI "github.com/marmotdata/marmot/internal/api/v1/roles"
 	"github.com/marmotdata/marmot/internal/api/v1/runs"
 	schedulesAPI "github.com/marmotdata/marmot/internal/api/v1/schedules"
@@ -119,9 +118,7 @@ type Server struct {
 	// Operator Run CRD syncer
 	operatorSyncer *operatorSync.Syncer
 
-	extensionTasks  []*background.SingletonTask
-	qualityRuns     quality.RunService
-	qualitySchedule *background.SingletonTask
+	extensionTasks []*background.SingletonTask
 
 	handlers []interface{ Routes() []common.Route }
 }
@@ -656,23 +653,6 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 	server.handlers = append(server.handlers, extensionHandler)
 	server.extensionTasks = extensionTasks
 
-	if config.Quality.Enabled {
-		qualityRepo := quality.NewPostgresRepository(db)
-		qualitySvc := quality.NewService(qualityRepo, quality.WithRegistry(metamodelRegistry))
-		qualityRules := quality.NewPostgresRuleRepository(db)
-		server.qualityRuns = quality.NewRunService(qualitySvc, qualityRepo, assetRepo, metamodelRegistry,
-			quality.WithScoreWriter(assetSvc), quality.WithRuleStore(qualityRules))
-		qualityScheduler := quality.NewScheduler(qualitySvc, server.qualityRuns, qualityRepo)
-		server.qualitySchedule = background.NewSingletonTask(background.SingletonConfig{
-			Name:     "quality-schedule",
-			DB:       db,
-			Interval: quality.ScheduleCheckInterval,
-			TaskFn:   qualityScheduler.Tick,
-		})
-		server.qualitySchedule.Start(context.Background())
-		server.handlers = append(server.handlers, qualityAPI.NewHandler(qualitySvc, server.qualityRuns, quality.NewRuleService(qualityRules, qualitySvc, metamodelRegistry), qualityScheduler, userSvc, authSvc, config))
-	}
-
 	// Set up K8s SA token auth and operator syncer if enabled
 	if config.Operator.Enabled {
 		k8sValidator, err := common.NewK8sTokenValidator()
@@ -723,12 +703,6 @@ func applyContentPacks(dir string, registry *metamodel.Registry, assets contentp
 }
 
 func (s *Server) Stop() {
-	if s.qualitySchedule != nil {
-		s.qualitySchedule.Stop()
-	}
-	if s.qualityRuns != nil {
-		s.qualityRuns.Shutdown()
-	}
 	for _, task := range s.extensionTasks {
 		task.Stop()
 	}

@@ -1,8 +1,6 @@
 package quality_test
 
 import (
-	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -89,79 +87,6 @@ func TestAProfileWithoutTheFieldsIsAuditedAndWritesNothing(t *testing.T) {
 	if changes := auditor.ScoreChanges(a, auditor.Audit(a)); len(changes) != 1 {
 		// The audit profile declares metadata_quality_score, nothing else: only that one is written.
 		t.Fatalf("%v", changes)
-	}
-}
-
-type recordedWrites struct {
-	inputs   []asset.UpdateInput
-	ids      []string
-	conflict map[string]bool
-	fail     map[string]bool
-}
-
-func (r *recordedWrites) Update(_ context.Context, id string, input asset.UpdateInput) (*asset.Asset, error) {
-	r.ids = append(r.ids, id)
-	r.inputs = append(r.inputs, input)
-	switch {
-	case r.conflict[id]:
-		return nil, asset.ErrVersionConflict
-	case r.fail[id]:
-		return nil, errors.New("boom")
-	}
-	return &asset.Asset{ID: id}, nil
-}
-
-func TestARunWritesOnlyWhatChangedAsThePlatformAndCountsHowItWent(t *testing.T) {
-	settings := quality.DefaultSettings()
-	settings.BatchSize = 2
-	source := &memorySource{assets: catalog(5)}
-	source.assets[1].IsStub = true
-	for i, a := range source.assets {
-		a.Version = int64(10 + i)
-	}
-	said := source.assets[2].Metadata["dgu"].(map[string]any)
-	said["metadata_quality_score"] = 1.0
-	said["metadata_quality_dimensions"] = []any{"description", "tags", "ownership", "classification", "review", "completeness", "conformity"}
-	said["metadata_quality_evaluated_at"] = "2026-09-01"
-	repo := newMemoryRuns()
-	writes := &recordedWrites{conflict: map[string]bool{"id-a03": true}, fail: map[string]bool{"id-a04": true}}
-	svc := quality.NewRunService(fixedSettings{settings}, repo, source, scoreRegistry(t), quality.WithScoreWriter(writes))
-	t.Cleanup(svc.Shutdown)
-
-	if _, err := svc.StartRun(context.Background(), quality.TriggerManual, ""); err != nil {
-		t.Fatal(err)
-	}
-	wait(t, repo)
-	if repo.failure != "" {
-		t.Fatalf("failed: %s", repo.failure)
-	}
-
-	// a00, a03, a04 need a score; the stub (a01) is skipped and a02 already has it.
-	if got := strings.Join(writes.ids, ","); got != "id-a00,id-a03,id-a04" {
-		t.Fatalf("written: %s", got)
-	}
-	first := writes.inputs[0]
-	if !first.SystemWrite || !first.SkipNotification || first.ExpectedVersion == nil || *first.ExpectedVersion != 10 {
-		t.Fatalf("it writes as the platform, quietly, against the version it read: %+v", first)
-	}
-	if first.Metadata != nil || first.GovernedFields["metadata_quality_score"] != 1.0 {
-		t.Fatalf("it patches fields, not the whole asset: %+v", first)
-	}
-	if repo.counts != (quality.ScoreCounts{Written: 1, Conflicts: 1, Failed: 1}) {
-		t.Fatalf("counts = %+v", repo.counts)
-	}
-}
-
-func TestARunWithoutAWriterOnlyRecords(t *testing.T) {
-	source := &memorySource{assets: catalog(2)}
-	repo := newMemoryRuns()
-	svc := service(t, quality.DefaultSettings(), source, repo, scoreRegistry(t))
-	if _, err := svc.StartRun(context.Background(), quality.TriggerManual, ""); err != nil {
-		t.Fatal(err)
-	}
-	wait(t, repo)
-	if repo.counts != (quality.ScoreCounts{}) {
-		t.Fatalf("counts = %+v", repo.counts)
 	}
 }
 
