@@ -68,15 +68,18 @@ type Environment struct {
 } // @name Environment
 
 type CreateInput struct {
-	Name          *string                `json:"name" validate:"required"`
-	MRN           *string                `json:"mrn" validate:"required"`
-	Type          string                 `json:"type" validate:"required"`
-	Providers     []string               `json:"providers" validate:"required"`
-	Description   *string                `json:"description"`
-	Metadata      map[string]interface{} `json:"metadata"`
-	Schema        map[string]string      `json:"schema"`
-	Tags          []string               `json:"tags"`
-	CreatedBy     string                 `json:"created_by" validate:"required"`
+	Name        *string                `json:"name" validate:"required"`
+	MRN         *string                `json:"mrn" validate:"required"`
+	Type        string                 `json:"type" validate:"required"`
+	Providers   []string               `json:"providers" validate:"required"`
+	Description *string                `json:"description"`
+	Metadata    map[string]interface{} `json:"metadata"`
+	Schema      map[string]string      `json:"schema"`
+	Tags        []string               `json:"tags"`
+	CreatedBy   string                 `json:"created_by" validate:"required"`
+	// DeferLinks is set by a discovery run on its first pass: a link field naming, by MRN, an asset
+	// that does not exist yet is left out whole, for the run to send again once its batch is in.
+	DeferLinks    bool                   `json:"-"`
 	Sources       []AssetSource          `json:"sources"`
 	Environments  map[string]Environment `json:"environments"`
 	ExternalLinks []ExternalLink         `json:"external_links"`
@@ -109,6 +112,8 @@ type UpdateInput struct {
 	// FromSync marks a discovery run: the source fills governed fields that are still
 	// empty but never overwrites a value already set, so it needs no expected version.
 	FromSync bool `json:"-"`
+	// DeferLinks has the meaning it has in CreateInput.
+	DeferLinks bool `json:"-"`
 }
 
 type Filter struct {
@@ -498,6 +503,9 @@ func (s *service) Create(ctx context.Context, input CreateInput) (*Asset, error)
 	if err := s.validateAsset(asset); err != nil {
 		return nil, err
 	}
+	if err := s.resolveLinkMRNs(ctx, asset, input.DeferLinks); err != nil {
+		return nil, err
+	}
 	if err := s.checkLinks(ctx, asset.ID, asset.Metadata, nil); err != nil {
 		return nil, err
 	}
@@ -699,6 +707,9 @@ func (s *service) Update(ctx context.Context, id string, input UpdateInput) (*As
 		if err := s.validateAsset(asset); err != nil {
 			return nil, err
 		}
+	}
+	if err := s.resolveLinkMRNs(ctx, asset, input.DeferLinks); err != nil {
+		return nil, err
 	}
 	if err := s.checkLinks(ctx, asset.ID, asset.Metadata, oldAsset.Metadata); err != nil {
 		return nil, err

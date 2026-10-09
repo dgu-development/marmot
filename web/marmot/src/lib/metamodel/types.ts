@@ -30,6 +30,8 @@ export interface MetamodelConstraints {
 	maxLength?: number;
 	minItems?: number;
 	maxItems?: number;
+	/** An asset link that forms a hierarchy: it may not lead back to the asset. */
+	acyclic?: boolean;
 }
 
 export interface MetamodelAppliesTo {

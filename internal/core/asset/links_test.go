@@ -145,3 +145,81 @@ fields:
 		}
 	}
 }
+
+func TestAnMRNLinkResolvesOnceItsTargetExists(t *testing.T) {
+	svc := newLinkService(t)
+	ctx := context.Background()
+	first := validCreate("source")
+	mrn := "mrn://table/test/source"
+	first.MRN = &mrn
+	first.Metadata["example"] = map[string]any{"applies_to": []any{"mrn://table/test/later"}}
+	first.DeferLinks = true
+	source, err := svc.Create(ctx, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value, present := metamodel.ValueAt(source.Metadata, "metadata.example.applies_to"); present {
+		t.Fatalf("a deferred field with an MRN that names nothing yet is not stored: %v", value)
+	}
+	later := validCreate("later")
+	laterMRN := "mrn://table/test/later"
+	later.MRN = &laterMRN
+	target, err := svc.Create(ctx, later)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := svc.Update(ctx, source.ID, UpdateInput{
+		Metadata: map[string]any{"example": map[string]any{"applies_to": []any{"mrn://table/test/later"}}},
+		FromSync: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, _ := metamodel.ValueAt(updated.Metadata, "metadata.example.applies_to")
+	if got := LinkIDs(value); len(got) != 1 || got[0] != target.ID {
+		t.Fatalf("the link must hold the target's ID once it exists: %v", got)
+	}
+	if !HasLinkMRNs(map[string]any{"a": []any{"x", "mrn://t/p/n"}}) || HasLinkMRNs(map[string]any{"a": "x"}) {
+		t.Fatal("HasLinkMRNs finds an MRN anywhere in the metadata")
+	}
+}
+
+func TestAnAcyclicLinkCannotLeadBackToTheAsset(t *testing.T) {
+	registry, err := metamodel.Load(strings.NewReader(strings.Replace(linkProfile, "    presentation:", "    validation:\n      acyclic: true\n    presentation:", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(newMemoryRepo(), WithMetamodel(registry))
+	ctx := context.Background()
+	top, err := svc.Create(ctx, validCreate("top"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	middle, err := svc.Create(ctx, withLinks("middle", top.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bottom, err := svc.Create(ctx, withLinks("bottom", middle.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := func(to string) map[string]any { return map[string]any{"applies_to": []any{to}} }
+	if _, err := svc.PatchFields(ctx, top.ID, top.Version, link(bottom.ID)); !hasViolation(err, "applies_to", "cycle") {
+		t.Fatalf("top -> bottom -> middle -> top is a cycle: %v", err)
+	}
+	other, err := svc.Create(ctx, validCreate("other"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PatchFields(ctx, top.ID, top.Version, link(other.ID)); err != nil {
+		t.Fatalf("a link that leads nowhere near the asset is fine: %v", err)
+	}
+}
+
+func TestAcyclicNeedsTheAssetControl(t *testing.T) {
+	bad := strings.Replace(strings.Replace(linkProfile, "      control: asset\n", "", 1), "      inverseLabelKey: example.applies_to.inverse\n", "", 1)
+	bad = strings.Replace(bad, "    presentation:", "    validation:\n      acyclic: true\n    presentation:", 1)
+	if _, err := metamodel.Load(strings.NewReader(bad)); err == nil || !strings.Contains(err.Error(), "acyclic") {
+		t.Fatalf("acyclic on a plain list must be refused: %v", err)
+	}
+}
