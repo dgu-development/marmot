@@ -63,6 +63,64 @@
 			.catch(() => {});
 	});
 
+	// The server derives an asset's identifier from its type, its first provider and its name, so
+	// the same three cannot be created twice; the same name alone can, and is worth a look.
+	interface Existing {
+		id: string;
+		name: string;
+		type: string;
+		providers: string[];
+		mrn: string;
+	}
+	let sameName = $state<Existing[]>([]);
+	let taken = $state<Existing | null>(null);
+	const identity = $derived(
+		isManual && manual
+			? { type: manual.type, provider: manual.provider }
+			: assetType.trim() && providers.length > 0
+				? { type: assetType.trim(), provider: providers[0] }
+				: null
+	);
+	function assetPath(mrn: string) {
+		const parts = mrn.replace('mrn://', '').split('/');
+		return `/discover/${parts[0]}/${parts[1]}/${encodeURIComponent(parts.slice(2).join('/'))}`;
+	}
+
+	$effect(() => {
+		const wanted = name.trim();
+		const who = identity;
+		sameName = [];
+		taken = null;
+		if (wanted.length < 2) return;
+		const controller = new AbortController();
+		const timer = setTimeout(async () => {
+			try {
+				const found = await fetchApi(`/assets/search?q=${encodeURIComponent(wanted)}&limit=20`, {
+					signal: controller.signal
+				});
+				if (found.ok) {
+					const body = await found.json();
+					sameName = ((body.assets ?? []) as Existing[]).filter(
+						(asset) => asset.name?.toLowerCase() === wanted.toLowerCase()
+					);
+				}
+				if (who) {
+					const hit = await fetchApi(
+						`/assets/lookup/${encodeURIComponent(who.type)}/${encodeURIComponent(who.provider)}/${encodeURIComponent(wanted)}`,
+						{ signal: controller.signal }
+					);
+					taken = hit.ok ? await hit.json() : null;
+				}
+			} catch {
+				// A lookup that fails must not block the form: the server still refuses a duplicate.
+			}
+		}, 300);
+		return () => {
+			clearTimeout(timer);
+			controller.abort();
+		};
+	});
+
 	function nestedMetadata(storage: string, value: string): Record<string, unknown> {
 		const keys = storage.replace(/^metadata\./, '').split('.');
 		let nested: Record<string, unknown> = { [keys[keys.length - 1]]: value };
@@ -380,13 +438,15 @@
 	onPrevious={() => currentStep--}
 	onNext={handleNextStep}
 	onSave={handleSave}
-	canProceed={currentStep === 1
-		? canProceedToStep2
-		: currentStep === 2
-			? canProceedToStep3
-			: isManual
-				? !!name.trim() && !!manualType
-				: !!name.trim() && !!assetType.trim() && providers.length > 0}
+	canProceed={taken
+		? false
+		: currentStep === 1
+			? canProceedToStep2
+			: currentStep === 2
+				? canProceedToStep3
+				: isManual
+					? !!name.trim() && !!manualType
+					: !!name.trim() && !!assetType.trim() && providers.length > 0}
 	{saving}
 	saveLabel={m.assetnew_create_asset()}
 	savingLabel={m.assetnew_creating()}
@@ -505,6 +565,30 @@
 					<p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
 						{m.assetnew_name_hint()}
 					</p>
+				{/if}
+				{#if taken}
+					<p class="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
+						{m.assetnew_name_taken()}
+						<a class="font-medium underline" href={resolve(assetPath(taken.mrn) as never)}
+							>{taken.name}</a
+						>
+					</p>
+				{:else if sameName.length > 0}
+					<div class="mt-2 text-sm text-amber-700 dark:text-amber-300" role="status">
+						<p>{m.assetnew_name_same()}</p>
+						<ul class="mt-1 space-y-0.5">
+							{#each sameName.slice(0, 5) as asset (asset.id)}
+								<li>
+									<a class="font-medium underline" href={resolve(assetPath(asset.mrn) as never)}
+										>{asset.name}</a
+									>
+									<span class="text-gray-500 dark:text-gray-400">
+										· {asset.type} · {asset.providers?.join(', ')}
+									</span>
+								</li>
+							{/each}
+						</ul>
+					</div>
 				{/if}
 			</div>
 		</div>

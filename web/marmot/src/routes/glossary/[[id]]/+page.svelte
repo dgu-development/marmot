@@ -73,6 +73,34 @@
 	let isCreating = false;
 	let createError = '';
 
+	// The dialog creates top-level terms: one of those with the same name is refused by the server,
+	// one under another parent is allowed.
+	let sameNameTerms: GlossaryTerm[] = [];
+	let nameTimer: ReturnType<typeof setTimeout>;
+	$: if (showCreateModal) checkTermName(newTermName);
+	$: nameTaken = sameNameTerms.some((term) => !term.parent_term_id);
+
+	function checkTermName(value: string) {
+		clearTimeout(nameTimer);
+		sameNameTerms = [];
+		const wanted = value.trim().toLowerCase();
+		if (wanted.length < 2) return;
+		nameTimer = setTimeout(async () => {
+			try {
+				const response = await fetchApi(
+					`/glossary/search?q=${encodeURIComponent(wanted)}&limit=50`
+				);
+				if (!response.ok || newTermName.trim().toLowerCase() !== wanted) return;
+				const body = await response.json();
+				sameNameTerms = ((body.terms ?? []) as GlossaryTerm[]).filter(
+					(term) => term.name.toLowerCase() === wanted
+				);
+			} catch {
+				// The server still refuses a repeated name.
+			}
+		}, 300);
+	}
+
 	let isEditing = false;
 	let editedTerm: GlossaryTerm | null = null;
 
@@ -296,6 +324,7 @@
 				})
 			});
 
+			if (response.status === 409) throw new Error(m.glossary_name_taken());
 			if (!response.ok) {
 				const info = await parseApiError(response);
 				if (isLimitExceeded(info)) toasts.warning(info.message);
@@ -399,6 +428,7 @@
 				body: JSON.stringify(updateData)
 			});
 
+			if (response.status === 409) throw new Error(m.glossary_name_taken());
 			if (!response.ok) {
 				const errorData = await response.json();
 				throw new Error(errorData.error || m.glossary_update_error());
@@ -1038,6 +1068,25 @@
 							class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-earthy-terracotta-600 focus:border-earthy-terracotta-700 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50"
 							required
 						/>
+						{#if sameNameTerms.length > 0}
+							<div
+								class="mt-2 text-sm {nameTaken
+									? 'text-red-600 dark:text-red-400'
+									: 'text-amber-700 dark:text-amber-300'}"
+								role={nameTaken ? 'alert' : 'status'}
+							>
+								<p>{nameTaken ? m.glossary_name_taken() : m.glossary_name_same()}</p>
+								<ul class="mt-1 space-y-0.5">
+									{#each sameNameTerms.slice(0, 5) as term (term.id)}
+										<li>
+											<a class="font-medium underline" href={resolve(`/glossary/${term.id}`)}>
+												{term.name}
+											</a>
+										</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
 					</div>
 
 					<div>
@@ -1100,7 +1149,7 @@
 						/>
 						<Button
 							type="submit"
-							disabled={isCreating}
+							disabled={isCreating || nameTaken}
 							loading={isCreating}
 							text={isCreating ? m.glossary_creating() : m.glossary_create_term_button()}
 							variant="filled"

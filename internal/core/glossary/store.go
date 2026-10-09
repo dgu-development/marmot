@@ -230,8 +230,10 @@ func (r *PostgresRepository) Get(ctx context.Context, id string) (*GlossaryTerm,
 }
 
 // GetByName looks a term up by the name a source system knows it by.
-// Nothing stops two rows sharing a name, so the oldest wins and stays
-// the one an ingestion keeps writing to. Owners are left unloaded: this
+// A source does not say where in the tree its term hangs, and a name may
+// repeat under different parents, so the oldest wins and stays the one an
+// ingestion keeps writing to. Case is ignored, as the uniqueness of
+// siblings does. Owners are left unloaded: this
 // is the hot path of a sync, which only needs identity and content.
 func (r *PostgresRepository) GetByName(ctx context.Context, name string) (*GlossaryTerm, error) {
 	start := time.Now()
@@ -240,7 +242,7 @@ func (r *PostgresRepository) GetByName(ctx context.Context, name string) (*Gloss
 		SELECT id, name, definition, user_definition, description, parent_term_id,
 			   metadata, tags, created_at, updated_at, deleted_at
 		FROM glossary_terms
-		WHERE name = $1 AND deleted_at IS NULL
+		WHERE lower(name) = lower($1) AND deleted_at IS NULL
 		ORDER BY created_at ASC
 		LIMIT 1`
 
@@ -360,6 +362,10 @@ func (r *PostgresRepository) Update(ctx context.Context, term *GlossaryTerm, own
 
 	if err != nil {
 		r.recorder.RecordDBQuery(ctx, "glossary_update", duration, false)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return ErrConflict
+		}
 		return fmt.Errorf("updating glossary term: %w", err)
 	}
 

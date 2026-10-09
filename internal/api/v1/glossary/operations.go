@@ -222,6 +222,8 @@ func (h *Handler) updateTerm(w http.ResponseWriter, r *http.Request) {
 			common.RespondError(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, glossary.ErrTermNotFound):
 			common.RespondError(w, http.StatusNotFound, "Glossary term not found")
+		case errors.Is(err, glossary.ErrTermExists):
+			common.RespondError(w, http.StatusConflict, "Term already exists")
 		case errors.Is(err, glossary.ErrCircularRef):
 			log.Error().Err(err).Str("id", id).Msg("Circular reference detected")
 			common.RespondError(w, http.StatusBadRequest, "Circular reference detected in term hierarchy")
