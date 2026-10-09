@@ -173,6 +173,7 @@ their next write, such as the next run of their pipeline.
 | `minimum` / `maximum` | `integer`, `number`, and list items of those types |
 | `minLength` / `maxLength` | `string`, and list items of type `string` |
 | `minItems` / `maxItems` | `list` |
+| `acyclic` | fields with `control: asset` |
 
 ### Presentation keys
 

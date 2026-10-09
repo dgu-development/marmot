@@ -79,6 +79,8 @@ type Constraints struct {
 	MaxLength *int     `json:"maxLength,omitempty"`
 	MinItems  *int     `json:"minItems,omitempty"`
 	MaxItems  *int     `json:"maxItems,omitempty"`
+	// Acyclic makes an asset link a hierarchy: following it from an asset never leads back to it.
+	Acyclic bool `json:"acyclic,omitempty"`
 }
 
 // AppliesTo scopes a field to entity kinds and, within asset or glossary_term, to specific asset
@@ -511,6 +513,9 @@ func validateDefinition(f Field) error {
 	}
 	if (v.MinLength != nil || v.MaxLength != nil) && !slices.Contains([]string{"string", "enum", "date", "url"}, valueType) {
 		return errors.New("length bounds require a string type")
+	}
+	if v.Acyclic && f.Presentation.Control != ControlAsset {
+		return errors.New("acyclic requires the asset control")
 	}
 	if (v.MinItems != nil || v.MaxItems != nil) && f.Type != "list" {
 		return errors.New("item bounds require a list")

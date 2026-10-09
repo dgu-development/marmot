@@ -179,12 +179,54 @@ func (s *service) checkLinks(ctx context.Context, self string, metadata, previou
 		}
 		if !allowed {
 			violations = append(violations, metamodel.Violation{Field: f.ID, Code: "target_type"})
+			continue
+		}
+		if f.Validation.Acyclic && self != "" {
+			loops, err := s.leadsBack(ctx, f, valid, self)
+			if err != nil {
+				return err
+			}
+			if loops {
+				violations = append(violations, metamodel.Violation{Field: f.ID, Code: "cycle"})
+			}
 		}
 	}
 	if len(violations) > 0 {
 		return &metamodel.ValidationError{Fields: violations}
 	}
 	return nil
+}
+
+// maxLinkDepth bounds the walk of an acyclic field; a hierarchy deeper than this is refused as if
+// it looped rather than read without end.
+const maxLinkDepth = 256
+
+// leadsBack reports whether following the field from any of ids reaches self.
+func (s *service) leadsBack(ctx context.Context, f metamodel.Field, ids []string, self string) (bool, error) {
+	seen := map[string]bool{}
+	queue := slices.Clone(ids)
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		if id == self || len(seen) >= maxLinkDepth {
+			return true, nil
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		linked, err := s.repo.Get(ctx, id)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return false, fmt.Errorf("walking %s: %w", f.ID, err)
+		}
+		if value, ok := metamodel.ValueAt(linked.Metadata, f.Storage); ok {
+			queue = append(queue, LinkIDs(value)...)
+		}
+	}
+	return false, nil
 }
 
 // targetsAllowed reports whether every asset in ids has an asset_type the field accepts.
