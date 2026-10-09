@@ -955,6 +955,7 @@
 	"metamodel_error_unknown": "The value is not valid.",
 	"metamodel_filter_by": "See everything with “{value}”",
 	"metamodel_hide_empty": "Hide fields without a value",
+	"metamodel_incoming_links": "Linked from other assets",
 	"metamodel_list_placeholder": "Add a value and press Enter",
 	"metamodel_list_remove": "Remove {value}",
 	"metamodel_missing_version": "Asset version is missing. Reload the asset before saving.",

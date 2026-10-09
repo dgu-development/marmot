@@ -955,6 +955,7 @@
 	"metamodel_error_unknown": "El valor no es válido.",
 	"metamodel_filter_by": "Ver todo lo que tiene «{value}»",
 	"metamodel_hide_empty": "Ocultar campos sin valor",
+	"metamodel_incoming_links": "Enlazado desde otros activos",
 	"metamodel_list_placeholder": "Añade un valor y pulsa Intro",
 	"metamodel_list_remove": "Quitar {value}",
 	"metamodel_missing_version": "Falta la versión del activo. Recárgalo antes de guardar.",

@@ -9,7 +9,13 @@
 	import Avatar from '$components/user/Avatar.svelte';
 	import AssetLinks from '$components/asset/AssetLinks.svelte';
 	import AssetLinkPicker from '$components/asset/AssetLinkPicker.svelte';
-	import { ASSET_CONTROL, assetLinkIds } from '$lib/assets/links';
+	import {
+		ASSET_CONTROL,
+		assetLinkIds,
+		assetReferences,
+		rememberAsset,
+		type AssetReferences
+	} from '$lib/assets/links';
 	import { createKeyboardNavigationState } from '$lib/keyboard';
 	import type { Asset } from '$lib/assets/types';
 	import type { MetamodelField, MetamodelSchema } from '$lib/metamodel/types';
@@ -104,6 +110,35 @@
 	const filled = $derived(sections.reduce((total, section) => total + section.filled, 0));
 	const colspan = $derived(editable ? 3 : 2);
 	const RING = 2 * Math.PI * 16;
+
+	// What points at this asset, read through each field's inverse label: the other half of its links.
+	let incoming = $state<AssetReferences[]>([]);
+	let incomingOpen = $state(true);
+
+	$effect(() => {
+		const id = asset.id;
+		let cancelled = false;
+		incoming = [];
+		assetReferences(id)
+			.then((found) => {
+				if (cancelled) return;
+				for (const group of found) group.assets.forEach(rememberAsset);
+				incoming = found;
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	function inverse(fieldId: string): string {
+		const field = schema.fields.find((candidate) => candidate.id === fieldId);
+		const text = resolveMessage(field?.presentation?.inverseLabelKey, context);
+		if (text) return text;
+		return m.glossary_referenced_by({
+			field: resolveMessage(field?.presentation?.labelKey, context) ?? fieldId
+		});
+	}
 
 	async function goToMissing() {
 		const section = sections.find((candidate) => candidate.missing > 0);
@@ -977,3 +1012,47 @@
 		</tr>
 	{/if}
 {/each}
+{#if incoming.length > 0}
+	<tr data-governed-incoming>
+		<td {colspan} class="border-b border-gray-200 p-0 dark:border-gray-700">
+			<button
+				type="button"
+				aria-expanded={incomingOpen}
+				onclick={() => (incomingOpen = !incomingOpen)}
+				class="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-earthy-terracotta-600 dark:hover:bg-gray-700/30"
+			>
+				<IconifyIcon
+					icon="material-symbols:chevron-right-rounded"
+					class="h-5 w-5 flex-shrink-0 text-gray-400 transition-transform {incomingOpen
+						? 'rotate-90'
+						: ''}"
+				/>
+				<span class="text-sm font-semibold text-gray-800 dark:text-gray-100">
+					{m.metamodel_incoming_links()}
+				</span>
+				<span class="ml-auto text-xs text-gray-500 tabular-nums dark:text-gray-400">
+					{incoming.reduce((total, group) => total + group.assets.length, 0)}
+				</span>
+			</button>
+		</td>
+	</tr>
+	{#if incomingOpen}
+		<tr>
+			<td {colspan} class="border-b border-gray-200 px-5 pt-1 pb-3 dark:border-gray-700">
+				{#each incoming as group (group.field)}
+					<div
+						class="-mx-2 grid grid-cols-1 gap-x-6 gap-y-1 rounded-md px-2 py-2.5 sm:grid-cols-[15rem_minmax(0,1fr)]"
+						data-asset-references={group.field}
+					>
+						<div class="text-sm font-medium text-gray-700 dark:text-gray-300">
+							{inverse(group.field)}
+						</div>
+						<div class="min-w-0 text-sm">
+							<AssetLinks ids={group.assets.map((linked) => linked.id)} />
+						</div>
+					</div>
+				{/each}
+			</td>
+		</tr>
+	{/if}
+{/if}
