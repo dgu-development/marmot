@@ -312,15 +312,24 @@ func (d extensionDomains) MayWrite(r *http.Request, id string) (bool, error) {
 	return d.can(r, id, domain.ActionWrite)
 }
 
+// extensionHandler adapts the extensions' routes to the server's handler list.
+type extensionHandler []common.Route
+
+func (h extensionHandler) Routes() []common.Route { return h }
+
 // extensionRoutes mounts the extensions and returns the tasks they scheduled, for the server to stop.
-func extensionRoutes(services extensionServices, authService auth.Service, cfg *config.Config) (extensions.Handler, []*background.SingletonTask, error) {
+func extensionRoutes(services extensionServices, authService auth.Service, cfg *config.Config) (extensionHandler, []*background.SingletonTask, error) {
 	var tasks []*background.SingletonTask
-	handler, err := extensions.Routes(extensionHost{extensionServices: services, tasks: &tasks}, func(resource, action string) []func(http.HandlerFunc) http.HandlerFunc {
+	routes, err := extensions.Routes(extensionHost{extensionServices: services, tasks: &tasks}, func(resource, action string) []func(http.HandlerFunc) http.HandlerFunc {
 		guard := []func(http.HandlerFunc) http.HandlerFunc{common.WithAuth(services.users, authService, cfg)}
 		if resource != "" {
 			guard = append(guard, common.RequirePermission(services.users, resource, action))
 		}
 		return guard
 	})
+	handler := make(extensionHandler, 0, len(routes))
+	for _, route := range routes {
+		handler = append(handler, common.Route(route))
+	}
 	return handler, tasks, err
 }
