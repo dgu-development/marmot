@@ -79,12 +79,33 @@ Grant roles from a domain's **Roles** section. A role applies to the domain and 
 | --- | --- |
 | Steward | Edit the assets, products and terms in the subtree |
 | Domain admin | What a steward can do, plus create, rename, move and delete subdomains and grant roles in the subtree |
-| Reader | Nothing yet; reserved for domains with restricted reading |
+| Reader | See the content of a [restricted domain](#restricted-domains), and nothing else |
 
 - A role can go to a user, a team (every member gets it) or a service account.
 - A domain admin can only grant roles inside its own subtree. Top-level domains are created by global administrators only.
 - The native `admin` role and the operator token act on every domain.
-- A revocation applies from the next request.
+- A revocation applies from the next request for writes, and within two seconds for what a restricted domain shows.
+
+## Restricted domains
+
+Reading is open: whoever can view assets sees every domain. A domain marked **Restricted** is the exception. Its content, and that of its subdomains, is only seen by those with a role in it or in a domain above it. For everyone else its assets, products and terms are missing from search and its counts, from lists, from lineage and from the pages that would link to them, and they get no notifications about them.
+
+```yaml
+domains:
+  enabled: true
+  restricted_read: true
+```
+
+```
+MARMOT_DOMAINS_RESTRICTED_READ=true
+```
+
+- The option only allows marking a domain; it restricts nothing by itself. A domain admin marks a domain from **Edit**.
+- Any role in the domain reads it. Grant **Reader** to those who should only read.
+- The native `admin` role and the operator token read everything.
+- Owning an asset gives no access to it: an owner without a role in its restricted domain does not see it and is not notified about it.
+- A domain above one you can read stays in the tree so you can reach yours, without its content.
+- Unassigned cannot be restricted.
 
 ## Write enforcement
 
@@ -150,6 +171,7 @@ Errors carry a stable `code` next to the message, such as `forbidden`, `name_con
 ## Known limits
 
 - Elasticsearch search is not supported with domains.
-- Reading cannot be restricted per domain yet; `restricted: true` is rejected.
+- Notifications delivered before a domain was restricted stay in their recipient's inbox.
+- Usage metrics count every asset; only what they list by asset is filtered.
 - Asset rules and data product rules are global, and so are the links they derive.
 - With `openlineage.auth.enabled: false`, OpenLineage events carry no identity, so under write enforcement they cannot write anything. Keep OpenLineage authentication on and give the emitter's service account a role on the domains it writes.

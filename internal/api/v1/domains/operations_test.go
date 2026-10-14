@@ -17,6 +17,7 @@ type fakeService struct {
 	domain.Service
 	err      error
 	created  domain.CreateInput
+	updated  domain.UpdateInput
 	assigned struct {
 		kind   domain.Kind
 		ids    []string
@@ -43,8 +44,9 @@ func (f *fakeService) Create(_ context.Context, in domain.CreateInput) (*domain.
 	return &domain.Domain{ID: "new", Name: in.Name}, f.err
 }
 
-func (f *fakeService) Update(context.Context, string, domain.UpdateInput) (*domain.Domain, error) {
+func (f *fakeService) Update(_ context.Context, _ string, in domain.UpdateInput) (*domain.Domain, error) {
 	f.calls++
+	f.updated = in
 	return &domain.Domain{}, f.err
 }
 
@@ -76,6 +78,8 @@ func (g passthroughGuard) AssignPipeline(ctx context.Context, scheduleID, domain
 }
 
 func (passthroughGuard) AuditMove(context.Context, string, *string, *string) error { return nil }
+
+func (passthroughGuard) ForgetReads() {}
 
 func (passthroughGuard) AuditLog(context.Context, string, string) ([]domain.AuditEntry, error) {
 	return nil, nil
@@ -153,11 +157,19 @@ func TestCreate(t *testing.T) {
 	}
 }
 
-func TestUpdateRefusesRestricted(t *testing.T) {
+func TestUpdateRefusesRestrictedUntilTheServerEnablesIt(t *testing.T) {
 	svc := &fakeService{}
 	rec := call(handlerFor(svc).update, http.MethodPut, "/api/v1/domains/d", `{"restricted":true}`, manager, map[string]string{"id": "d"})
 	if rec.Code != http.StatusBadRequest || svc.calls != 0 {
 		t.Fatalf("status %d, calls %d", rec.Code, svc.calls)
+	}
+
+	enabled := handlerFor(svc)
+	enabled.config = &config.Config{}
+	enabled.config.Domains.RestrictedRead = true
+	rec = call(enabled.update, http.MethodPut, "/api/v1/domains/d", `{"restricted":true}`, manager, map[string]string{"id": "d"})
+	if rec.Code != http.StatusOK || svc.updated.Restricted == nil || !*svc.updated.Restricted {
+		t.Fatalf("status %d, update %+v", rec.Code, svc.updated)
 	}
 }
 

@@ -635,6 +635,8 @@
 	"domains_toggle_children": "Mostrar u ocultar los subdominios de {name}",
 	"domains_unassigned": "Sin asignar",
 	"domains_unassigned_hint": "Entidades sin dominio explícito. No se puede renombrar, mover ni eliminar.",
+	"domains_restricted": "Restringido",
+	"domains_restricted_hint": "Solo quien tiene un rol en este dominio o en uno superior ve su contenido y el de sus subdominios.",
 	"domains_updated": "Dominio actualizado",
 	"domains_view_contents": "Ver contenido en Descubrir",
 	"editor_mention_hint": "Escribe @ para mencionar",

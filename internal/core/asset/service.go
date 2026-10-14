@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/marmotdata/marmot/internal/core/limits"
 	"github.com/marmotdata/marmot/internal/core/metamodel"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"github.com/rs/zerolog/log"
 )
 
@@ -369,7 +370,7 @@ func (s *service) GetMetadataFields(ctx context.Context, queryContext *MetadataC
 	}
 
 	s.metadataFieldsCache.RLock()
-	if s.metadataFieldsCache.data != nil && time.Now().Before(s.metadataFieldsCache.expiresAt) {
+	if s.metadataFieldsCache.data != nil && time.Now().Before(s.metadataFieldsCache.expiresAt) && !readscope.Narrowed(ctx) {
 		cached := s.metadataFieldsCache.data
 		s.metadataFieldsCache.RUnlock()
 		return cached, nil
@@ -379,6 +380,10 @@ func (s *service) GetMetadataFields(ctx context.Context, queryContext *MetadataC
 	fields, err := s.repo.GetMetadataFields(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("getting metadata fields: %w", err)
+	}
+
+	if readscope.Narrowed(ctx) {
+		return fields, nil
 	}
 
 	s.metadataFieldsCache.Lock()
@@ -572,7 +577,7 @@ func (s *service) Search(ctx context.Context, filter SearchFilter, calculateCoun
 
 func (s *service) Summary(ctx context.Context) (*AssetSummary, error) {
 	s.summaryCache.RLock()
-	if s.summaryCache.data != nil && time.Now().Before(s.summaryCache.expiresAt) {
+	if s.summaryCache.data != nil && time.Now().Before(s.summaryCache.expiresAt) && !readscope.Narrowed(ctx) {
 		cached := s.summaryCache.data
 		s.summaryCache.RUnlock()
 		return cached, nil
@@ -582,6 +587,10 @@ func (s *service) Summary(ctx context.Context) (*AssetSummary, error) {
 	summary, err := s.repo.Summary(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get summary: %w", err)
+	}
+
+	if readscope.Narrowed(ctx) {
+		return summary, nil
 	}
 
 	s.summaryCache.Lock()

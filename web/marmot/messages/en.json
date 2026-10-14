@@ -635,6 +635,8 @@
 	"domains_toggle_children": "Show or hide the subdomains of {name}",
 	"domains_unassigned": "Unassigned",
 	"domains_unassigned_hint": "Entities without an explicit domain. It cannot be renamed, moved or deleted.",
+	"domains_restricted": "Restricted",
+	"domains_restricted_hint": "Only those with a role in this domain or one above it see its content, and that of its subdomains.",
 	"domains_updated": "Domain updated",
 	"domains_view_contents": "View contents in Discover",
 	"editor_mention_hint": "Type @ to mention",

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -24,11 +25,11 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	db *pgxpool.Pool
+	db readscope.DB
 }
 
 func NewPostgresRepository(db *pgxpool.Pool) Repository {
-	return &PostgresRepository{db: db}
+	return &PostgresRepository{db: readscope.Scoped(db)}
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, sub *Subscription) error {

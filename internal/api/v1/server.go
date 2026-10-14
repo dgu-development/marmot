@@ -56,6 +56,7 @@ import (
 	"github.com/marmotdata/marmot/internal/core/mfa"
 	notificationService "github.com/marmotdata/marmot/internal/core/notification"
 	"github.com/marmotdata/marmot/internal/core/quality"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	roleService "github.com/marmotdata/marmot/internal/core/role"
 	runService "github.com/marmotdata/marmot/internal/core/runs"
 	searchService "github.com/marmotdata/marmot/internal/core/search"
@@ -625,6 +626,24 @@ func New(config *config.Config, db *pgxpool.Pool, lookupsRecorder lookups.Record
 			log.Fatal().Msg("domains.enabled is not supported with the Elasticsearch search backend yet")
 		}
 		assetSvc.AddMembershipObserver(domainService.NewIngestionObserver(domainRepo))
+		// From here on the stores leave out what a restricted domain hides from
+		// each caller, and the API answers for the domains that caller sees.
+		readscope.SetResolver(domainGuard.Hidden)
+		notificationSvc.SetAssetReaders(func(mrn string, recipients []notificationService.Recipient) []notificationService.Recipient {
+			kept := make([]notificationService.Recipient, 0, len(recipients))
+			for _, recipient := range recipients {
+				reads, err := domainGuard.SubjectReadsAsset(context.Background(), domainService.SubjectType(recipient.Type), recipient.ID, mrn)
+				if err != nil {
+					log.Error().Err(err).Str("asset_mrn", mrn).Msg("Resolving who may be told about an asset; nobody is")
+					return nil
+				}
+				if reads {
+					kept = append(kept, recipient)
+				}
+			}
+			return kept
+		})
+		domainSvc = domainService.GuardReads(domainSvc, domainGuard)
 		searchRepo.SetDomainResolver(domainService.SearchResolver(domainSvc))
 		for i, h := range server.handlers {
 			switch h.(type) {

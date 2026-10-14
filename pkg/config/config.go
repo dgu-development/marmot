@@ -187,6 +187,10 @@ type Config struct {
 		Enabled bool `mapstructure:"enabled"`
 		// WriteEnforcement is the state of write enforcement until someone sets it through the API.
 		WriteEnforcement bool `mapstructure:"write_enforcement"`
+		// RestrictedRead lets a domain be marked restricted. The server always
+		// filters what a restricted domain hides; this is off until everything
+		// compiled into it, extensions included, reads through that filter.
+		RestrictedRead bool `mapstructure:"restricted_read"`
 	} `mapstructure:"domains"`
 }
 
@@ -425,6 +429,7 @@ func loadConfig(configPath string) error {
 	v.BindEnv("metamodel.packs")
 	v.BindEnv("domains.enabled")
 	v.BindEnv("domains.write_enforcement")
+	v.BindEnv("domains.restricted_read")
 
 	// Set defaults
 	setDefaults(v)
@@ -569,6 +574,7 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("domains.enabled", false)
 	v.SetDefault("domains.write_enforcement", false)
+	v.SetDefault("domains.restricted_read", false)
 
 }
 

@@ -20,6 +20,7 @@ type Guard interface {
 	AssignPipeline(ctx context.Context, scheduleID, domainID string, moveAssets bool) (*domain.PipelineMoveResult, error)
 	AuditMove(ctx context.Context, domainID string, from, to *string) error
 	AuditLog(ctx context.Context, entityKind, entityID string) ([]domain.AuditEntry, error)
+	ForgetReads()
 }
 
 type Handler struct {
@@ -43,7 +44,7 @@ func (h *Handler) Routes() []common.Route {
 		common.WithAuth(h.userService, h.authService, h.config),
 		common.RequirePermission(h.userService, "domains", "manage"),
 	}
-	return []common.Route{
+	routes := []common.Route{
 		{Path: "/api/v1/domains", Method: http.MethodGet, Handler: h.list, Middleware: view},
 		{Path: "/api/v1/domains", Method: http.MethodPost, Handler: h.create, Middleware: view},
 		{Path: "/api/v1/domains/{id}", Method: http.MethodGet, Handler: h.get, Middleware: view},
@@ -66,4 +67,14 @@ func (h *Handler) Routes() []common.Route {
 		{Path: "/api/v1/domains/enforcement/plan", Method: http.MethodGet, Handler: h.enforcementPlan, Middleware: view},
 		{Path: "/api/v1/domains/audit/{kind}/{id}", Method: http.MethodGet, Handler: h.auditLog, Middleware: manage},
 	}
+	// A change here may alter who reads what, which the guard remembers briefly.
+	for i, route := range routes {
+		if handler := route.Handler; route.Method != http.MethodGet {
+			routes[i].Handler = func(w http.ResponseWriter, r *http.Request) {
+				handler(w, r)
+				h.guard.ForgetReads()
+			}
+		}
+	}
+	return routes
 }

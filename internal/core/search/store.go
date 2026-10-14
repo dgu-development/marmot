@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"github.com/marmotdata/marmot/internal/metrics"
 	"github.com/marmotdata/marmot/internal/query"
 )
@@ -30,7 +31,7 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	db              *pgxpool.Pool
+	db              readscope.DB
 	recorder        metrics.Recorder
 	domainResolver  DomainResolver
 	assetBadgePaths []string
@@ -38,7 +39,7 @@ type PostgresRepository struct {
 
 func NewPostgresRepository(db *pgxpool.Pool, recorder metrics.Recorder) *PostgresRepository {
 	return &PostgresRepository{
-		db:       db,
+		db:       readscope.Scoped(db),
 		recorder: recorder,
 	}
 }
@@ -535,7 +536,7 @@ func (r *PostgresRepository) buildFacetsParallel(ctx context.Context, searchQuer
 	// Note: selecting all 4 entity types is functionally equivalent to no type filter
 	allTypesSelected := len(filter.Types) == 4
 	noTypeFilter := len(filter.Types) == 0 || allTypesSelected
-	if noTypeFilter && len(filter.AssetTypes) == 0 && len(filter.Providers) == 0 && len(filter.Tags) == 0 && len(filter.MetadataFilters) == 0 && filter.Domain == nil {
+	if noTypeFilter && len(filter.AssetTypes) == 0 && len(filter.Providers) == 0 && len(filter.Tags) == 0 && len(filter.MetadataFilters) == 0 && filter.Domain == nil && !readscope.Narrowed(ctx) {
 		return r.buildCachedFacets(ctx, filter)
 	}
 

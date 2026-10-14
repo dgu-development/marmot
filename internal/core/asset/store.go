@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"github.com/marmotdata/marmot/internal/metrics"
 	"github.com/marmotdata/marmot/internal/query"
 	"github.com/rs/zerolog/log"
@@ -83,13 +84,13 @@ type AssetSummary struct {
 }
 
 type PostgresRepository struct {
-	db       *pgxpool.Pool
+	db       readscope.DB
 	recorder metrics.Recorder
 }
 
 func NewPostgresRepository(db *pgxpool.Pool, recorder metrics.Recorder) *PostgresRepository {
 	return &PostgresRepository{
-		db:       db,
+		db:       readscope.Scoped(db),
 		recorder: recorder,
 	}
 }
@@ -666,7 +667,12 @@ func (r *PostgresRepository) GetMetadataValues(ctx context.Context, field string
 			ORDER BY total_count DESC, value ASC
 			LIMIT $3`
 
-		results, err := r.scanMetadataValues(ctx, query, field, prefix, limit)
+		var results []MetadataValueSuggestion
+		var err error
+		// The view counts every asset, so it cannot answer a caller who sees only some.
+		if !readscope.Narrowed(ctx) {
+			results, err = r.scanMetadataValues(ctx, query, field, prefix, limit)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -878,9 +884,20 @@ func (r *PostgresRepository) Summary(ctx context.Context) (*AssetSummary, error)
 		Tags:      make(map[string]int),
 	}
 
+	// summary_counts totals every asset; a caller who sees only some is counted live.
+	source := "summary_counts"
+	if readscope.Narrowed(ctx) {
+		source = `(
+			SELECT 'type' AS dimension, type AS key, count(*) AS count FROM assets WHERE is_stub = FALSE GROUP BY type
+			UNION ALL
+			SELECT 'provider', p, count(*) FROM assets, unnest(providers) p WHERE is_stub = FALSE GROUP BY p
+			UNION ALL
+			SELECT 'tag', t, count(*) FROM assets, unnest(tags) t WHERE is_stub = FALSE GROUP BY t
+		) live`
+	}
 	rows, err := r.db.Query(ctx, `
 		SELECT dimension, key, count
-		FROM summary_counts
+		FROM `+source+`
 		WHERE count > 0
 		ORDER BY
 			CASE dimension

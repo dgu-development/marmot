@@ -59,6 +59,8 @@ export interface DomainCapabilities {
 	enforced: boolean;
 	write: boolean;
 	admin: boolean;
+	/** Whether this server lets a domain be restricted. */
+	restricted_read?: boolean;
 }
 
 export interface WritableDomains {

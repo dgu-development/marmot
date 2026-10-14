@@ -56,6 +56,7 @@ type Guard struct {
 	svc       Service
 	repo      Repository
 	principal PrincipalFunc
+	reads     readCache
 }
 
 func NewGuard(svc Service, repo Repository, principal PrincipalFunc) *Guard {
@@ -174,6 +175,9 @@ func (g *Guard) AuthorizeCreate(ctx context.Context) error {
 
 // AuthorizeEntities checks the domains the entities are in now.
 func (g *Guard) AuthorizeEntities(ctx context.Context, kind Kind, ids ...string) error {
+	if err := g.authorizeRead(ctx, kind, ids); err != nil {
+		return err
+	}
 	return g.authorize(ctx, func(*writer) ([]string, error) {
 		placed, err := g.repo.Placements(ctx, kind, ids)
 		if err != nil {
@@ -203,6 +207,9 @@ func (g *Guard) AuthorizeAssetMRNs(ctx context.Context, mrns ...string) error {
 			} else {
 				paths = append(paths, unassignedPath)
 			}
+		}
+		if err := g.authorizeRead(ctx, KindAsset, known); err != nil {
+			return nil, err
 		}
 		placed, err := g.repo.Placements(ctx, KindAsset, known)
 		if err != nil {

@@ -43,6 +43,7 @@
 	let busy = $state(false);
 	let formName = $state('');
 	let formDescription = $state('');
+	let formRestricted = $state(false);
 	let formParent = $state('');
 	let landingTemplate = $state('');
 
@@ -69,7 +70,7 @@
 	const createParents = $derived(domainOptions(forest));
 
 	// admin: edit it and create subdomains. parentAdmin: move or delete it.
-	let caps = $state<{ admin: boolean; parentAdmin: boolean } | null>(null);
+	let caps = $state<{ admin: boolean; parentAdmin: boolean; restrictedRead: boolean } | null>(null);
 
 	$effect(() => {
 		const d = selected;
@@ -81,10 +82,15 @@
 			d.parent_id ? capabilities(d.parent_id) : Promise.resolve({ admin: canManage })
 		])
 			.then(([own, parent]) => {
-				if (!cancelled) caps = { admin: own.admin, parentAdmin: parent.admin };
+				if (!cancelled)
+					caps = {
+						admin: own.admin,
+						parentAdmin: parent.admin,
+						restrictedRead: own.restricted_read ?? false
+					};
 			})
 			.catch(() => {
-				if (!cancelled) caps = { admin: false, parentAdmin: false };
+				if (!cancelled) caps = { admin: false, parentAdmin: false, restrictedRead: false };
 			});
 		return () => {
 			cancelled = true;
@@ -128,6 +134,7 @@
 		if (!selected) return;
 		formName = selected.name;
 		formDescription = selected.description ?? '';
+		formRestricted = selected.restricted;
 		mode = 'edit';
 	}
 
@@ -172,7 +179,12 @@
 		const id = selected.id;
 		if (
 			await run(
-				() => updateDomain(id, { name: formName, description: formDescription }),
+				() =>
+					updateDomain(id, {
+						name: formName,
+						description: formDescription,
+						restricted: caps?.restrictedRead ? formRestricted : undefined
+					}),
 				m.domains_updated()
 			)
 		) {
@@ -332,6 +344,21 @@
 							{m.domains_edit()}
 						</h2>
 						{@render fields()}
+						{#if caps?.restrictedRead && !isUnassigned(selected)}
+							<label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+								<input
+									type="checkbox"
+									bind:checked={formRestricted}
+									class="mt-0.5 rounded border-gray-300 text-earthy-terracotta-700 focus:ring-earthy-terracotta-600 dark:border-gray-600 dark:bg-gray-700"
+								/>
+								<span>
+									<span class="font-medium">{m.domains_restricted()}</span>
+									<span class="block text-xs text-gray-500 dark:text-gray-400"
+										>{m.domains_restricted_hint()}</span
+									>
+								</span>
+							</label>
+						{/if}
 						{@render actions(m.domains_save())}
 					</form>
 				{:else if mode === 'move'}
@@ -368,6 +395,14 @@
 								<h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
 									{domainName(selected)}
 								</h2>
+								{#if selected.restricted}
+									<p
+										class="mt-1 inline-flex items-center rounded-full bg-earthy-terracotta-100 px-2 py-0.5 text-xs font-medium text-earthy-terracotta-800 dark:bg-earthy-terracotta-900/40 dark:text-earthy-terracotta-200"
+										title={m.domains_restricted_hint()}
+									>
+										{m.domains_restricted()}
+									</p>
+								{/if}
 								{#if selected.description}
 									<p class="mt-2 whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-400">
 										{selected.description}

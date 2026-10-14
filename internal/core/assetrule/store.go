@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/enrichment"
 	"github.com/marmotdata/marmot/internal/metrics"
@@ -139,13 +140,13 @@ type Repository interface {
 
 // PostgresRepository implements Repository for PostgreSQL.
 type PostgresRepository struct {
-	db       *pgxpool.Pool
+	db       readscope.DB
 	recorder metrics.Recorder
 }
 
 // NewPostgresRepository creates a new PostgreSQL repository.
 func NewPostgresRepository(db *pgxpool.Pool, recorder metrics.Recorder) *PostgresRepository {
-	return &PostgresRepository{db: db, recorder: recorder}
+	return &PostgresRepository{db: readscope.Scoped(db), recorder: recorder}
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, rule *AssetRule) error {

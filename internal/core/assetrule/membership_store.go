@@ -3,6 +3,7 @@ package assetrule
 import (
 	"context"
 	"fmt"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,13 +35,13 @@ type MembershipRepository interface {
 
 // PostgresMembershipRepository implements MembershipRepository for PostgreSQL.
 type PostgresMembershipRepository struct {
-	db       *pgxpool.Pool
+	db       readscope.DB
 	recorder metrics.Recorder
 }
 
 // NewPostgresMembershipRepository creates a new membership repository.
 func NewPostgresMembershipRepository(db *pgxpool.Pool, recorder metrics.Recorder) *PostgresMembershipRepository {
-	return &PostgresMembershipRepository{db: db, recorder: recorder}
+	return &PostgresMembershipRepository{db: readscope.Scoped(db), recorder: recorder}
 }
 
 func ruleSource(ruleID string) string {

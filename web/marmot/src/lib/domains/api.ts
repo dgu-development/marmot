@@ -97,7 +97,7 @@ export function createDomain(input: {
 
 export function updateDomain(
 	id: string,
-	input: { name?: string; description?: string }
+	input: { name?: string; description?: string; restricted?: boolean }
 ): Promise<Domain> {
 	treeCache = undefined;
 	return send<Domain>(`/domains/${encodeURIComponent(id)}`, 'PUT', input);

@@ -95,6 +95,10 @@ func (s *service) Update(ctx context.Context, id string, in UpdateInput) (*Domai
 		}
 		in.Name = &name
 	}
+	// Unassigned holds whatever has no domain yet, which everyone must find.
+	if in.Restricted != nil && *in.Restricted && id == UnassignedID {
+		return nil, ErrProtected
+	}
 	return s.repo.Update(ctx, id, in)
 }
 

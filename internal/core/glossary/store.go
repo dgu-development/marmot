@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -63,7 +64,7 @@ func (r *PostgresRepository) InTx(ctx context.Context, fn func(Repository) error
 
 func NewPostgresRepository(db *pgxpool.Pool, recorder metrics.Recorder) *PostgresRepository {
 	return &PostgresRepository{
-		db:       db,
+		db:       readscope.Scoped(db),
 		recorder: recorder,
 	}
 }

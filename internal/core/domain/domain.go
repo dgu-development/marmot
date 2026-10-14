@@ -71,14 +71,15 @@ type CreateInput struct {
 	Description *string        `json:"description"`
 	Metadata    map[string]any `json:"metadata"`
 	Tags        []string       `json:"tags"`
+	Restricted  bool           `json:"restricted"`
 	CreatedBy   string         `json:"-"`
 }
 
-// UpdateInput changes only the fields it sets. Restricted is not settable
-// until read restriction is enforced on every channel (delivery 3).
+// UpdateInput changes only the fields it sets.
 type UpdateInput struct {
 	Name        *string        `json:"name"`
 	Description *string        `json:"description"`
 	Metadata    map[string]any `json:"metadata"`
 	Tags        []string       `json:"tags"`
+	Restricted  *bool          `json:"restricted"`
 }
