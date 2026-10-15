@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import SearchLinks from '$components/metamodel/SearchLinks.svelte';
 	import IconifyIcon from '@iconify/svelte';
 	import { fetchApi } from '$lib/api';
@@ -84,14 +85,49 @@
 		native: nativeMessage
 	});
 
-	const hasMultipleSections = $derived.by(() => {
-		const seen: string[] = [];
+	function isEmptyValue(value: unknown): boolean {
+		return isUnset(value) || (Array.isArray(value) && value.length === 0);
+	}
+
+	// What the reader chose to open; a section nobody touched opens only when it has something to say.
+	let toggled = $state<Record<string, boolean>>({});
+	let emptyShown = $state<Record<string, boolean>>({});
+
+	const sections = $derived.by(() => {
+		const out: { id: string; fields: MetamodelField[]; filled: number; missing: number }[] = [];
 		for (const field of fields) {
-			const section = field.presentation?.section ?? '';
-			if (!seen.includes(section)) seen.push(section);
+			const id = field.presentation?.section ?? '';
+			let section = out.find((candidate) => candidate.id === id);
+			if (!section) out.push((section = { id, fields: [], filled: 0, missing: 0 }));
+			section.fields.push(field);
+			if (!isEmptyValue(readMetadataValue(metadata, field.storage))) section.filled++;
+			else if (field.required) section.missing++;
 		}
-		return seen.length > 1;
+		return out;
 	});
+	const missing = $derived(sections.reduce((total, section) => total + section.missing, 0));
+	const filled = $derived(sections.reduce((total, section) => total + section.filled, 0));
+	const colspan = $derived(editable ? 3 : 2);
+	const RING = 2 * Math.PI * 16;
+
+	function isOpen(section: { id: string; filled: number; missing: number }): boolean {
+		return toggled[section.id] ?? (sections.length === 1 || section.filled + section.missing > 0);
+	}
+
+	async function goToMissing() {
+		const section = sections.find((candidate) => candidate.missing > 0);
+		const field = section?.fields.find(
+			(candidate) =>
+				candidate.required && isEmptyValue(readMetadataValue(metadata, candidate.storage))
+		);
+		if (!section || !field) return;
+		toggled[section.id] = true;
+		if (editable) startEdit(field, undefined);
+		await tick();
+		document
+			.querySelector(`[data-governed-field="${field.id}"]`)
+			?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	}
 
 	const neededOwnerIds = $derived.by(() => {
 		const ids: string[] = [];
@@ -136,10 +172,6 @@
 		if (label) return label;
 		if (typeof value === 'boolean') return value ? m.metamodel_yes() : m.metamodel_no();
 		return text(value);
-	}
-
-	function isEmptyValue(value: unknown): boolean {
-		return isUnset(value) || (Array.isArray(value) && value.length === 0);
 	}
 
 	function focusIf(node: HTMLElement, on: boolean) {
@@ -722,32 +754,16 @@
 
 <svelte:window onclick={handleWindowClick} />
 
-{#each fields as field, i (field.id)}
-	{@const section = field.presentation?.section ?? ''}
-	{@const previousSection = i > 0 ? (fields[i - 1].presentation?.section ?? '') : undefined}
-	{@const value = readMetadataValue(metadata, field.storage)}
+{#snippet row(field: MetamodelField, value: unknown)}
 	{@const helpText = help(field)}
-	{#if hasMultipleSections && section !== previousSection}
-		<tr data-governed-section={section}>
-			<td
-				colspan={editable ? 3 : 2}
-				class="bg-gray-50/60 px-4 pt-4 pb-1.5 text-xs font-semibold tracking-wide text-gray-400 uppercase dark:bg-gray-900/40 dark:text-gray-500"
-			>
-				{section ? sectionLabel(section, context) : m.metamodel_other_section()}
-			</td>
-		</tr>
-	{/if}
-	<tr
-		class="group border-b border-gray-200 transition-colors dark:border-gray-700 {field.required
-			? 'bg-earthy-terracotta-50 dark:bg-earthy-terracotta-900/20'
+	{@const unmet = field.required && isEmptyValue(value)}
+	<div
+		class="group -mx-2 grid grid-cols-1 gap-x-6 gap-y-1 rounded-md px-2 py-2.5 transition-colors sm:grid-cols-[15rem_minmax(0,1fr)] {unmet
+			? 'bg-red-50/70 dark:bg-red-900/10'
 			: 'hover:bg-gray-50 dark:hover:bg-gray-700/30'}"
 		data-governed-field={field.id}
 	>
-		<td
-			class="w-64 px-4 py-3 align-top {field.required
-				? 'border-l-2 border-l-earthy-terracotta-600'
-				: ''}"
-		>
+		<div>
 			<div
 				id={`governed-product-label-${field.id}`}
 				class="flex items-baseline gap-1 text-sm font-medium text-gray-700 dark:text-gray-300"
@@ -763,12 +779,14 @@
 					</span>
 				{/if}
 			</div>
-			<div class="mt-0.5 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
-				<IconifyIcon icon={typeIcon(field)} class="h-3.5 w-3.5" />
-				{typeLabel(field)}
-			</div>
-		</td>
-		<td class="px-4 py-3 text-sm align-top">
+			{#if editingId === field.id}
+				<div class="mt-0.5 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
+					<IconifyIcon icon={typeIcon(field)} class="h-3.5 w-3.5" />
+					{typeLabel(field)}
+				</div>
+			{/if}
+		</div>
+		<div class="min-w-0 text-sm">
 			{#if editingId === field.id}
 				{@render editor(field)}
 			{:else}
@@ -779,7 +797,9 @@
 							type="button"
 							onclick={() => startEdit(field, value)}
 							disabled={saving}
-							class="flex-shrink-0 rounded p-1.5 text-gray-400 opacity-0 transition-all group-hover:opacity-100 hover:bg-gray-100 hover:text-earthy-terracotta-700 focus-visible:opacity-100 dark:hover:bg-gray-700 dark:hover:text-earthy-terracotta-500"
+							class="flex-shrink-0 rounded p-1.5 text-gray-400 transition-all group-hover:opacity-100 hover:bg-gray-100 {unmet
+								? ''
+								: 'opacity-0'} hover:text-earthy-terracotta-700 focus-visible:opacity-100 dark:hover:bg-gray-700 dark:hover:text-earthy-terracotta-500"
 							title={m.common_edit()}
 							aria-label={`${m.common_edit()}: ${label(field)}`}
 						>
@@ -788,6 +808,142 @@
 					{/if}
 				</div>
 			{/if}
-		</td>
-	</tr>
+		</div>
+	</div>
+{/snippet}
+
+<tr data-governed-summary>
+	<td {colspan} class="border-b border-gray-200 p-0 dark:border-gray-700">
+		<div class="flex flex-wrap items-center gap-4 px-5 py-4">
+			<svg viewBox="0 0 40 40" class="h-11 w-11 flex-shrink-0 -rotate-90" aria-hidden="true">
+				<circle
+					cx="20"
+					cy="20"
+					r="16"
+					fill="none"
+					stroke-width="4"
+					class="stroke-gray-200 dark:stroke-gray-700"
+				/>
+				<circle
+					cx="20"
+					cy="20"
+					r="16"
+					fill="none"
+					stroke-width="4"
+					stroke-linecap="round"
+					stroke-dasharray={RING}
+					stroke-dashoffset={RING * (1 - (fields.length ? filled / fields.length : 0))}
+					class="transition-all {missing > 0
+						? 'stroke-amber-500'
+						: 'stroke-green-600 dark:stroke-green-500'}"
+				/>
+			</svg>
+			<div class="min-w-0">
+				<p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+					{m.metamodel_fields_filled({ filled, total: fields.length })}
+				</p>
+				<p
+					class="flex items-center gap-1 text-xs {missing > 0
+						? 'text-gray-500 dark:text-gray-400'
+						: 'text-green-700 dark:text-green-500'}"
+				>
+					{#if missing > 0}
+						{m.metamodel_required_missing({ count: missing })}
+					{:else}
+						<IconifyIcon icon="material-symbols:check-circle-outline-rounded" class="h-3.5 w-3.5" />
+						{m.metamodel_required_done()}
+					{/if}
+				</p>
+			</div>
+			{#if missing > 0}
+				<button
+					type="button"
+					onclick={goToMissing}
+					data-governed-missing
+					class="ml-auto inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition-colors hover:bg-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:bg-amber-900/40 dark:text-amber-100 dark:hover:bg-amber-900/60"
+				>
+					{m.metamodel_fill_required()}
+					<IconifyIcon icon="material-symbols:arrow-forward-rounded" class="h-4 w-4" />
+				</button>
+			{/if}
+		</div>
+	</td>
+</tr>
+{#each sections as section (section.id)}
+	{@const open = isOpen(section)}
+	{@const hidden = section.fields.length - section.filled - section.missing}
+	{#if sections.length > 1}
+		<tr data-governed-section={section.id}>
+			<td {colspan} class="border-b border-gray-200 p-0 dark:border-gray-700">
+				<button
+					type="button"
+					aria-expanded={open}
+					onclick={() => (toggled[section.id] = !open)}
+					class="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-earthy-terracotta-600 dark:hover:bg-gray-700/30"
+				>
+					<IconifyIcon
+						icon="material-symbols:chevron-right-rounded"
+						class="h-5 w-5 flex-shrink-0 text-gray-400 transition-transform {open
+							? 'rotate-90'
+							: ''}"
+					/>
+					<span class="text-sm font-semibold text-gray-800 dark:text-gray-100">
+						{section.id ? sectionLabel(section.id, context) : m.metamodel_other_section()}
+					</span>
+					{#if section.missing > 0}
+						<span
+							class="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-red-200 ring-inset dark:bg-red-900/20 dark:text-red-300 dark:ring-red-900"
+						>
+							{m.metamodel_pending({ count: section.missing })}
+						</span>
+					{/if}
+					<span
+						class="ml-auto flex flex-shrink-0 items-center gap-2 text-xs text-gray-500 tabular-nums dark:text-gray-400"
+					>
+						<span
+							class="h-1.5 w-20 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+							aria-hidden="true"
+						>
+							<span
+								class="block h-full rounded-full bg-earthy-terracotta-600 transition-all"
+								style="width: {(section.filled / section.fields.length) * 100}%"
+							></span>
+						</span>
+						{section.filled}/{section.fields.length}
+					</span>
+				</button>
+			</td>
+		</tr>
+	{/if}
+	{#if open}
+		<tr>
+			<td {colspan} class="border-b border-gray-200 px-5 pt-1 pb-3 dark:border-gray-700">
+				{#each section.fields as field (field.id)}
+					{@const value = readMetadataValue(metadata, field.storage)}
+					{#if !isEmptyValue(value) || field.required || editingId === field.id || emptyShown[section.id]}
+						{@render row(field, value)}
+					{/if}
+				{/each}
+				{#if hidden > 0}
+					<button
+						type="button"
+						data-governed-empty={section.id}
+						aria-expanded={!!emptyShown[section.id]}
+						onclick={() => (emptyShown[section.id] = !emptyShown[section.id])}
+						class="mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-earthy-terracotta-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+					>
+						<IconifyIcon
+							icon={emptyShown[section.id]
+								? 'material-symbols:visibility-off-outline-rounded'
+								: 'material-symbols:add-rounded'}
+							class="h-4 w-4"
+						/>
+						{emptyShown[section.id]
+							? m.metamodel_hide_empty()
+							: m.metamodel_show_empty({ count: hidden })}
+					</button>
+				{/if}
+			</td>
+		</tr>
+	{/if}
 {/each}
