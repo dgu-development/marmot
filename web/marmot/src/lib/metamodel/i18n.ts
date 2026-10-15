@@ -41,6 +41,8 @@ export function violationMessage(code: string): string {
 			return m.metamodel_error_target_type();
 		case 'self_reference':
 			return m.metamodel_error_self_reference();
+		case 'cycle':
+			return m.metamodel_error_cycle();
 		default:
 			return m.metamodel_error_unknown();
 	}

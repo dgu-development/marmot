@@ -935,6 +935,7 @@
 	"metamodel_additional_metadata": "Metadatos adicionales",
 	"metamodel_conflict": "Este activo ha cambiado desde que lo abriste. Recarga e inténtalo de nuevo.",
 	"metamodel_derived_from": "Se calcula a partir de {field}",
+	"metamodel_error_cycle": "Este enlace cerraría un ciclo: el activo elegido ya cuelga de este.",
 	"metamodel_error_date": "Usa una fecha válida (AAAA-MM-DD).",
 	"metamodel_error_url": "Usa una URL http(s) absoluta.",
 	"metamodel_fields_filled": "{filled} de {total} campos con valor",

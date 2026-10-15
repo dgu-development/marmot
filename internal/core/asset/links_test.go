@@ -183,3 +183,43 @@ func TestAnMRNLinkResolvesOnceItsTargetExists(t *testing.T) {
 		t.Fatal("HasLinkMRNs finds an MRN anywhere in the metadata")
 	}
 }
+
+func TestAnAcyclicLinkCannotLeadBackToTheAsset(t *testing.T) {
+	registry, err := metamodel.Load(strings.NewReader(strings.Replace(linkProfile, "    presentation:", "    validation:\n      acyclic: true\n    presentation:", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(newMemoryRepo(), WithMetamodel(registry))
+	ctx := context.Background()
+	top, err := svc.Create(ctx, validCreate("top"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	middle, err := svc.Create(ctx, withLinks("middle", top.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bottom, err := svc.Create(ctx, withLinks("bottom", middle.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := func(to string) map[string]any { return map[string]any{"applies_to": []any{to}} }
+	if _, err := svc.PatchFields(ctx, top.ID, top.Version, link(bottom.ID)); !hasViolation(err, "applies_to", "cycle") {
+		t.Fatalf("top -> bottom -> middle -> top is a cycle: %v", err)
+	}
+	other, err := svc.Create(ctx, validCreate("other"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PatchFields(ctx, top.ID, top.Version, link(other.ID)); err != nil {
+		t.Fatalf("a link that leads nowhere near the asset is fine: %v", err)
+	}
+}
+
+func TestAcyclicNeedsTheAssetControl(t *testing.T) {
+	bad := strings.Replace(strings.Replace(linkProfile, "      control: asset\n", "", 1), "      inverseLabelKey: example.applies_to.inverse\n", "", 1)
+	bad = strings.Replace(bad, "    presentation:", "    validation:\n      acyclic: true\n    presentation:", 1)
+	if _, err := metamodel.Load(strings.NewReader(bad)); err == nil || !strings.Contains(err.Error(), "acyclic") {
+		t.Fatalf("acyclic on a plain list must be refused: %v", err)
+	}
+}

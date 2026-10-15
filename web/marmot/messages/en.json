@@ -935,6 +935,7 @@
 	"metamodel_additional_metadata": "Additional metadata",
 	"metamodel_conflict": "This asset changed since you opened it. Reload and try again.",
 	"metamodel_derived_from": "Computed from {field}",
+	"metamodel_error_cycle": "This link would close a loop: the chosen asset already hangs from this one.",
 	"metamodel_error_date": "Use a valid date (YYYY-MM-DD).",
 	"metamodel_error_url": "Use an absolute http(s) URL.",
 	"metamodel_fields_filled": "{filled} of {total} fields filled",
