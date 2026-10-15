@@ -1,4 +1,4 @@
-package asset
+package asset_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/marmotdata/marmot/internal/core/asset"
 	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/metrics"
 	"github.com/marmotdata/marmot/internal/store/postgres/pgtest"
@@ -18,9 +19,9 @@ func (dbRecorder) RecordDBQuery(context.Context, string, time.Duration, bool) {}
 func TestMetamodelPostgresWrites(t *testing.T) {
 	pool := pgtest.TempDB(t)
 	ctx := context.Background()
-	repo := NewPostgresRepository(pool, dbRecorder{})
-	svc := NewService(repo, WithMetamodel(mustLoadProfile(t)))
-	input := validCreate("postgres-metamodel")
+	repo := asset.NewPostgresRepository(pool, dbRecorder{})
+	svc := asset.NewService(repo, asset.WithMetamodel(asset.MustLoadProfile(t)))
+	input := asset.ValidCreate("postgres-metamodel")
 	if err := pool.QueryRow(ctx, "SELECT id FROM users WHERE username = 'admin'").Scan(&input.CreatedBy); err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +47,7 @@ func TestMetamodelPostgresWrites(t *testing.T) {
 	if _, err := svc.PatchFields(ctx, created.ID, 2, map[string]any{"retention": -1}); err == nil {
 		t.Fatal("invalid value persisted")
 	}
-	if _, err := svc.PatchFields(ctx, created.ID, 1, map[string]any{"retention": 1}); !errors.Is(err, ErrVersionConflict) {
+	if _, err := svc.PatchFields(ctx, created.ID, 1, map[string]any{"retention": 1}); !errors.Is(err, asset.ErrVersionConflict) {
 		t.Fatalf("stale patch: %v", err)
 	}
 
@@ -57,7 +58,7 @@ func TestMetamodelPostgresWrites(t *testing.T) {
 	}
 	start := make(chan struct{})
 	results := make(chan error, 2)
-	for _, a := range []*Asset{stored, other} {
+	for _, a := range []*asset.Asset{stored, other} {
 		go func() { <-start; results <- repo.Update(ctx, a) }()
 	}
 	close(start)
@@ -67,7 +68,7 @@ func TestMetamodelPostgresWrites(t *testing.T) {
 		switch {
 		case err == nil:
 			successes++
-		case errors.Is(err, ErrVersionConflict):
+		case errors.Is(err, asset.ErrVersionConflict):
 			conflicts++
 		default:
 			t.Fatal(err)

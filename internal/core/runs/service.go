@@ -174,6 +174,12 @@ type GlossarySyncer interface {
 	SyncTerms(ctx context.Context, source string, inputs []glossary.TermInput) (*glossary.SyncResult, error)
 }
 
+// linkedAsset is an asset whose metadata names others by MRN.
+type linkedAsset struct {
+	id, mrn  string
+	metadata map[string]interface{}
+}
+
 type service struct {
 	repo               Repository
 	assetService       asset.Service
@@ -291,6 +297,7 @@ func (s *service) ProcessEntities(ctx context.Context, runID string, assets []Cr
 		return nil, fmt.Errorf("getting last run checkpoints: %w", err)
 	}
 
+	var relink []linkedAsset
 	response := &ProcessAssetsResponse{
 		Assets:        make([]AssetResult, 0, len(assets)),
 		Lineage:       make([]LineageResult, 0, len(lineage)),
@@ -350,6 +357,7 @@ func (s *service) ProcessEntities(ctx context.Context, runID string, assets []Cr
 				QueryLanguage: ast.QueryLanguage,
 				Sources:       ast.Sources,
 				CreatedBy:     run.CreatedBy,
+				DeferLinks:    true,
 			}
 			created, err := s.assetService.Create(ctx, createInput)
 			if created != nil {
@@ -388,6 +396,7 @@ func (s *service) ProcessEntities(ctx context.Context, runID string, assets []Cr
 				Sources:          ast.Sources,
 				SkipNotification: true,
 				FromSync:         true,
+				DeferLinks:       true,
 			}
 			// Not cached when another writer created the asset after the fetch above.
 			existingAsset := existingAssets[assetMRN]
@@ -425,6 +434,10 @@ func (s *service) ProcessEntities(ctx context.Context, runID string, assets []Cr
 			}
 		}
 
+		if status != StatusFailed && assetID != "" && asset.HasLinkMRNs(ast.Metadata) {
+			relink = append(relink, linkedAsset{id: assetID, mrn: assetMRN, metadata: ast.Metadata})
+		}
+
 		result := AssetResult{
 			Name:     ast.Name,
 			Type:     ast.Type,
@@ -451,6 +464,17 @@ func (s *service) ProcessEntities(ctx context.Context, runID string, assets []Cr
 
 		if err := s.AddCheckpoint(ctx, runID, "asset", assetMRN, result.Status, []string{assetHash}); err != nil {
 			log.Error().Err(err).Str("run_id", runID).Str("entity_mrn", assetMRN).Msg("Failed to add checkpoint")
+		}
+	}
+
+	// A link by MRN may name an asset this same batch created after the one that holds it, so the
+	// fields left out on the way in are written now that every target exists.
+	// ponytail: an asset the run found unchanged is not revisited; a target that another source
+	// adds later is linked the next time this asset changes.
+	for _, linked := range relink {
+		input := asset.UpdateInput{Metadata: linked.metadata, SkipNotification: true, FromSync: true}
+		if _, err := s.assetService.Update(ctx, linked.id, input); err != nil {
+			log.Warn().Err(err).Str("asset_mrn", linked.mrn).Msg("Failed to link assets by MRN")
 		}
 	}
 
