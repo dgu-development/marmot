@@ -140,6 +140,10 @@ type Service struct {
 	config            *ServiceConfig
 	db                *pgxpool.Pool
 
+	// assetReaders keeps, of the recipients of a notice about an asset, those
+	// who may read it. Nil tells everyone.
+	assetReaders func(assetMRN string, recipients []Recipient) []Recipient
+
 	workerPool *worker.Pool
 	aggregator *assetChangeAggregator
 	pruneTask  *background.SingletonTask
@@ -355,11 +359,21 @@ func (s *Service) CreateSync(ctx context.Context, input CreateNotificationInput)
 	return s.doFanout(ctx, input)
 }
 
+// SetAssetReaders installs the filter of who is told about an asset.
+func (s *Service) SetAssetReaders(readers func(assetMRN string, recipients []Recipient) []Recipient) {
+	s.assetReaders = readers
+}
+
 // QueueAssetChange queues an asset change for aggregated notification.
 // changeType should be TypeAssetChange or TypeSchemaChange.
 func (s *Service) QueueAssetChange(assetID, assetMRN, assetName, changeType string, owners []Recipient, changedFields []string) {
 	if s.aggregator == nil {
 		return
+	}
+	if s.assetReaders != nil {
+		if owners = s.assetReaders(assetMRN, owners); len(owners) == 0 {
+			return
+		}
 	}
 	s.aggregator.queue(assetID, assetMRN, assetName, changeType, owners, changedFields)
 }

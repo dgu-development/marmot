@@ -63,11 +63,17 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// Restricted domains need read filtering on every channel first (delivery 3);
-// accepting the flag earlier would promise protection that does not exist.
-func rejectRestricted(w http.ResponseWriter, restricted *bool) bool {
-	if restricted != nil && *restricted {
-		respondCode(w, http.StatusBadRequest, "restricted_unsupported", "Restricted domains are not supported yet")
+func (h *Handler) restrictedRead() bool {
+	return h.config != nil && h.config.Domains.RestrictedRead
+}
+
+// A restricted domain is only as closed as every reader compiled into the
+// server makes it; until the operator vouches for them with
+// domains.restricted_read, accepting the mark would promise protection that
+// may not exist.
+func (h *Handler) rejectRestricted(w http.ResponseWriter, restricted *bool) bool {
+	if restricted != nil && *restricted && !h.restrictedRead() {
+		respondCode(w, http.StatusBadRequest, "restricted_unsupported", "Restricted domains are not enabled on this server")
 		return true
 	}
 	return false
@@ -157,7 +163,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 // @Router /api/v1/domains [post]
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var req CreateRequest
-	if !decode(w, r, &req) || rejectRestricted(w, req.Restricted) {
+	if !decode(w, r, &req) || h.rejectRestricted(w, req.Restricted) {
 		return
 	}
 	parent := ""
@@ -173,6 +179,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 		Metadata:    req.Metadata,
 		Tags:        req.Tags,
+		Restricted:  req.Restricted != nil && *req.Restricted,
 	}
 	if principal, ok := common.PrincipalFromContext(r.Context()); ok {
 		in.CreatedBy = principal.ID()
@@ -221,7 +228,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 // @Router /api/v1/domains/{id} [put]
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	var req UpdateRequest
-	if !decode(w, r, &req) || rejectRestricted(w, req.Restricted) {
+	if !decode(w, r, &req) || h.rejectRestricted(w, req.Restricted) {
 		return
 	}
 	if !h.requireAdmin(w, r, r.PathValue("id")) {
@@ -232,6 +239,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 		Metadata:    req.Metadata,
 		Tags:        req.Tags,
+		Restricted:  req.Restricted,
 	})
 	if err != nil {
 		respondError(w, err, "update domain")
@@ -627,6 +635,8 @@ type Capabilities struct {
 	Write bool `json:"write"`
 	// Admin: manage its subdomains and role assignments.
 	Admin bool `json:"admin"`
+	// RestrictedRead reports whether this server lets a domain be restricted.
+	RestrictedRead bool `json:"restricted_read"`
 }
 
 // @Summary What the caller may do in a domain
@@ -679,10 +689,11 @@ func (h *Handler) capabilities(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	common.RespondJSON(w, http.StatusOK, Capabilities{
-		DomainID: d.ID,
-		Enforced: state.Write,
-		Write:    !state.Write || scope.Can(domain.ActionWrite, d.Path),
-		Admin:    admin,
+		DomainID:       d.ID,
+		Enforced:       state.Write,
+		Write:          !state.Write || scope.Can(domain.ActionWrite, d.Path),
+		Admin:          admin,
+		RestrictedRead: h.restrictedRead(),
 	})
 }
 

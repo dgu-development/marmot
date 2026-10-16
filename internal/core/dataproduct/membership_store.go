@@ -3,6 +3,7 @@ package dataproduct
 import (
 	"context"
 	"fmt"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"strings"
 	"time"
 
@@ -68,14 +69,14 @@ type MembershipRepository interface {
 
 // PostgresMembershipRepository implements MembershipRepository for PostgreSQL.
 type PostgresMembershipRepository struct {
-	db       *pgxpool.Pool
+	db       readscope.DB
 	recorder metrics.Recorder
 }
 
 // NewPostgresMembershipRepository creates a new PostgreSQL membership repository.
 func NewPostgresMembershipRepository(db *pgxpool.Pool, recorder metrics.Recorder) *PostgresMembershipRepository {
 	return &PostgresMembershipRepository{
-		db:       db,
+		db:       readscope.Scoped(db),
 		recorder: recorder,
 	}
 }

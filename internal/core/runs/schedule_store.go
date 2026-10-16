@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"github.com/marmotdata/marmot/internal/plugin"
 	"github.com/robfig/cron/v3"
 )
@@ -119,11 +120,11 @@ type ScheduleRepository interface {
 }
 
 type SchedulePostgresRepository struct {
-	db *pgxpool.Pool
+	db readscope.DB
 }
 
 func NewSchedulePostgresRepository(db *pgxpool.Pool) ScheduleRepository {
-	return &SchedulePostgresRepository{db: db}
+	return &SchedulePostgresRepository{db: readscope.Scoped(db)}
 }
 
 // validateCronExpression validates a cron expression and returns the next run time

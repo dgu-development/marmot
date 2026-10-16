@@ -19,6 +19,13 @@ Each row is a change to a file that also exists upstream. A PR that adds, moves 
 | `internal/core/search/store.go` | `PostgresRepository.domainResolver`; `Search` resolves `@domain` first; `buildFilterClauses` and `buildListingFacetWhereClause` call `appendDomainClauses`; `buildFacetsParallel` skips cached facets when `filter.Domain` is set | `@domain` filter over subtrees, by id, name or name path, and `NOT @domain` exclusion. Cached facets are global counts and would ignore it |
 | `internal/core/search/service.go` | `Filter.Domain` | Carries the resolved domain filter; never read from JSON |
 | `pkg/config/config.go` | `Config.Domains`; `BindEnv` and `SetDefault` of `domains.enabled` and `domains.write_enforcement` | The feature flag (`MARMOT_DOMAINS_ENABLED`) and the state of write enforcement before it is ever set (`MARMOT_DOMAINS_WRITE_ENFORCEMENT`) |
+| `internal/core/{asset,glossary,dataproduct,lineage,search,team,assetdocs,docs,assetrule,subscription,runs}/*store.go`, `internal/metrics/store.go` | the `db` field and its assignment in the constructor; one import | The pool is `readscope.Scoped`, so every read of the store leaves out what a restricted domain hides from the caller. No query changes |
+| `internal/core/asset/store.go` | `Summary`; the default case of `GetMetadataValues` | `summary_counts` and `metadata_value_counts` total every asset, so a caller something is hidden from is counted live |
+| `internal/core/asset/service.go` | `Summary`, `GetMetadataFields` | Their caches are shared by every caller: one something is hidden from neither reads nor fills them |
+| `internal/core/search/store.go`, `external_service.go` | the condition before `buildCachedFacets`; `ExternalSearchService.Search` | Cached facets and the external index know nothing of domains: a caller something is hidden from is answered from PostgreSQL, uncached |
+| `internal/core/notification/service.go` | `Service.assetReaders`, `SetAssetReaders`, first lines of `QueueAssetChange` | Drops the recipients of a notice about an asset who may not read it |
+| `pkg/extension/host.go`, `internal/api/v1/extensions.go` | `Querier`, `ReadDB`; `extensionHost.ReadDB` | The scoped pool for what an extension reads on behalf of a caller |
+| `pkg/config/config.go` | `Domains.RestrictedRead`; its `BindEnv` and `SetDefault` | `domains.restricted_read` (`MARMOT_DOMAINS_RESTRICTED_READ`), off by default: whether a domain may be marked restricted |
 | `pkg/config/config_test.go` | `TestLoad_DCRAllowedRedirectHostsFromEnv` | Asserts the flag is read from the environment; `Load` runs once per process, so it cannot live in its own test |
 | `permissions`, `role_permissions` (data, fork migration `002`) | rows `dgu_view_domains`, `dgu_manage_domains` | `domains:view` for `admin` and `user`, `domains:manage` for `admin`. Names are `dgu_`-prefixed so an upstream permission with the same name cannot collide |
 | `charts/marmot/values.yaml`, `values.schema.json`, `templates/validation.yaml`, `tests/{configmap,validation}_test.yaml` | `config.domains`; the Elasticsearch check | The flag through the chart; refuses to render domains with Elasticsearch, as the server refuses to start |
@@ -41,6 +48,42 @@ Fork-only UI lives in `web/marmot/src/lib/domains/`, `components/domain/` and `r
 | `components/product/DataProductForm.svelte`, `routes/assets/new/+page.svelte` | `DomainSelect`; `?domain_id=` on the create request | Domain on creation |
 | `routes/pipelines/new/+page.svelte`, `routes/pipelines/[id]/edit/+page.svelte` | `PipelineDomain` | Pipeline domain, with the explicit asset move |
 | `components/query/QueryBuilder.svelte`, `components/query/QueryInput.svelte` | `@domain` field, its values (shown by label, inserted by value) and its `=` operator | Query builder and `@` autocomplete |
+
+## Read restriction
+
+A domain marked `restricted` hides its content, and that of its subtree, from whoever holds no role in it or in a domain above it (delivery 3). Reading stays open everywhere else.
+
+### How it decides
+
+- `Guard.Hidden` (`internal/core/domain/read.go`) resolves, for the principal in the context, the domains of a restricted subtree no role of its own or of its teams reaches. Any role reads: `reader` exists for those who should do nothing else. The native `admin` role and the operator read everything, and so does work without a principal, which is the server's own.
+- It is remembered per principal for two seconds, since every store read asks. A change to the tree or to its roles through the API forgets it at once on that server; another replica follows within those two seconds, and so does a change of team membership.
+- Entities in Unassigned, or with no domain, are never hidden, and Unassigned cannot be restricted.
+- A domain above one the caller reads stays in the tree, without its content, so the readable one can be reached. The API serves the tree through `domain.GuardReads`.
+
+### How it is applied
+
+- `internal/core/readscope` holds one condition per table that holds or names an asset, a glossary term or a data product (`visible`), and `readscope.Scoped` wraps a pool so that every `SELECT` naming one of them, inside a transaction too, reads it through a CTE of the same name without the hidden rows. A store that serves callers builds its pool with it; nothing else changes in its queries. Statements that write or lock are left alone.
+- A caller nothing is hidden from runs the queries as upstream wrote them.
+- Writes to what the caller may not read are refused by `Guard.AuthorizeEntities`, whether or not writes are scoped by domain.
+- `TestEveryReaderOfADomainTableIsScoped` fails when a package reads one of those tables with a plain pool and is not listed, with its reason, in `unscoped`. A new table that refers to those entities gets its condition in `visible`; `TestEveryTableOfADomainHasACondition` runs each against the real schema.
+
+### What is left out
+
+| Channel | How |
+| --- | --- |
+| Assets, terms and products by ID, MRN or name; lists, search, facets, totals, suggestions, summary | scoped pool; live counts instead of the pre-computed ones |
+| Lineage | edges with a hidden end are not read, so a traversal stops there and the neighbour is not a node |
+| Terms of an asset, assets of a term, members and rules of a product, owners, tags, run history, documentation, subscriptions | scoped pool, through the tables that name the entity |
+| MCP, OpenLineage, extensions' `Host.Assets()`, `Glossary()`, `Queries()` | they call the same services with the caller's principal |
+| Notifications about an asset, and the team webhooks they feed | `SetAssetReaders`: only recipients with a role are told. An administrator without one is not |
+| Domain tree, an entity's domain, roles of a domain | `GuardReads` |
+
+### Limits
+
+- `domains.restricted_read` is off by default and the API refuses the mark without it. The server filters either way; the option is the operator vouching that everything compiled into it does too. An extension reads the server's tables through `extension.ReadDB`, and one that keeps entity names or IDs in tables of its own must join the server's to filter them.
+- Notifications delivered before a domain was restricted, or before a role was revoked, stay in their recipient's inbox.
+- Usage metrics are aggregates over every asset; what they list by asset is filtered, their totals are not.
+- `internal/core/quality` scores the whole catalogue for the server: whoever serves those scores filters them.
 
 ## Write inventory
 

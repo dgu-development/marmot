@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"time"
 
 	"github.com/google/uuid"
@@ -57,11 +58,11 @@ type LineageEdge struct {
 } // @name LineageEdge
 
 type PostgresRepository struct {
-	db *pgxpool.Pool
+	db readscope.DB
 }
 
 func NewPostgresRepository(db *pgxpool.Pool) Repository {
-	return &PostgresRepository{db: db}
+	return &PostgresRepository{db: readscope.Scoped(db)}
 }
 
 func (r *PostgresRepository) GetDirectLineage(ctx context.Context, edgeID string) (*LineageEdge, error) {

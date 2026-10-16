@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/marmotdata/marmot/internal/core/readscope"
 )
 
 // ExternalSearchService routes text queries to an external search indexer
@@ -38,6 +40,12 @@ func (s *ExternalSearchService) Search(ctx context.Context, filter Filter) (*Res
 
 	// Empty/browse queries stay on PG
 	if filter.Query == "" {
+		return s.pgSvc.Search(ctx, filter)
+	}
+
+	// The external index knows nothing of domains: a caller some are hidden
+	// from is answered from PG, which filters them.
+	if hidden, err := readscope.Hidden(ctx); err != nil || len(hidden) > 0 {
 		return s.pgSvc.Search(ctx, filter)
 	}
 

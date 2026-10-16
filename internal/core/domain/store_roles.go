@@ -123,3 +123,13 @@ func (r *PostgresRepository) RevokeRole(ctx context.Context, domainID, assignmen
 	}
 	return nil
 }
+
+// RestrictedSubtrees lists the restricted domains and everything under them.
+func (r *PostgresRepository) RestrictedSubtrees(ctx context.Context) ([]*Domain, error) {
+	rows, err := r.db.Query(ctx, "SELECT "+columns+` FROM domains d
+		WHERE EXISTS (SELECT 1 FROM domains r WHERE r.restricted AND d.path LIKE r.path || '%')`)
+	if err != nil {
+		return nil, err
+	}
+	return scanDomains(rows)
+}

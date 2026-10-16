@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // Errors of the host's services. The host wraps its own with these, so an
@@ -145,4 +147,23 @@ type Task struct {
 	Name     string
 	Interval time.Duration
 	Run      func(ctx context.Context) error
+}
+
+// Querier reads from the database.
+type Querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// ReadDB is the database for what an extension reads on behalf of a caller:
+// its SELECTs over the server's tables of assets, glossary terms and data
+// products, and those that refer to them, leave out what a restricted domain
+// hides from the caller of the context. Tables of the extension itself are
+// not filtered; one that names such entities must join the server's.
+// DB remains for writes and for the extension's own work.
+func ReadDB(host Host) Querier {
+	if scoped, ok := host.(interface{ ReadDB() Querier }); ok {
+		return scoped.ReadDB()
+	}
+	return host.DB()
 }

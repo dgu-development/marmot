@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"sort"
 	"strings"
 	"time"
@@ -100,11 +101,11 @@ type Store interface {
 }
 
 type PostgresStore struct {
-	db *pgxpool.Pool
+	db readscope.DB
 }
 
 func NewPostgresStore(db *pgxpool.Pool) Store {
-	return &PostgresStore{db: db}
+	return &PostgresStore{db: readscope.Scoped(db)}
 }
 
 // =============================================================================

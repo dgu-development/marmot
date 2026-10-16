@@ -20,6 +20,7 @@ import (
 	"github.com/marmotdata/marmot/internal/core/metamodel"
 	"github.com/marmotdata/marmot/internal/core/notification"
 	"github.com/marmotdata/marmot/internal/core/quality"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"github.com/marmotdata/marmot/internal/core/team"
 	"github.com/marmotdata/marmot/internal/core/user"
 	"github.com/marmotdata/marmot/internal/extensions"
@@ -49,6 +50,8 @@ type extensionHost struct {
 }
 
 func (h extensionHost) DB() *pgxpool.Pool { return h.db }
+
+func (h extensionHost) ReadDB() extension.Querier { return readscope.Scoped(h.db) }
 
 // extensionPrincipal adds to a principal what the contract asks in its own words.
 type extensionPrincipal struct{ auth.Principal }

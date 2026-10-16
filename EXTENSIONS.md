@@ -13,6 +13,7 @@ An extension is a Go module that calls `extension.Register` from an `init` funct
 | Routes | Served under `/api/v1/ext/<id>/`. Every route requires an authenticated caller; `Resource` and `Action` add a permission check |
 | Tables | Its own migration track (`public.ext_<id>_schema_version`, tern format), applied after the core and fork tracks. Tables are named `ext_<id>_*` |
 | `Host.DB()` | The pool. Core tables are read through it; writing them from an extension is an exception to justify in its own repository, not the rule |
+| `extension.ReadDB(host)` | The pool for what is read on behalf of a caller: its `SELECT`s over the server's tables of assets, terms and products, and those that name them, leave out what a restricted domain hides from that caller (see DOMAINS.md). Tables of the extension are not filtered; one that keeps entity names or IDs joins the server's |
 | `Host.Principal` | Who is calling |
 | `Host.Domains()` | Whether the caller may write in or administer a domain, the domain of an entity and who holds each role in it; nil on a server without domains |
 | `Host.Users()`, `Host.Teams()` | People and teams by ID or name, and the members of a team |

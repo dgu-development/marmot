@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/marmotdata/marmot/internal/core/readscope"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -149,11 +150,11 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	db *pgxpool.Pool
+	db readscope.DB
 }
 
 func NewPostgresRepository(db *pgxpool.Pool) *PostgresRepository {
-	return &PostgresRepository{db: db}
+	return &PostgresRepository{db: readscope.Scoped(db)}
 }
 
 func (r *PostgresRepository) CreatePage(ctx context.Context, entityType EntityType, entityID string, input CreatePageInput, createdBy *string) (*Page, error) {

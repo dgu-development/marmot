@@ -41,6 +41,7 @@ type Repository interface {
 	AssetIDsByMRN(ctx context.Context, mrns []string) (map[string]string, error)
 	DocOwner(ctx context.Context, pageID, imageID string) (entityType, entityID string, found bool, err error)
 	All(ctx context.Context) ([]*Domain, error)
+	RestrictedSubtrees(ctx context.Context) ([]*Domain, error)
 	EnforcementState(ctx context.Context) (*EnforcementState, error)
 	EditorPrincipals(ctx context.Context) ([]EditorPrincipal, error)
 	PipelinesOutsideDomain(ctx context.Context) ([]PlanPipeline, error)
@@ -161,10 +162,10 @@ func (r *PostgresRepository) Create(ctx context.Context, in CreateInput) (*Domai
 
 	d, err := scanDomain(tx.QueryRow(ctx, `
 		WITH g AS (SELECT gen_random_uuid() AS id)
-		INSERT INTO domains (id, parent_id, path, depth, name, description, metadata, tags, created_by)
-		SELECT g.id, $1::uuid, $2::text || g.id::text || '/', $3::int, $4::text, $5::text, $6::jsonb, $7::text[], NULLIF($8::text, '') FROM g
+		INSERT INTO domains (id, parent_id, path, depth, name, description, metadata, tags, created_by, restricted)
+		SELECT g.id, $1::uuid, $2::text || g.id::text || '/', $3::int, $4::text, $5::text, $6::jsonb, $7::text[], NULLIF($8::text, ''), $9::boolean FROM g
 		RETURNING `+columns,
-		in.ParentID, parentPath, parentDepth+1, in.Name, in.Description, metadata, tags, in.CreatedBy))
+		in.ParentID, parentPath, parentDepth+1, in.Name, in.Description, metadata, tags, in.CreatedBy, in.Restricted))
 	if pgCode(err) == "23505" {
 		return nil, ErrNameConflict
 	}
@@ -236,11 +237,14 @@ func (r *PostgresRepository) Update(ctx context.Context, id string, in UpdateInp
 	if in.Tags != nil {
 		current.Tags = in.Tags
 	}
+	if in.Restricted != nil {
+		current.Restricted = *in.Restricted
+	}
 
 	d, err := scanDomain(tx.QueryRow(ctx, `
-		UPDATE domains SET name = $2, description = $3, metadata = $4, tags = $5, updated_at = now()
+		UPDATE domains SET name = $2, description = $3, metadata = $4, tags = $5, restricted = $6, updated_at = now()
 		WHERE id = $1 RETURNING `+columns,
-		id, current.Name, current.Description, current.Metadata, current.Tags))
+		id, current.Name, current.Description, current.Metadata, current.Tags, current.Restricted))
 	if pgCode(err) == "23505" {
 		return nil, ErrNameConflict
 	}
