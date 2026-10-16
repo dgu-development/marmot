@@ -10,7 +10,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/tern/v2/migrate"
-	"github.com/marmotdata/marmot/internal/api/v1/common"
 	"github.com/marmotdata/marmot/pkg/extension"
 	"github.com/rs/zerolog/log"
 )
@@ -49,9 +48,18 @@ func Migrate(ctx context.Context, conn *pgx.Conn) error {
 // permission the route names.
 type Middleware func(resource, action string) []func(http.HandlerFunc) http.HandlerFunc
 
+// Route is a mounted route. It mirrors the API's own route type, which this
+// package cannot import: the store runs Migrate, and the API depends on the store.
+type Route struct {
+	Path       string
+	Method     string
+	Handler    http.HandlerFunc
+	Middleware []func(http.HandlerFunc) http.HandlerFunc
+}
+
 // Routes returns every extension's routes under /api/v1/ext/<id>.
-func Routes(host extension.Host, guard Middleware) ([]common.Route, error) {
-	var out []common.Route
+func Routes(host extension.Host, guard Middleware) ([]Route, error) {
+	var out []Route
 	for _, e := range extension.Registered() {
 		for _, route := range e.Routes(host) {
 			if !strings.HasPrefix(route.Path, "/") || route.Handler == nil || route.Method == "" {
@@ -60,7 +68,7 @@ func Routes(host extension.Host, guard Middleware) ([]common.Route, error) {
 			if (route.Resource == "") != (route.Action == "") {
 				return nil, fmt.Errorf("extension %s: route %s names half a permission", e.ID(), route.Path)
 			}
-			out = append(out, common.Route{
+			out = append(out, Route{
 				Path:       "/api/v1/ext/" + e.ID() + route.Path,
 				Method:     route.Method,
 				Handler:    route.Handler,
@@ -70,8 +78,3 @@ func Routes(host extension.Host, guard Middleware) ([]common.Route, error) {
 	}
 	return out, nil
 }
-
-// Handler adapts the routes to the server's handler list.
-type Handler []common.Route
-
-func (h Handler) Routes() []common.Route { return h }
