@@ -1040,13 +1040,17 @@ func (r *PostgresRepository) Search(ctx context.Context, filter SearchFilter, ca
           created_at, created_by, updated_at, last_sync_at,
           query, query_language, is_stub, version
       FROM search_results
-      ORDER BY
-          CASE WHEN name_similarity > 0.8 THEN name_similarity * 2
-          ELSE search_rank END DESC
+      ORDER BY %s
       LIMIT $%d OFFSET $%d
   `
+	// Without text every row ranks the same: sorting by rank would score the
+	// whole table to break a tie, and page through it in no stable order.
+	order := "CASE WHEN name_similarity > 0.8 THEN name_similarity * 2 ELSE search_rank END DESC"
+	if searchQuery.FreeText == "" {
+		order = "updated_at DESC, id"
+	}
 	params = append(params, filter.Limit, filter.Offset)
-	wrappedQuery = fmt.Sprintf(wrappedQuery, len(params)-1, len(params))
+	wrappedQuery = fmt.Sprintf(wrappedQuery, order, len(params)-1, len(params))
 
 	assets, err := r.scanMultipleAssets(ctx, wrappedQuery, params...)
 	if err != nil {
