@@ -1382,6 +1382,12 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return rw.ResponseWriter.Write(b)
 }
 
+// Unwrap lets http.ResponseController reach the writer underneath, so a
+// handler that streams, such as server-sent events, can flush.
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}
+
 func (s *Server) getMetricPath(routePath, actualPath string) string {
 	if strings.Contains(routePath, "{") {
 		return routePath
