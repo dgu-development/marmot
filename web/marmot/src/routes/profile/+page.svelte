@@ -7,12 +7,15 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
+	import { auth } from '$lib/stores/auth';
 	import { m } from '$lib/paraglide/messages';
 
+	// The API key endpoints require users:manage, so without it the tab could only fail.
+	const canManageApiKeys = auth.hasPermission('users', 'manage');
 	const tabs = [
 		{ id: 'profile', label: m.profile_tab_profile() },
 		{ id: 'subscriptions', label: m.profile_tab_subscriptions() },
-		{ id: 'api-keys', label: m.profile_tab_api_keys() }
+		...(canManageApiKeys ? [{ id: 'api-keys', label: m.profile_tab_api_keys() }] : [])
 	];
 
 	$: activeTab = $page.url.searchParams.get('tab') || tabs[0]?.id;
@@ -20,6 +23,9 @@
 	onMount(() => {
 		if (!$page.url.searchParams.has('tab')) {
 			goto(resolve(`/profile?tab=${tabs[0]?.id}`), { replaceState: true });
+		}
+		if ($page.url.searchParams.get('tab') === 'api-keys' && !canManageApiKeys) {
+			goto(resolve('/profile?tab=profile'), { replaceState: true });
 		}
 	});
 </script>
